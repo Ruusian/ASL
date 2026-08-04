@@ -1,0 +1,279 @@
+#!/bin/bash
+# AndroidLinux-SuperKit: Unified CLI Management Console
+# Combines Root Chroot + MoBox Gaming + Termux-Desktops
+
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+SUPERKIT_DIR="$(cd "$(dirname "$REAL_SCRIPT")/.." && pwd)"
+DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
+
+export SUPERKIT_DIR DEBIANPATH
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
+    exit 2
+fi
+
+is_mounted() {
+    su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null
+}
+
+run_in_chroot() {
+    local command_text="$1"
+    local command_b64
+
+    command_b64=$(printf '%s' "$command_text" | base64 | tr -d '\n')
+    su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; printf %s $command_b64 | /usr/bin/base64 -d | /bin/bash'"
+}
+
+show_help() {
+    echo "============================================================"
+    echo "       AndroidLinux-SuperKit Console v1.0"
+    echo "  Combined Native Chroot + MoBox Gaming + Termux Desktops"
+    echo "============================================================"
+    echo "Usage: superkit [dashboard|command] [args]"
+    echo ""
+    echo "Dashboard:"
+    echo "  dashboard, menu  Open the interactive terminal dashboard"
+    echo ""
+    echo "Core Chroot Commands:"
+    echo "  start            Start & mount Debian chroot safely"
+    echo "  stop             Stop & unmount Debian chroot"
+    echo "  status           Show chroot status, size, and mounts"
+    echo "  doctor           Check SuperKit prerequisites without changing state"
+    echo "  shell [user]     Enter interactive shell (default: root)"
+    echo "  exec <cmd>       Execute a single command inside chroot"
+    echo "  backup           Backup chroot to tar.gz archive"
+    echo "  restore <file>   Restore chroot from tar.gz archive"
+    echo ""
+    echo "MoBox Gaming Commands:"
+    echo "  game [exe]       Launch Windows .exe with Box64 + Wine"
+    echo "  gpu              Detect SoC & configure Turnip/Zink/VirGL"
+    echo ""
+    echo "Termux Desktop Commands:"
+    echo "  desktop start    Start SuperKit-managed XFCE4 desktop"
+    echo "  desktop stop     Stop only the SuperKit-managed desktop"
+    echo "  desktop status   Show desktop lifecycle status"
+    echo "  desktop sync-apps Create SuperKit-owned Termux launchers"
+    echo "  audio            Start standalone PulseAudio server"
+    echo ""
+    echo "Utility Commands:"
+    echo "  help             Show this help message"
+    echo ""
+}
+
+pause_dashboard() {
+    echo ""
+    read -r -p "Press Enter to return to the dashboard..." _
+}
+
+dashboard() {
+    while true; do
+        clear 2>/dev/null || true
+        echo "============================================================"
+        echo "          AndroidLinux-SuperKit Dashboard"
+        echo "============================================================"
+        if is_mounted; then
+            echo " Debian chroot: ACTIVE"
+        else
+            echo " Debian chroot: INACTIVE"
+        fi
+        echo ""
+        echo "  1) Chroot status"
+        echo "  2) Run diagnostics"
+        echo "  3) Start Debian chroot"
+        echo "  4) Open Debian shell"
+        echo "  5) Run a command in Debian"
+        echo "  6) Start XFCE desktop (Termux:X11)"
+        echo "  7) Stop SuperKit desktop"
+        echo "  8) Desktop status"
+        echo "  9) Sync Debian app launchers"
+        echo " 10) Start PulseAudio only"
+        echo " 11) Launch a Windows .exe (Wine + Box64)"
+        echo " 12) Show GPU profile"
+        echo " 13) Back up Debian"
+        echo " 14) Restore Debian from backup"
+        echo " 15) Stop and unmount Debian chroot"
+        echo "  h) Help"
+        echo "  q) Exit dashboard"
+        echo ""
+        read -r -p "Select an option: " choice
+
+        case "$choice" in
+            1) bash "$REAL_SCRIPT" status; pause_dashboard ;;
+            2) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
+            3) bash "$REAL_SCRIPT" start; pause_dashboard ;;
+            4) bash "$REAL_SCRIPT" shell ;;
+            5)
+                read -r -p "Debian command: " command
+                if [ -n "$command" ]; then bash "$REAL_SCRIPT" exec "$command"; fi
+                pause_dashboard ;;
+            6) bash "$REAL_SCRIPT" desktop start; pause_dashboard ;;
+            7) bash "$REAL_SCRIPT" desktop stop; pause_dashboard ;;
+            8) bash "$REAL_SCRIPT" desktop status; pause_dashboard ;;
+            9) bash "$REAL_SCRIPT" desktop sync-apps; pause_dashboard ;;
+            10) bash "$REAL_SCRIPT" audio; pause_dashboard ;;
+            11)
+                read -r -p "Full path to Windows .exe: " exe_path
+                if [ -n "$exe_path" ]; then bash "$REAL_SCRIPT" game run "$exe_path"; fi
+                pause_dashboard ;;
+            12) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
+            13)
+                read -r -p "Create a Debian backup now? [y/N]: " confirm
+                if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" backup; fi
+                pause_dashboard ;;
+            14)
+                read -r -p "Backup archive path: " archive
+                if [ -n "$archive" ]; then
+                    read -r -p "Restore replaces the current Debian filesystem. Continue? [y/N]: " confirm
+                    if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" restore "$archive"; fi
+                fi
+                pause_dashboard ;;
+            15)
+                read -r -p "Stop all chroot processes and unmount Debian? [y/N]: " confirm
+                if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" stop; fi
+                pause_dashboard ;;
+            h|H) show_help; pause_dashboard ;;
+            q|Q) return 0 ;;
+            *) echo "Invalid option: ${choice:-empty}"; pause_dashboard ;;
+        esac
+    done
+}
+
+case "${1:-}" in
+    dashboard|menu|ui)
+        dashboard
+        ;;
+    start)
+        bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        ;;
+    stop)
+        bash "$SUPERKIT_DIR/desktop/start-desktop.sh" stop || exit 1
+        bash "$SUPERKIT_DIR/core/stop-chroot.sh"
+        ;;
+    doctor)
+        bash "$SUPERKIT_DIR/core/doctor.sh"
+        ;;
+    status)
+        echo "=== AndroidLinux-SuperKit Status ==="
+        if is_mounted; then
+            echo " Status:   ACTIVE (Mounted)"
+        else
+            echo " Status:   INACTIVE (Unmounted)"
+        fi
+        echo " Location: $DEBIANPATH"
+        SIZE=$(su -c "du -shx '$DEBIANPATH' 2>/dev/null | cut -f1")
+        echo " Size:     ${SIZE:-Unknown}"
+
+        if is_mounted; then
+            echo ""
+            echo "Active Sub-mounts:"
+            su -c "grep '$DEBIANPATH' /proc/mounts | awk '{print \" - \" \$2 \" (\" \$3 \")\"}'" 2>/dev/null
+        fi
+        ;;
+    shell|enter)
+        shift
+        TARGET_USER="${1:-root}"
+        if ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        if [ "$TARGET_USER" = "root" ]; then
+            exec su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; exec /bin/bash --login'"
+        fi
+        if [[ ! "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]]; then
+            echo "Error: Invalid Debian username."
+            exit 1
+        fi
+        exec su -c "chroot '$DEBIANPATH' /bin/su -l '$TARGET_USER'"
+        ;;
+    exec|run)
+        shift
+        if [ $# -eq 0 ]; then
+            echo "Error: No command specified. Usage: superkit exec <command>"
+            exit 1
+        fi
+        if ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        run_in_chroot "$*"
+        ;;
+    game|wine)
+        shift
+        if ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        bash "$SUPERKIT_DIR/gaming/wine-box64.sh" "$@"
+        ;;
+    gpu)
+        bash "$SUPERKIT_DIR/core/gpu-detect.sh"
+        ;;
+    desktop)
+        shift
+        DESKTOP_ACTION="${1:-start}"
+        case "$DESKTOP_ACTION" in start|stop|status|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, status, sync-apps, or launch."; exit 1 ;; esac
+        if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]] && ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        shift || true
+        bash "$SUPERKIT_DIR/desktop/start-desktop.sh" "$DESKTOP_ACTION" "$@"
+        ;;
+    audio)
+        bash "$SUPERKIT_DIR/desktop/start-desktop.sh" audio
+        ;;
+    backup)
+        BACKUP_DIR="/sdcard/Debian_Backups"
+        if is_mounted; then
+            echo "[!] Stopping chroot before backup..."
+            bash "$SUPERKIT_DIR/core/stop-chroot.sh" || exit 1
+        fi
+        mkdir -p "$BACKUP_DIR" 2>/dev/null || BACKUP_DIR="/data/data/com.termux/files/home"
+        BACKUP_FILE="$BACKUP_DIR/superkit-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
+        PARTIAL_BACKUP="$BACKUP_FILE.partial"
+        echo "[*] Creating backup at $BACKUP_FILE..."
+        if su -c "tar -czf '$PARTIAL_BACKUP' -C '$DEBIANPATH' ." && su -c "test -s '$PARTIAL_BACKUP'"; then
+            mv "$PARTIAL_BACKUP" "$BACKUP_FILE"
+            echo "[✓] Backup completed: $BACKUP_FILE"
+        else
+            rm -f "$PARTIAL_BACKUP"
+            echo "[!] Backup failed; no completed archive was created."
+            exit 1
+        fi
+        ;;
+    restore)
+        shift
+        RESTORE_FILE="${1:-}"
+        if [ -z "$RESTORE_FILE" ] || [ ! -f "$RESTORE_FILE" ]; then
+            echo "Error: Valid archive file required. Usage: superkit restore <path/to/backup.tar.gz>"
+            exit 1
+        fi
+        BASE64_BIN=$(command -v base64) || {
+            echo "Error: base64 is required to restore an archive."
+            exit 1
+        }
+        restore_b64=$(printf '%s' "$RESTORE_FILE" | "$BASE64_BIN" | tr -d '\n')
+        if ! su -c "archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); tar -tzf \"\$archive\" >/dev/null && ! tar -tzf \"\$archive\" | grep -Eq '(^/|(^|/)\.\.(/|\$))'"; then
+            echo "[!] Restore archive is unreadable or contains unsafe paths."
+            exit 1
+        fi
+        if is_mounted; then
+            echo "[!] Stopping chroot..."
+            bash "$SUPERKIT_DIR/core/stop-chroot.sh" || exit 1
+        fi
+        echo "[*] Staging restore from $RESTORE_FILE..."
+        su -c "archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.superkit-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; mv \"\$target\" \"\$rollback\" && mv \"\$stage\" \"\$target\" || exit 1; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
+            echo "[!] Restore failed; the existing Debian root was left unchanged."
+            exit 1
+        }
+        ;;
+    help|-h|--help)
+        show_help
+        ;;
+    "")
+        dashboard
+        ;;
+    *)
+        if ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        run_in_chroot "$*"
+        ;;
+esac
