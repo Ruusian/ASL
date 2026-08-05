@@ -350,13 +350,42 @@ sync_apps() {
     echo "[✓] Synchronized $count SuperKit-owned launchers."
 }
 
+audio_control() {
+    local action="${1:-start}" level="${2:-}"
+    case "$action" in
+        start|"") start_audio ;;
+        stop) pkill -x pulseaudio 2>/dev/null && echo "[✓] PulseAudio stopped." || echo "[*] PulseAudio is not running." ;;
+        test)
+            if ! pgrep -x pulseaudio >/dev/null; then start_audio || return 1; fi
+            echo "[*] Playing audio test tone..."
+            if command -v paplay >/dev/null; then
+                paplay /usr/share/sounds/freedesktop/stereo/bell.oga 2>/dev/null || echo "[*] Audio pipeline active."
+            else
+                echo "[!] paplay is not installed in Termux."
+            fi
+            ;;
+        volume)
+            if [ -n "$level" ]; then
+                if command -v pactl >/dev/null; then
+                    pactl set-sink-volume @DEFAULT_SINK@ "${level}%" 2>/dev/null && echo "[✓] Master volume set to ${level}%." || echo "[!] pactl failed to set volume."
+                else
+                    echo "[!] pactl is not installed in Termux."
+                fi
+            else
+                echo "Usage: superkit audio volume <0-100>"
+            fi
+            ;;
+        *) echo "Usage: start-desktop.sh audio {start|stop|test|volume <level>}" ;;
+    esac
+}
+
 case "${1:-start}" in
     start|"") start_desktop ;;
     stop) stop_desktop ;;
     force-stop|kill) force_stop_desktop ;;
     restart) force_stop_desktop && start_desktop ;;
     status) status_desktop ;;
-    audio) start_audio ;;
+    audio) shift; audio_control "$@" ;;
     sync-apps) sync_apps ;;
     launch) shift; launch_app "$@" ;;
     *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|audio|sync-apps|launch}"; exit 1 ;;

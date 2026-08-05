@@ -50,13 +50,17 @@ superkit shell            # Enter chroot bash session as root
 superkit status           # Check status, storage size, and active sub-mounts
 superkit doctor           # Check prerequisites without changing state
 superkit stop             # Stop SuperKit desktop, then unmount safely
+superkit install <pkgs>   # Install Debian packages directly via apt-get
+superkit search <query>   # Search available Debian packages
+superkit service <act> <svc> Manage Debian background services (start|stop|restart|status)
 superkit backup           # Backup chroot to /sdcard/Debian_Backups
 superkit restore <file>   # Restore chroot from backup
 ```
 
-### MoBox Gaming Layer
+### MoBox Gaming Layer & Performance
 ```bash
 superkit gpu              # Report the safe selected GPU runtime profile
+superkit mode [gaming|performance|balanced] # Tune memory compaction & Turnip GPU flags
 superkit game             # Open interactive gaming launcher
 superkit game run <exe>   # Run a Windows executable (requires Wine / Box64 packages)
 ```
@@ -67,7 +71,8 @@ superkit desktop start    # Launch SuperKit-managed XFCE4 desktop
 superkit desktop status   # Check managed desktop state
 superkit desktop stop     # Stop only the managed session
 superkit desktop sync-apps # Generate SuperKit-owned Termux launchers
-superkit audio            # Start standalone PulseAudio server
+superkit resolution [720p|1080p|native] [scale] # Configure Termux:X11 display resolution
+superkit audio [start|stop|test|volume <0-100>] # PulseAudio server management & volume control
 ```
 
 The GPU profile is selected from allowlisted hardware profiles and is applied to desktop and Wine launches. Generated launchers live in the Termux applications directory, are marked `X-SuperKit-Managed=true`, and are the only launchers synchronization removes.

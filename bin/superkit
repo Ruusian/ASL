@@ -62,6 +62,7 @@ show_help() {
     echo "Dashboard:"
     echo "  dashboard, menu  Open the interactive terminal dashboard"
     echo "  overview         Show concise chroot, desktop, audio, X11, and GPU state"
+    echo "  mode [gaming|performance|balanced] Configure performance profile"
     echo ""
     echo "Core Chroot Commands:"
     echo "  start            Start & mount Debian chroot safely"
@@ -70,6 +71,9 @@ show_help() {
     echo "  doctor           Check SuperKit prerequisites without changing state"
     echo "  shell [user]     Enter interactive shell (default: root)"
     echo "  exec <cmd>       Execute a single command inside chroot"
+    echo "  install <pkg..>  Install Debian packages via apt-get"
+    echo "  search <query>   Search available Debian packages"
+    echo "  service <act> <name> Manage Debian background services (start|stop|restart|status)"
     echo "  backup           Backup chroot to tar.gz archive"
     echo "  restore <file>   Restore chroot from tar.gz archive"
     echo ""
@@ -82,7 +86,8 @@ show_help() {
     echo "  desktop stop     Stop only the SuperKit-managed desktop"
     echo "  desktop status   Show desktop lifecycle status"
     echo "  desktop sync-apps Create SuperKit-owned Termux launchers"
-    echo "  audio            Start standalone PulseAudio server"
+    echo "  resolution [preset] Set Termux:X11 display resolution (720p|1080p|native)"
+    echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
     echo ""
     echo "Utility Commands:"
     echo "  help             Show this help message"
@@ -358,8 +363,105 @@ case "${1:-}" in
         shift || true
         bash "$SUPERKIT_DIR/desktop/start-desktop.sh" "$DESKTOP_ACTION" "$@"
         ;;
+    install)
+        shift
+        if [ $# -eq 0 ]; then
+            echo "Usage: superkit install <package_name...>"
+            exit 1
+        fi
+        if ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        echo "[*] Updating package lists and installing: $*..."
+        run_in_chroot "apt-get update && apt-get install -y $*"
+        ;;
+    search)
+        shift
+        if [ $# -eq 0 ]; then
+            echo "Usage: superkit search <query>"
+            exit 1
+        fi
+        if ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        run_in_chroot "apt-cache search $*"
+        ;;
+    mode)
+        shift
+        TARGET_MODE="${1:-status}"
+        case "$TARGET_MODE" in
+            gaming|game)
+                echo "[*] Applying Gaming Performance Mode..."
+                su -c "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
+                export TU_DEBUG=noconform
+                echo "[✓] Gaming mode active: RAM compacted, Turnip performance flags set."
+                ;;
+            performance|perf)
+                echo "[*] Applying Maximum Performance Mode..."
+                su -c "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
+                echo "[✓] Performance mode active: RAM freed."
+                ;;
+            balanced|normal)
+                unset TU_DEBUG
+                echo "[✓] Balanced profile active."
+                ;;
+            status|"")
+                echo "Current Mode: ${TU_DEBUG:+Gaming (noconform)}${TU_DEBUG:-Balanced}"
+                ;;
+            *)
+                echo "Usage: superkit mode [gaming|performance|balanced|status]"
+                exit 1
+                ;;
+        esac
+        ;;
+    resolution|res)
+        shift
+        RES="${1:-status}"
+        SCALE="${2:-}"
+        case "$RES" in
+            720p)
+                pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
+                termux-x11 :0 -geometry 1280x720 +iglx -ac >/dev/null 2>&1 &
+                echo "[✓] Termux:X11 display resolution set to 1280x720."
+                ;;
+            1080p)
+                pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
+                termux-x11 :0 -geometry 1920x1080 +iglx -ac >/dev/null 2>&1 &
+                echo "[✓] Termux:X11 display resolution set to 1920x1080."
+                ;;
+            native)
+                pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
+                termux-x11 :0 +iglx -ac >/dev/null 2>&1 &
+                echo "[✓] Termux:X11 display resolution set to native."
+                ;;
+            status|"")
+                echo "Usage: superkit resolution [720p|1080p|native] [scale]"
+                ;;
+            *)
+                echo "Error: Invalid resolution preset '$RES'. Use: 720p, 1080p, native"
+                exit 1
+                ;;
+        esac
+        if is_mounted && [ -n "$SCALE" ]; then
+            run_in_chroot "DISPLAY=:0 xfconf-query -c xsettings -p /Gtk/ScaleFactor -s $SCALE 2>/dev/null || true"
+        fi
+        ;;
+    service)
+        shift
+        ACTION="${1:-status}"
+        SVC="${2:-}"
+        if [ -z "$SVC" ]; then
+            echo "Usage: superkit service <start|stop|restart|status> <service_name>"
+            exit 1
+        fi
+        if ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        run_in_chroot "service '$SVC' '$ACTION'"
+        ;;
     audio)
-        bash "$SUPERKIT_DIR/desktop/start-desktop.sh" audio
+        shift
+        bash "$SUPERKIT_DIR/desktop/start-desktop.sh" audio "$@"
         ;;
     backup)
         BACKUP_DIR="/sdcard/Debian_Backups"
