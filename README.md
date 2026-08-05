@@ -37,8 +37,11 @@ superkit                  # Open the full interactive terminal dashboard
 superkit dashboard
 ```
 
-The dashboard provides status, chroot lifecycle controls, Debian shell and command execution,
-Termux:X11 desktop/audio controls, Wine launching, GPU detection, backup, and restore actions.
+The dashboard groups system, Debian, desktop/audio, and gaming/maintenance actions, with a live color-coded overview of chroot, desktop, X11 socket, audio, and GPU-profile state. Press `r` to refresh it. Set `NO_COLOR=1` to disable colors.
+
+```bash
+superkit overview          # Print the concise live overview without opening the dashboard
+```
 
 ### Core Chroot Operations
 ```bash

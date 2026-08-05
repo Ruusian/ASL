@@ -16,6 +16,13 @@ superkit_gpu_apply() {
     superkit_gpu_detect
     unset GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE MESA_VK_WINSYS TU_DEBUG
 
+    if pgrep -x virgl_test_server_android >/dev/null 2>&1 || pgrep -f virgl_test_server >/dev/null 2>&1; then
+        export GALLIUM_DRIVER=virpipe
+        export MESA_GL_VERSION_OVERRIDE=4.0
+        export MESA_VK_WINSYS=x11
+        return 0
+    fi
+
     case "$SUPERKIT_GPU_PROFILE" in
         adreno-turnip-zink)
             export GALLIUM_DRIVER=zink
@@ -26,7 +33,8 @@ superkit_gpu_apply() {
             esac
             ;;
         mali-virgl|generic-virgl)
-            export GALLIUM_DRIVER=virgl
+            export GALLIUM_DRIVER=virpipe
+            export MESA_GL_VERSION_OVERRIDE=4.0
             export MESA_VK_WINSYS=x11
             ;;
     esac

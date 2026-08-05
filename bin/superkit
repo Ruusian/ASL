@@ -4,9 +4,36 @@
 
 REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
 SUPERKIT_DIR="$(cd "$(dirname "$REAL_SCRIPT")/.." && pwd)"
+if [ ! -d "$SUPERKIT_DIR/core" ] && [ -d "$HOME/AndroidLinux-SuperKit/core" ]; then
+    SUPERKIT_DIR="$HOME/AndroidLinux-SuperKit"
+fi
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
 export SUPERKIT_DIR DEBIANPATH
+
+if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ]; then
+    C_RESET=$'\033[0m'
+    C_BOLD=$'\033[1m'
+    C_CYAN=$'\033[36m'
+    C_GREEN=$'\033[32m'
+    C_YELLOW=$'\033[33m'
+    C_RED=$'\033[31m'
+    C_DIM=$'\033[2m'
+else
+    C_RESET= C_BOLD= C_CYAN= C_GREEN= C_YELLOW= C_RED= C_DIM=
+fi
+
+status_label() {
+    local state="$1"
+    case "$state" in
+        ACTIVE|RUNNING|READY) printf '%s%s%s' "$C_GREEN" "$state" "$C_RESET" ;;
+        INACTIVE|STOPPED) printf '%s%s%s' "$C_DIM" "$state" "$C_RESET" ;;
+        *) printf '%s%s%s' "$C_YELLOW" "$state" "$C_RESET" ;;
+    esac
+}
+
+section_title() { printf '%s%s%s\n' "$C_CYAN$C_BOLD" "$1" "$C_RESET"; }
+menu_item() { printf '  %s%2s%s) %s\n' "$C_CYAN" "$1" "$C_RESET" "$2"; }
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
@@ -34,6 +61,7 @@ show_help() {
     echo ""
     echo "Dashboard:"
     echo "  dashboard, menu  Open the interactive terminal dashboard"
+    echo "  overview         Show concise chroot, desktop, audio, X11, and GPU state"
     echo ""
     echo "Core Chroot Commands:"
     echo "  start            Start & mount Debian chroot safely"
@@ -66,73 +94,169 @@ pause_dashboard() {
     read -r -p "Press Enter to return to the dashboard..." _
 }
 
+overview() {
+    local desktop_state desktop_status desktop_detail x11_socket
+    local mem_total mem_avail mem_used mem_pct disk_data load_avg
+    x11_socket="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0"
+    desktop_state=$(bash "$SUPERKIT_DIR/desktop/start-desktop.sh" status 2>/dev/null | tr '\n' ' ')
+    desktop_state=${desktop_state#Desktop: }
+    desktop_state=${desktop_state% }
+    desktop_status=${desktop_state%% *}
+    desktop_detail=${desktop_state#"$desktop_status"}
+    source "$SUPERKIT_DIR/core/gpu-profile.sh"
+    superkit_gpu_detect
+
+    mem_total=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+    mem_avail=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+    if [ "$mem_total" -gt 0 ]; then
+        mem_used=$((mem_total - mem_avail))
+        mem_pct=$((mem_used * 100 / mem_total))
+    else
+        mem_used=0; mem_pct=0
+    fi
+    disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')
+    load_avg=$(su -c "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3 || echo "unknown")
+
+    printf '%s=== AndroidLinux-SuperKit Overview ===%s\n' "$C_BOLD" "$C_RESET"
+    if is_mounted; then printf ' Chroot:  '; status_label ACTIVE; echo; else printf ' Chroot:  '; status_label INACTIVE; echo; fi
+    printf ' Desktop: '; status_label "${desktop_status:-UNKNOWN}"; printf '%s\n' "$desktop_detail"
+    if [ -S "$x11_socket" ]; then printf ' X11:     '; status_label READY; printf ' (DISPLAY=:0)\n'; else printf ' X11:     '; status_label STOPPED; echo; fi
+    if pgrep -x pulseaudio >/dev/null 2>&1; then printf ' Audio:   '; status_label RUNNING; echo; else printf ' Audio:   '; status_label STOPPED; echo; fi
+    printf ' GPU:     %s%s%s (%s)\n' "$C_YELLOW" "$SUPERKIT_GPU_PROFILE" "$C_RESET" "${SUPERKIT_GPU_PLATFORM:-unknown}"
+    printf ' Telemetry: RAM %s%dMB / %dMB (%d%%)%s | Data %s%s%s | Load %s%s%s\n' \
+        "$C_CYAN" "$mem_used" "$mem_total" "$mem_pct" "$C_RESET" \
+        "$C_CYAN" "${disk_data:-unknown}" "$C_RESET" \
+        "$C_YELLOW" "${load_avg}" "$C_RESET"
+}
+
+process_manager() {
+    while true; do
+        clear 2>/dev/null || true
+        printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s           SuperKit Resource & Process Manager%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s============================================================%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%sTop CPU / Memory Processes:%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        su -c "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 12" 2>/dev/null || ps aux | head -n 12
+        echo ""
+        echo "Actions:"
+        echo "  1) Refresh list"
+        echo "  2) Terminate process (SIGTERM)"
+        echo "  3) Force kill process (SIGKILL)"
+        echo "  4) Return to menu"
+        echo ""
+        read -r -p "Select action [1-4]: " pm_act
+        case "$pm_act" in
+            2)
+                read -r -p "Enter PID to terminate: " target_pid
+                if [ -n "$target_pid" ]; then
+                    su -c "kill '$target_pid'" 2>/dev/null && echo "[✓] Sent SIGTERM to PID $target_pid" || echo "[!] Failed to terminate PID $target_pid"
+                fi
+                pause_dashboard
+                ;;
+            3)
+                read -r -p "Enter PID to force kill: " target_pid
+                if [ -n "$target_pid" ]; then
+                    su -c "kill -9 '$target_pid'" 2>/dev/null && echo "[✓] Sent SIGKILL to PID $target_pid" || echo "[!] Failed to kill PID $target_pid"
+                fi
+                pause_dashboard
+                ;;
+            1) continue ;;
+            4|*) break ;;
+        esac
+    done
+}
+
+watch_dashboard() {
+    trap 'break' INT
+    while true; do
+        clear 2>/dev/null || true
+        printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s    AndroidLinux-SuperKit Live Monitor (Press Ctrl+C to stop)%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        overview
+        echo ""
+        printf '%sActive High CPU Processes:%s\n' "$C_CYAN" "$C_RESET"
+        su -c "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 8" 2>/dev/null || true
+        sleep 2
+    done
+    trap - INT
+}
+
 dashboard() {
     while true; do
         clear 2>/dev/null || true
-        echo "============================================================"
-        echo "          AndroidLinux-SuperKit Dashboard"
-        echo "============================================================"
-        if is_mounted; then
-            echo " Debian chroot: ACTIVE"
-        else
-            echo " Debian chroot: INACTIVE"
-        fi
+        printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s          AndroidLinux-SuperKit Dashboard%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        overview
         echo ""
-        echo "  1) Chroot status"
-        echo "  2) Run diagnostics"
-        echo "  3) Start Debian chroot"
-        echo "  4) Open Debian shell"
-        echo "  5) Run a command in Debian"
-        echo "  6) Start XFCE desktop (Termux:X11)"
-        echo "  7) Stop SuperKit desktop"
-        echo "  8) Desktop status"
-        echo "  9) Sync Debian app launchers"
-        echo " 10) Start PulseAudio only"
-        echo " 11) Launch a Windows .exe (Wine + Box64)"
-        echo " 12) Show GPU profile"
-        echo " 13) Back up Debian"
-        echo " 14) Restore Debian from backup"
-        echo " 15) Stop and unmount Debian chroot"
-        echo "  h) Help"
-        echo "  q) Exit dashboard"
+        section_title "  System & Resources"
+        menu_item 1 "Detailed chroot status"
+        menu_item 2 "Run read-only diagnostics"
+        menu_item 3 "Show GPU profile"
+        menu_item 4 "Resource & process manager"
         echo ""
+        section_title "  Debian"
+        menu_item 5 "Start Debian chroot"
+        menu_item 6 "Open Debian shell"
+        menu_item 7 "Run a command in Debian"
+        echo ""
+        section_title "  Desktop and Audio"
+        menu_item 8 "Start XFCE desktop (Termux:X11)"
+        menu_item 9 "Restart XFCE desktop"
+        menu_item 10 "Stop SuperKit desktop"
+        menu_item 11 "Detailed desktop status"
+        menu_item 12 "Sync Debian app launchers"
+        menu_item 13 "Start PulseAudio only"
+        echo ""
+        section_title "  Gaming and Maintenance"
+        menu_item 14 "Launch a Windows .exe (Wine + Box64)"
+        menu_item 15 "Back up Debian"
+        menu_item 16 "Restore Debian from backup"
+        menu_item 17 "Stop and unmount Debian chroot"
+        echo ""
+        printf '  %sh%s) Help  %sr%s) Refresh  %sw%s) Watch live  %sq%s) Exit%s\n\n' "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         read -r -p "Select an option: " choice
 
         case "$choice" in
             1) bash "$REAL_SCRIPT" status; pause_dashboard ;;
             2) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
-            3) bash "$REAL_SCRIPT" start; pause_dashboard ;;
-            4) bash "$REAL_SCRIPT" shell ;;
-            5)
+            3) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
+            4) process_manager ;;
+            5) bash "$REAL_SCRIPT" start; pause_dashboard ;;
+            6) bash "$REAL_SCRIPT" shell ;;
+            7)
                 read -r -p "Debian command: " command
                 if [ -n "$command" ]; then bash "$REAL_SCRIPT" exec "$command"; fi
                 pause_dashboard ;;
-            6) bash "$REAL_SCRIPT" desktop start; pause_dashboard ;;
-            7) bash "$REAL_SCRIPT" desktop stop; pause_dashboard ;;
-            8) bash "$REAL_SCRIPT" desktop status; pause_dashboard ;;
-            9) bash "$REAL_SCRIPT" desktop sync-apps; pause_dashboard ;;
-            10) bash "$REAL_SCRIPT" audio; pause_dashboard ;;
-            11)
+            8) bash "$REAL_SCRIPT" desktop start; pause_dashboard ;;
+            9) bash "$REAL_SCRIPT" desktop restart; pause_dashboard ;;
+            10) bash "$REAL_SCRIPT" desktop stop; pause_dashboard ;;
+            11) bash "$REAL_SCRIPT" desktop status; pause_dashboard ;;
+            12) bash "$REAL_SCRIPT" desktop sync-apps; pause_dashboard ;;
+            13) bash "$REAL_SCRIPT" audio; pause_dashboard ;;
+            14)
                 read -r -p "Full path to Windows .exe: " exe_path
                 if [ -n "$exe_path" ]; then bash "$REAL_SCRIPT" game run "$exe_path"; fi
                 pause_dashboard ;;
-            12) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
-            13)
+            15)
                 read -r -p "Create a Debian backup now? [y/N]: " confirm
                 if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" backup; fi
                 pause_dashboard ;;
-            14)
+            16)
                 read -r -p "Backup archive path: " archive
                 if [ -n "$archive" ]; then
                     read -r -p "Restore replaces the current Debian filesystem. Continue? [y/N]: " confirm
                     if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" restore "$archive"; fi
                 fi
                 pause_dashboard ;;
-            15)
+            17)
                 read -r -p "Stop all chroot processes and unmount Debian? [y/N]: " confirm
                 if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" stop; fi
                 pause_dashboard ;;
             h|H) show_help; pause_dashboard ;;
+            r|R) ;;
+            w|W) watch_dashboard ;;
             q|Q) return 0 ;;
             *) echo "Invalid option: ${choice:-empty}"; pause_dashboard ;;
         esac
@@ -142,6 +266,15 @@ dashboard() {
 case "${1:-}" in
     dashboard|menu|ui)
         dashboard
+        ;;
+    overview)
+        overview
+        ;;
+    watch|monitor)
+        watch_dashboard
+        ;;
+    ps|top|processes)
+        process_manager
         ;;
     start)
         bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
@@ -209,8 +342,8 @@ case "${1:-}" in
     desktop)
         shift
         DESKTOP_ACTION="${1:-start}"
-        case "$DESKTOP_ACTION" in start|stop|status|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, status, sync-apps, or launch."; exit 1 ;; esac
-        if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]] && ! is_mounted; then
+        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, or launch."; exit 1 ;; esac
+        if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = restart || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]] && ! is_mounted; then
             bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
         fi
         shift || true

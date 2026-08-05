@@ -9,6 +9,8 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] || [ ! -d "$DEBIANPATH" ]
     exit 1
 fi
 
+TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+
 echo "[*] Mounting Linux chroot environment at $DEBIANPATH..."
 
 su -c "
@@ -17,13 +19,13 @@ su -c "
     if ! grep -q -w \"$DEBIANPATH\" /proc/mounts 2>/dev/null; then
         mount --bind \"$DEBIANPATH\" \"$DEBIANPATH\"
     fi
-    mount --make-rprivate \"$DEBIANPATH\"
+    mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
 
     domount_bind() {
-        if ! grep -q -w \"\$2\" /proc/mounts 2>/dev/null; then
+        if ! mountpoint -q \"\$2\" 2>/dev/null; then
             mkdir -p \"\$2\"
             mount --bind \"\$1\" \"\$2\"
-            mount --make-rslave \"\$2\"
+            mount --make-rslave \"\$2\" 2>/dev/null || true
         fi
     }
 
@@ -35,9 +37,9 @@ su -c "
     }
 
     domount_tmpfs() {
-        if ! grep -q -w \"\$2\" /proc/mounts 2>/dev/null; then
-            mkdir -p \"\$2\"
-            mount -t tmpfs -o \"\$3\" tmpfs \"\$2\"
+        if ! grep -q -w \"\$1\" /proc/mounts 2>/dev/null; then
+            mkdir -p \"\$1\"
+            mount -t tmpfs -o \"\$2\" tmpfs \"\$1\"
         fi
     }
 
@@ -50,7 +52,17 @@ su -c "
         domount_bind /sdcard $DEBIANPATH/sdcard
     fi
 
-    domount_tmpfs $DEBIANPATH/tmp rw,nosuid,nodev,mode=1777,noatime
+    mkdir -p \"$TERMUX_TMP\"
+    chmod 1777 \"$TERMUX_TMP\"
+    if ! mountpoint -q \"$DEBIANPATH/tmp\" 2>/dev/null; then
+        mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/tmp\"
+        mount --make-rslave \"$DEBIANPATH/tmp\" 2>/dev/null || true
+    fi
+    mkdir -p \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
+    if ! mountpoint -q \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" 2>/dev/null; then
+        mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
+        mount --make-rslave \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" 2>/dev/null || true
+    fi
     domount_tmpfs $DEBIANPATH/run rw,nosuid,nodev,mode=0755,noatime
     domount_tmpfs $DEBIANPATH/dev/shm rw,nosuid,nodev,noatime
 

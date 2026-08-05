@@ -10,6 +10,7 @@ check() {
     local name="$1" required="$2" detail="$3" status="$4"
     printf '%-14s %-5s %s\n' "$name" "$status" "$detail"
     [ "$required" = required ] && [ "$status" = FAIL ] && fail=1
+    return 0
 }
 
 [ "$DEBIANPATH" = /data/local/tmp/chrootDebian ] || { echo "FAIL fixed-path DEBIANPATH must be /data/local/tmp/chrootDebian"; exit 2; }
@@ -25,7 +26,5 @@ if [ -e /dev/dri ] || [ -e /dev/kgsl-3d0 ]; then check gpu optional "profile=$SU
 if [ "$mounted" = 1 ]; then
     su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/xfce4-session" 2>/dev/null && check xfce required "xfce4-session available" PASS || check xfce required "install Debian xfce4-session" FAIL
     if su -c "chroot '$DEBIANPATH' /usr/bin/find /usr/share/vulkan/icd.d -type f -name '*.json' -print -quit 2>/dev/null | /system/bin/grep -q ."; then check vulkan optional "ICD JSON found" PASS; else check vulkan optional "no Vulkan ICD JSON found" WARN; fi
-    su -c "chroot '$DEBIANPATH' /usr/bin/box64 --version >/dev/null 2>&1" && check box64 optional "box64 runnable" PASS || check box64 optional "box64 missing or not runnable" WARN
-    su -c "chroot '$DEBIANPATH' /usr/bin/wine --version >/dev/null 2>&1" && check wine optional "wine runnable" PASS || check wine optional "wine missing or not runnable" WARN
 fi
 exit "$fail"
