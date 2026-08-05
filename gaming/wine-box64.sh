@@ -20,12 +20,27 @@ check_emulation_available() {
     return 0
 }
 
+setup_gaming() {
+    echo "[*] Initializing Gaming Environment dependencies inside Debian chroot..."
+    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        apt-get update && apt-get install -y wine wine64 box64 dxvk libvulkan1 cabextract wget unzip 2>/dev/null || true
+    '"
+    echo "[*] Setting up Wine win64 prefix..."
+    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        export WINEARCH=win64
+        wineboot -u 2>/dev/null || true
+    '"
+    echo "[✓] Gaming Environment setup completed."
+}
+
 show_gaming_menu() {
     echo "=========================================="
     echo "       SuperKit Gaming Launcher"
     echo "=========================================="
     if ! check_emulation_available; then
-        return 1
+        echo "0) Auto-Install Wine / Box64 Gaming Packages"
     fi
     echo "1) Launch Wine Config (winecfg)"
     echo "2) Run Windows Executable (.exe)"
@@ -54,6 +69,9 @@ run_wine_exe() {
 }
 
 case "${1:-}" in
+    setup|setup-gaming)
+        setup_gaming
+        ;;
     run)
         shift
         run_wine_exe "$@"

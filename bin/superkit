@@ -63,6 +63,7 @@ show_help() {
     echo "  dashboard, menu  Open the interactive terminal dashboard"
     echo "  overview         Show concise chroot, desktop, audio, X11, and GPU state"
     echo "  mode [gaming|performance|balanced] Configure performance profile"
+    echo "  thermal          Display battery and CPU/GPU thermal temperatures"
     echo ""
     echo "Core Chroot Commands:"
     echo "  start            Start & mount Debian chroot safely"
@@ -74,19 +75,23 @@ show_help() {
     echo "  install <pkg..>  Install Debian packages via apt-get"
     echo "  search <query>   Search available Debian packages"
     echo "  service <act> <name> Manage Debian background services (start|stop|restart|status)"
+    echo "  snapshot [act]   Fast chroot snapshots (create|list|restore|delete)"
     echo "  backup           Backup chroot to tar.gz archive"
     echo "  restore <file>   Restore chroot from tar.gz archive"
     echo ""
     echo "MoBox Gaming Commands:"
+    echo "  setup-gaming     Auto-install Wine, Box64, DXVK, and VKD3D dependencies"
     echo "  game [exe]       Launch Windows .exe with Box64 + Wine"
     echo "  gpu              Detect SoC & configure Turnip/Zink/VirGL"
     echo ""
-    echo "Termux Desktop Commands:"
+    echo "Termux Desktop & Remote Commands:"
     echo "  desktop start    Start SuperKit-managed XFCE4 desktop"
     echo "  desktop stop     Stop only the SuperKit-managed desktop"
     echo "  desktop status   Show desktop lifecycle status"
     echo "  desktop sync-apps Create SuperKit-owned Termux launchers"
+    echo "  theme [preset]   Set XFCE look & feel (dark|light|nord|dracula)"
     echo "  resolution [preset] Set Termux:X11 display resolution (720p|1080p|native)"
+    echo "  remote [ssh|vnc] Manage SSH/VNC remote access servers"
     echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
     echo ""
     echo "Utility Commands:"
@@ -205,25 +210,30 @@ dashboard() {
         menu_item 2 "Run read-only diagnostics"
         menu_item 3 "Show GPU profile"
         menu_item 4 "Resource & process manager"
+        menu_item 5 "Thermal & battery monitor"
         echo ""
-        section_title "  Debian"
-        menu_item 5 "Start Debian chroot"
-        menu_item 6 "Open Debian shell"
-        menu_item 7 "Run a command in Debian"
+        section_title "  Debian & Maintenance"
+        menu_item 6 "Start Debian chroot"
+        menu_item 7 "Open Debian shell"
+        menu_item 8 "Run a command in Debian"
+        menu_item 9 "Chroot snapshots (fast backup/restore)"
+        menu_item 10 "Back up Debian (tar.gz)"
+        menu_item 11 "Restore Debian from backup"
+        menu_item 12 "Stop and unmount Debian chroot"
         echo ""
-        section_title "  Desktop and Audio"
-        menu_item 8 "Start XFCE desktop (Termux:X11)"
-        menu_item 9 "Restart XFCE desktop"
-        menu_item 10 "Stop SuperKit desktop"
-        menu_item 11 "Detailed desktop status"
-        menu_item 12 "Sync Debian app launchers"
-        menu_item 13 "Start PulseAudio only"
+        section_title "  Desktop & Remote"
+        menu_item 13 "Start XFCE desktop (Termux:X11)"
+        menu_item 14 "Restart XFCE desktop"
+        menu_item 15 "Stop SuperKit desktop"
+        menu_item 16 "Detailed desktop status"
+        menu_item 17 "Sync Debian app launchers"
+        menu_item 18 "Desktop theme switcher"
+        menu_item 19 "Remote SSH / VNC manager"
+        menu_item 20 "Start PulseAudio only"
         echo ""
-        section_title "  Gaming and Maintenance"
-        menu_item 14 "Launch a Windows .exe (Wine + Box64)"
-        menu_item 15 "Back up Debian"
-        menu_item 16 "Restore Debian from backup"
-        menu_item 17 "Stop and unmount Debian chroot"
+        section_title "  Gaming"
+        menu_item 21 "Setup Wine/Box64 gaming environment"
+        menu_item 22 "Launch a Windows .exe (Wine + Box64)"
         echo ""
         printf '  %sh%s) Help  %sr%s) Refresh  %sw%s) Watch live  %sq%s) Exit%s\n\n' "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         read -r -p "Select an option: " choice
@@ -233,36 +243,64 @@ dashboard() {
             2) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
             3) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
             4) process_manager ;;
-            5) bash "$REAL_SCRIPT" start; pause_dashboard ;;
-            6) bash "$REAL_SCRIPT" shell ;;
-            7)
+            5) bash "$REAL_SCRIPT" thermal; pause_dashboard ;;
+            6) bash "$REAL_SCRIPT" start; pause_dashboard ;;
+            7) bash "$REAL_SCRIPT" shell ;;
+            8)
                 read -r -p "Debian command: " command
                 if [ -n "$command" ]; then bash "$REAL_SCRIPT" exec "$command"; fi
                 pause_dashboard ;;
-            8) bash "$REAL_SCRIPT" desktop start; pause_dashboard ;;
-            9) bash "$REAL_SCRIPT" desktop restart; pause_dashboard ;;
-            10) bash "$REAL_SCRIPT" desktop stop; pause_dashboard ;;
-            11) bash "$REAL_SCRIPT" desktop status; pause_dashboard ;;
-            12) bash "$REAL_SCRIPT" desktop sync-apps; pause_dashboard ;;
-            13) bash "$REAL_SCRIPT" audio; pause_dashboard ;;
-            14)
-                read -r -p "Full path to Windows .exe: " exe_path
-                if [ -n "$exe_path" ]; then bash "$REAL_SCRIPT" game run "$exe_path"; fi
+            9)
+                echo "Snapshot actions: 1) list  2) create  3) restore  4) delete"
+                read -r -p "Select action [1-4]: " s_act
+                case "$s_act" in
+                    1) bash "$REAL_SCRIPT" snapshot list ;;
+                    2) read -r -p "Snapshot name: " s_name; bash "$REAL_SCRIPT" snapshot create "$s_name" ;;
+                    3) read -r -p "Snapshot name to restore: " s_name; bash "$REAL_SCRIPT" snapshot restore "$s_name" ;;
+                    4) read -r -p "Snapshot name to delete: " s_name; bash "$REAL_SCRIPT" snapshot delete "$s_name" ;;
+                esac
                 pause_dashboard ;;
-            15)
+            10)
                 read -r -p "Create a Debian backup now? [y/N]: " confirm
                 if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" backup; fi
                 pause_dashboard ;;
-            16)
+            11)
                 read -r -p "Backup archive path: " archive
                 if [ -n "$archive" ]; then
                     read -r -p "Restore replaces the current Debian filesystem. Continue? [y/N]: " confirm
                     if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" restore "$archive"; fi
                 fi
                 pause_dashboard ;;
-            17)
+            12)
                 read -r -p "Stop all chroot processes and unmount Debian? [y/N]: " confirm
                 if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" stop; fi
+                pause_dashboard ;;
+            13) bash "$REAL_SCRIPT" desktop start; pause_dashboard ;;
+            14) bash "$REAL_SCRIPT" desktop restart; pause_dashboard ;;
+            15) bash "$REAL_SCRIPT" desktop stop; pause_dashboard ;;
+            16) bash "$REAL_SCRIPT" desktop status; pause_dashboard ;;
+            17) bash "$REAL_SCRIPT" desktop sync-apps; pause_dashboard ;;
+            18)
+                echo "Presets: dark, light, nord, dracula, greybird"
+                read -r -p "Select theme preset: " t_preset
+                if [ -n "$t_preset" ]; then bash "$REAL_SCRIPT" theme "$t_preset"; fi
+                pause_dashboard ;;
+            19)
+                echo "Remote actions: 1) SSH start  2) SSH stop  3) VNC start  4) VNC stop  5) status"
+                read -r -p "Select action [1-5]: " r_act
+                case "$r_act" in
+                    1) bash "$REAL_SCRIPT" remote ssh start ;;
+                    2) bash "$REAL_SCRIPT" remote ssh stop ;;
+                    3) bash "$REAL_SCRIPT" remote vnc start ;;
+                    4) bash "$REAL_SCRIPT" remote vnc stop ;;
+                    *) bash "$REAL_SCRIPT" remote status ;;
+                esac
+                pause_dashboard ;;
+            20) bash "$REAL_SCRIPT" audio; pause_dashboard ;;
+            21) bash "$REAL_SCRIPT" setup-gaming; pause_dashboard ;;
+            22)
+                read -r -p "Full path to Windows .exe: " exe_path
+                if [ -n "$exe_path" ]; then bash "$REAL_SCRIPT" game run "$exe_path"; fi
                 pause_dashboard ;;
             h|H) show_help; pause_dashboard ;;
             r|R) ;;
@@ -350,8 +388,29 @@ case "${1:-}" in
         fi
         bash "$SUPERKIT_DIR/gaming/wine-box64.sh" "$@"
         ;;
+    setup-gaming|setup)
+        if ! is_mounted; then
+            bash "$SUPERKIT_DIR/core/mount-chroot.sh" || exit 1
+        fi
+        bash "$SUPERKIT_DIR/gaming/wine-box64.sh" setup
+        ;;
     gpu)
         bash "$SUPERKIT_DIR/core/gpu-detect.sh"
+        ;;
+    thermal|temp)
+        bash "$SUPERKIT_DIR/core/thermal.sh"
+        ;;
+    theme)
+        shift
+        bash "$SUPERKIT_DIR/desktop/theme.sh" "$@"
+        ;;
+    snapshot)
+        shift
+        bash "$SUPERKIT_DIR/core/snapshot.sh" "$@"
+        ;;
+    remote)
+        shift
+        bash "$SUPERKIT_DIR/desktop/remote.sh" "$@"
         ;;
     desktop)
         shift

@@ -17,11 +17,16 @@ AndroidLinux-SuperKit/
 ├── core/
 │   ├── mount-chroot.sh   # Safe, isolated mount script
 │   ├── stop-chroot.sh    # Safe unmount script
-│   └── gpu-detect.sh     # Auto-detect SoC and config drivers
+│   ├── doctor.sh         # Non-mutating environment diagnostics
+│   ├── gpu-detect.sh     # Auto-detect SoC and config drivers
+│   ├── thermal.sh        # Battery & CPU/GPU thermal monitor
+│   └── snapshot.sh       # Fast point-in-time chroot snapshots
 ├── gaming/
-│   └── wine-box64.sh     # MoBox gaming layer helpers
+│   └── wine-box64.sh     # MoBox gaming layer & auto-setup helpers
 ├── desktop/
-│   └── start-desktop.sh  # Desktop & audio launcher
+│   ├── start-desktop.sh  # Desktop & audio launcher
+│   ├── theme.sh          # Desktop look & feel switcher
+│   └── remote.sh         # SSH & VNC remote access manager
 ├── docs/                 # Documentation & guides
 └── README.md
 ```
@@ -41,6 +46,7 @@ The dashboard groups system, Debian, desktop/audio, and gaming/maintenance actio
 
 ```bash
 superkit overview          # Print the concise live overview without opening the dashboard
+superkit thermal           # Display battery and CPU/GPU thermal zone temperatures
 ```
 
 ### Core Chroot Operations
@@ -53,6 +59,7 @@ superkit stop             # Stop SuperKit desktop, then unmount safely
 superkit install <pkgs>   # Install Debian packages directly via apt-get
 superkit search <query>   # Search available Debian packages
 superkit service <act> <svc> Manage Debian background services (start|stop|restart|status)
+superkit snapshot [create|list|restore|delete] <name> Fast chroot snapshots
 superkit backup           # Backup chroot to /sdcard/Debian_Backups
 superkit restore <file>   # Restore chroot from backup
 ```
@@ -61,17 +68,20 @@ superkit restore <file>   # Restore chroot from backup
 ```bash
 superkit gpu              # Report the safe selected GPU runtime profile
 superkit mode [gaming|performance|balanced] # Tune memory compaction & Turnip GPU flags
+superkit setup-gaming     # Auto-install Wine, Box64, DXVK, and VKD3D dependencies
 superkit game             # Open interactive gaming launcher
 superkit game run <exe>   # Run a Windows executable (requires Wine / Box64 packages)
 ```
 
-### Termux-Desktops GUI & Audio
+### Termux-Desktops GUI, Theme & Remote Access
 ```bash
 superkit desktop start    # Launch SuperKit-managed XFCE4 desktop
 superkit desktop status   # Check managed desktop state
 superkit desktop stop     # Stop only the managed session
 superkit desktop sync-apps # Generate SuperKit-owned Termux launchers
+superkit theme [dark|light|nord|dracula] # Switch XFCE GTK and Papirus icon presets
 superkit resolution [720p|1080p|native] [scale] # Configure Termux:X11 display resolution
+superkit remote [ssh|vnc] [start|stop|status] # Manage SSH (port 2222) & VNC (port 5900)
 superkit audio [start|stop|test|volume <0-100>] # PulseAudio server management & volume control
 ```
 
