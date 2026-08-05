@@ -7,7 +7,14 @@ superkit_gpu_detect() {
     SUPERKIT_GPU_PROFILE="generic-virgl"
 
     case "$SUPERKIT_GPU_PLATFORM" in
-        msm*|sm*|qcom*) SUPERKIT_GPU_PROFILE="adreno-turnip-zink" ;;
+        msm*|sm*|qcom*)
+            DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
+            if [ -d "$DEBIANPATH" ] && su -c "chroot '$DEBIANPATH' /usr/bin/test -f /usr/lib/aarch64-linux-gnu/dri/zink_dri.so -o -d /usr/share/vulkan/icd.d" 2>/dev/null; then
+                SUPERKIT_GPU_PROFILE="adreno-turnip-zink"
+            else
+                SUPERKIT_GPU_PROFILE="generic-virgl"
+            fi
+            ;;
         exynos*|mali*|mt*|dimensity*) SUPERKIT_GPU_PROFILE="mali-virgl" ;;
     esac
 }

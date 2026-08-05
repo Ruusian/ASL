@@ -25,6 +25,7 @@ superkit_gpu_detect
 if [ -e /dev/dri ] || [ -e /dev/kgsl-3d0 ]; then check gpu optional "profile=$SUPERKIT_GPU_PROFILE; host GPU node present" PASS; else check gpu optional "profile=$SUPERKIT_GPU_PROFILE; no known host GPU node" WARN; fi
 if [ "$mounted" = 1 ]; then
     su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/xfce4-session" 2>/dev/null && check xfce required "xfce4-session available" PASS || check xfce required "install Debian xfce4-session" FAIL
+    su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/dbus-launch" 2>/dev/null && check dbus required "dbus-launch available" PASS || check dbus required "install Debian dbus-x11" FAIL
     if su -c "chroot '$DEBIANPATH' /usr/bin/find /usr/share/vulkan/icd.d -type f -name '*.json' -print -quit 2>/dev/null | /system/bin/grep -q ."; then check vulkan optional "ICD JSON found" PASS; else check vulkan optional "no Vulkan ICD JSON found" WARN; fi
 fi
 exit "$fail"

@@ -2,7 +2,7 @@
 
 A comprehensive, safe, root-accelerated Linux environment for Android combining:
 - 🛡️ **Zero-Crash Native Chroot Management Core** (Isolated mounts, `--make-rprivate` / `--make-rslave`, safe `/sdcard` sharing, no host OS degradation)
-- 🎮 **MoBox-Inspired Gaming Engine** (Wine + Box64/Box86 + Turnip + Zink + DXVK / VKD3D acceleration)
+- 🎮 **Modular Gaming & Hardware Acceleration Engine** (Native Turnip + Zink + VirGL acceleration with optional Box64/Wine support)
 - 🖥️ **Termux-Desktops-Inspired GUI Engine** (XFCE4 Desktop + PulseAudio audio integration via Termux-X11)
 - ⚡ **Auto-Hardware Detection & Tuning** (Adreno 6xx/7xx Turnip+Zink auto-config, Snapdragon 8 Gen 1 flicker fixes, Mali VirGL fallbacks)
 
@@ -58,7 +58,7 @@ superkit restore <file>   # Restore chroot from backup
 ```bash
 superkit gpu              # Report the safe selected GPU runtime profile
 superkit game             # Open interactive gaming launcher
-superkit game run <exe>   # Run a Windows executable using Box64 + Wine + DXVK
+superkit game run <exe>   # Run a Windows executable (requires Wine / Box64 packages)
 ```
 
 ### Termux-Desktops GUI & Audio

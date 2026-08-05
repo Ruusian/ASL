@@ -48,6 +48,10 @@ su -c "
     domount_fs sysfs $DEBIANPATH/sys
     domount_bind /dev/pts $DEBIANPATH/dev/pts
 
+    if [ -d /proc/sys/fs/binfmt_misc ] && mountpoint -q /proc/sys/fs/binfmt_misc 2>/dev/null; then
+        domount_bind /proc/sys/fs/binfmt_misc $DEBIANPATH/proc/sys/fs/binfmt_misc
+    fi
+
     if [ -d /sdcard ]; then
         domount_bind /sdcard $DEBIANPATH/sdcard
     fi
@@ -68,6 +72,11 @@ su -c "
 
     if [ -d $DEBIANPATH/var ] && [ ! -L $DEBIANPATH/var/lock ]; then
         domount_tmpfs $DEBIANPATH/var/lock rw,nosuid,nodev,mode=1777,noatime
+    fi
+
+    if [ ! -s $DEBIANPATH/etc/resolv.conf ]; then
+        mkdir -p $DEBIANPATH/etc
+        printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > $DEBIANPATH/etc/resolv.conf
     fi
 " || {
     echo "[!] Chroot mount failed."

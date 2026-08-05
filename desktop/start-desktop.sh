@@ -39,11 +39,11 @@ process_matches() {
 read_state() {
     [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ] || return 1
     [ "$(stat -c %U "$STATE_FILE" 2>/dev/null)" = "$(id -un)" ] || return 1
-    unset DISPLAY_ID X11_PID X11_START SESSION_PID SESSION_START PULSE_PID PULSE_START PULSE_OWNED
+    unset DISPLAY_ID X11_PID X11_START SESSION_PID SESSION_START PULSE_PID PULSE_START PULSE_OWNED SOCAT_PID SOCAT_START
     local key value
     while IFS='=' read -r key value; do
         case "$key" in
-            DISPLAY_ID|X11_PID|X11_START|SESSION_PID|SESSION_START|PULSE_PID|PULSE_START|PULSE_OWNED)
+            DISPLAY_ID|X11_PID|X11_START|SESSION_PID|SESSION_START|PULSE_PID|PULSE_START|PULSE_OWNED|SOCAT_PID|SOCAT_START)
                 printf -v "$key" '%s' "$value"
                 ;;
             *) return 1 ;;
@@ -63,6 +63,7 @@ write_state() {
         printf 'X11_PID=%s\nX11_START=%s\n' "$X11_PID" "$X11_START"
         printf 'SESSION_PID=%s\nSESSION_START=%s\n' "$SESSION_PID" "$SESSION_START"
         printf 'PULSE_OWNED=%s\nPULSE_PID=%s\nPULSE_START=%s\n' "$PULSE_OWNED" "$PULSE_PID" "$PULSE_START"
+        printf 'SOCAT_PID=%s\nSOCAT_START=%s\n' "$SOCAT_PID" "$SOCAT_START"
     } > "$tmp" && mv -f "$tmp" "$STATE_FILE"
 }
 
@@ -141,7 +142,7 @@ start_desktop() {
     am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[*] Starting Termux:X11 display server..."
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
-        rm -f "/data/data/com.termux/files/usr/tmp/.X11-unix/X0" 2>/dev/null || true
+        rm -f "/data/data/com.termux/files/usr/tmp/.X11-unix/X0" "/data/data/com.termux/files/usr/tmp/.X0-lock" 2>/dev/null || true
         termux-x11 "$DISPLAY_ID" +iglx -ac >/dev/null 2>&1 &
         sleep 1
     fi
@@ -200,6 +201,7 @@ export NO_AT_BRIDGE=1
 export GIO_USE_PORTALS=0
 export GIO_USE_VFS=local
 export WEBKIT_FORCE_SANDBOX=0
+export QT_QPA_PLATFORM=xcb
 export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
 export MESA_SHADER_CACHE_DIR=/tmp/.cache
@@ -274,6 +276,7 @@ stop_desktop() {
     sleep 1
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
     if process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || failed=1; fi
+    if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || failed=1; fi
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi
     rm -f "$STATE_FILE"
@@ -326,7 +329,7 @@ sync_apps() {
     for target in "$LAUNCHER_DIR"/superkit-*.desktop; do
         [ -f "$target" ] && [ ! -L "$target" ] && grep -qx 'X-SuperKit-Managed=true' "$target" && rm -f "$target"
     done
-    while IFS= read -r file; do
+    while IFS= read -r -d '' file; do
         root=
         for candidate in /usr/share/applications /usr/local/share/applications /root/.local/share/applications; do
             [[ "$file" == "$candidate/"* ]] && root="$candidate" && break
@@ -343,7 +346,7 @@ sync_apps() {
             printf 'Exec=%s desktop launch %s\n' "${0%/*}/../bin/superkit" "$id"
             printf 'Terminal=false\nX-SuperKit-Managed=true\nX-SuperKit-Desktop-Id=%s\n' "$id"
         } > "$tmp" && mv -f "$tmp" "$target" && count=$((count + 1))
-    done < <(su -c "chroot '$DEBIANPATH' /usr/bin/find /usr/share/applications /usr/local/share/applications /root/.local/share/applications -type f -name '*.desktop' 2>/dev/null" 2>/dev/null)
+    done < <(su -c "chroot '$DEBIANPATH' /usr/bin/find /usr/share/applications /usr/local/share/applications /root/.local/share/applications -type f -name '*.desktop' -print0 2>/dev/null" 2>/dev/null)
     echo "[✓] Synchronized $count SuperKit-owned launchers."
 }
 

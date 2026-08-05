@@ -38,6 +38,7 @@ su -c "
         $DEBIANPATH/proc
         $DEBIANPATH/sys
         $DEBIANPATH/run
+        $DEBIANPATH/data/data/com.termux/files/usr/tmp
         $DEBIANPATH/tmp
         $DEBIANPATH
     \"
