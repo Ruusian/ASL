@@ -115,7 +115,8 @@ overview() {
         mem_used=0; mem_pct=0
     fi
     disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')
-    load_avg=$(cat /proc/loadavg 2>/dev/null | cut -d' ' -f1-3 || su -c "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3 || echo "unknown")
+    load_avg=$(su -c "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3)
+    [ -n "$load_avg" ] || load_avg="unknown"
 
     printf '%s=== AndroidLinux-SuperKit Overview ===%s\n' "$C_BOLD" "$C_RESET"
     if is_mounted; then printf ' Chroot:  '; status_label ACTIVE; echo; else printf ' Chroot:  '; status_label INACTIVE; echo; fi
