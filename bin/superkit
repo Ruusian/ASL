@@ -33,7 +33,13 @@ status_label() {
 }
 
 section_title() { printf '%s%s%s\n' "$C_CYAN$C_BOLD" "$1" "$C_RESET"; }
-menu_item() { printf '  %s%2s%s) %s\n' "$C_CYAN" "$1" "$C_RESET" "$2"; }
+menu_item() {
+    if [ -n "${3:-}" ]; then
+        printf '  %s%2s%s) %-42s %s%s%s\n' "$C_CYAN" "$1" "$C_RESET" "$2" "$C_YELLOW" "$3" "$C_RESET"
+    else
+        printf '  %s%2s%s) %s\n' "$C_CYAN" "$1" "$C_RESET" "$2"
+    fi
+}
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
@@ -124,6 +130,8 @@ overview() {
     local desktop_state desktop_status desktop_detail x11_socket
     local mem_total mem_avail mem_used mem_pct disk_data load_avg
     local swap_total swap_free swap_used swap_pct governor
+    local batt_level batt_temp cpu_temp batt_str cpu_str
+
     x11_socket="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0"
     desktop_state=$(bash "$SUPERKIT_DIR/desktop/start-desktop.sh" status 2>/dev/null | tr '\n' ' ')
     desktop_state=${desktop_state#Desktop: }
@@ -156,6 +164,19 @@ overview() {
     load_avg=$(su -c "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3)
     [ -n "$load_avg" ] || load_avg="unknown"
 
+    batt_level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || su -c "dumpsys battery" 2>/dev/null | awk '/level:/ {print $2}')
+    batt_temp=$(cat /sys/class/power_supply/battery/temp 2>/dev/null || su -c "dumpsys battery" 2>/dev/null | awk '/temperature:/ {print int($2/10)}')
+    if [ -n "$batt_temp" ] && [ "$batt_temp" -gt 100 ]; then batt_temp=$((batt_temp / 10)); fi
+    cpu_temp=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1>1000 {$1=int($1/1000)} $1>=20 && $1<=100 {print $1; exit}')
+
+    if [ -n "$batt_level" ]; then
+        batt_str="${batt_level}%"
+        [ -n "$batt_temp" ] && batt_str="${batt_str} (${batt_temp}°C)"
+    else
+        batt_str="N/A"
+    fi
+    cpu_str="${cpu_temp:-N/A}°C"
+
     printf '%s╭──────────────────────────────────────────────────────────────────────────╮%s\n' "$C_CYAN" "$C_RESET"
     printf '%s│ 🚀  %sANDROID SUBSYSTEM FOR LINUX (ASL)%s                                 │\n' "$C_CYAN" "$C_BOLD$C_CYAN" "$C_RESET"
     printf '%s├──────────────────────────────────────────────────────────────────────────┤%s\n' "$C_CYAN" "$C_RESET"
@@ -164,12 +185,13 @@ overview() {
     printf '   🖥️  Desktop: '
     status_label "${desktop_status:-UNKNOWN}"
     printf ' %-24s │\n' "$desktop_detail"
-    printf '│ ⚡ GPU:     %s%-20s%s  (%s)%s │\n' "$C_YELLOW" "$SUPERKIT_GPU_PROFILE" "$C_RESET" "${SUPERKIT_GPU_PLATFORM:-unknown}" ""
+    printf '│ ⚡ GPU:     %s%-20s%s  (%s) │\n' "$C_YELLOW" "$SUPERKIT_GPU_PROFILE" "$C_RESET" "${SUPERKIT_GPU_PLATFORM:-unknown}"
     printf '│ 📡 X11:     '
     if [ -S "$x11_socket" ]; then status_label READY; else status_label STOPPED; fi
     printf '        🔊 Audio:   '
     if pgrep -x pulseaudio >/dev/null 2>&1; then status_label RUNNING; else status_label STOPPED; fi
     printf '      ⚙️ Gov: %s%-9s%s │\n' "$C_GREEN" "$governor" "$C_RESET"
+    printf '│ 🔋 Batt:    %s%-15s%s 🌡️ CPU: %s%-8s%s                         │\n' "$C_CYAN" "$batt_str" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_RESET"
     printf '%s├──────────────────────────────────────────────────────────────────────────┤%s\n' "$C_CYAN" "$C_RESET"
     printf '│ 💾 RAM:  ['
     draw_bar "$mem_pct" 12
@@ -260,20 +282,20 @@ dashboard() {
         menu_item 1 "Detailed chroot status"
         menu_item 2 "Run read-only diagnostics"
         menu_item 3 "Show GPU profile"
-        menu_item 4 "Resource & process manager"
-        menu_item 5 "Thermal & battery monitor"
+        menu_item 4 "Resource & process manager" "[p]"
+        menu_item 5 "Thermal & battery monitor" "[t]"
         echo ""
         section_title "  Debian & Maintenance"
-        menu_item 6 "Start Debian chroot"
+        menu_item 6 "Start Debian chroot" "[s]"
         menu_item 7 "Open Debian shell"
         menu_item 8 "Run a command in Debian"
         menu_item 9 "Chroot snapshots (fast backup/restore)"
         menu_item 10 "Back up Debian (tar.gz)"
         menu_item 11 "Restore Debian from backup"
-        menu_item 12 "Stop and unmount Debian chroot"
+        menu_item 12 "Stop and unmount Debian chroot" "[x]"
         echo ""
         section_title "  Desktop & Remote"
-        menu_item 13 "Start XFCE desktop (Termux:X11)"
+        menu_item 13 "Start XFCE desktop (Termux:X11)" "[d]"
         menu_item 14 "Restart XFCE desktop"
         menu_item 15 "Stop SuperKit desktop"
         menu_item 16 "Detailed desktop status"
@@ -284,8 +306,8 @@ dashboard() {
         echo ""
         section_title "  Gaming"
         menu_item 21 "Setup Wine/Box64 gaming environment"
-        menu_item 22 "Launch a Windows .exe (Wine + Box64)"
-        menu_item 23 "Tune performance profile (mode)"
+        menu_item 22 "Launch a Windows .exe (Wine + Box64)" "[g]"
+        menu_item 23 "Tune performance profile (mode)" "[m]"
         echo ""
         printf '  %sh%s) Help  %sr%s) Refresh  %sw%s) Watch live  %sq%s) Exit%s\n\n' "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         read -r -p "Select an option: " choice
