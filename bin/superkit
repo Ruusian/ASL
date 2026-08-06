@@ -624,7 +624,7 @@ case "${1:-}" in
         fi
 
         echo "[*] Creating backup at $BACKUP_FILE..."
-        if su -c "tar --warning=no-file-changed -czf '$PARTIAL_BACKUP' --exclude='dev/*' --exclude='proc/*' --exclude='sys/*' --exclude='run/*' --exclude='tmp/*' -C '$DEBIANPATH' ." && su -c "test -s '$PARTIAL_BACKUP'"; then
+        if su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; tar --warning=no-file-changed -czf '$PARTIAL_BACKUP' --exclude='./dev*' --exclude='./proc*' --exclude='./sys*' --exclude='./run*' --exclude='./tmp*' -C '$DEBIANPATH' ." && su -c "test -s '$PARTIAL_BACKUP'"; then
             mv "$PARTIAL_BACKUP" "$BACKUP_FILE"
             echo "[✓] Backup completed: $BACKUP_FILE"
         else
@@ -645,7 +645,7 @@ case "${1:-}" in
             exit 1
         }
         restore_b64=$(printf '%s' "$RESTORE_FILE" | "$BASE64_BIN" | tr -d '\n')
-        if ! su -c "archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); tar -tzf \"\$archive\" >/dev/null && ! tar -tzf \"\$archive\" | grep -Eq '(^/|(^|/)\.\.(/|\$))'"; then
+        if ! su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); tar -tzf \"\$archive\" >/dev/null && ! tar -tzf \"\$archive\" | grep -Eq '(^/|(^|/)\.\.(/|\$))'"; then
             echo "[!] Restore archive is unreadable or contains unsafe paths."
             exit 1
         fi
@@ -661,7 +661,7 @@ case "${1:-}" in
             bash "$SUPERKIT_DIR/core/stop-chroot.sh" || exit 1
         fi
         echo "[*] Staging restore from $RESTORE_FILE..."
-        su -c "archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.superkit-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; mv \"\$target\" \"\$rollback\" && mv \"\$stage\" \"\$target\" || exit 1; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
+        su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.superkit-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; mv \"\$target\" \"\$rollback\" && mv \"\$stage\" \"\$target\" || exit 1; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
             echo "[!] Restore failed; the existing Debian root was left unchanged."
             exit 1
         }
