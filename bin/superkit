@@ -157,7 +157,7 @@ overview() {
     [ -n "$load_avg" ] || load_avg="unknown"
 
     printf '%s╭──────────────────────────────────────────────────────────────────────────╮%s\n' "$C_CYAN" "$C_RESET"
-    printf '%s│ 🚀  %sANDROID SUBSYSTEM FOR LINUX (ASL)%s %s2026.1%s                          │\n' "$C_CYAN" "$C_BOLD$C_CYAN" "$C_RESET" "$C_YELLOW" "$C_RESET"
+    printf '%s│ 🚀  %sANDROID SUBSYSTEM FOR LINUX (ASL)%s                                 │\n' "$C_CYAN" "$C_BOLD$C_CYAN" "$C_RESET"
     printf '%s├──────────────────────────────────────────────────────────────────────────┤%s\n' "$C_CYAN" "$C_RESET"
     printf '│ 🛡️  Chroot:  '
     if is_mounted; then status_label ACTIVE; else status_label INACTIVE; fi
