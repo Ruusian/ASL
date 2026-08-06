@@ -1,0 +1,6 @@
+id=androidlinux-superkit
+name=Android Subsystem for Linux (ASL SuperKit)
+version=v1.0
+versionCode=100
+author=OpenClaude & DeepMind Team
+description=[ stopped🙁 ] Root-Accelerated Debian Chroot + Box64 Gaming Container

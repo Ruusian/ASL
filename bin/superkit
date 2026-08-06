@@ -100,6 +100,15 @@ show_help() {
     echo "  remote [ssh|vnc] Manage SSH/VNC remote access servers"
     echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
     echo ""
+    echo "Termux & Android Bridge Commands:"
+    echo "  open <target>    Open file or URL in default Android host application"
+    echo "  clip [copy|paste] Set or read Android system clipboard content"
+    echo "  wakelock [on|off] Acquire or release Termux CPU wake lock"
+    echo "  toast <message>  Display quick Android system toast message"
+    echo "  notify <t> <m>   Display Android notification banner"
+    echo "  storage          Request Android shared storage permission"
+    echo "  aid [setup]      Map Android system GIDs (aid_graphics, aid_audio, aid_sdcard_rw)"
+    echo ""
     echo "Utility Commands:"
     echo "  help             Show this help message"
     echo ""
@@ -309,6 +318,12 @@ dashboard() {
         menu_item 22 "Launch a Windows .exe (Wine + Box64)" "[g]"
         menu_item 23 "Tune performance profile (mode)" "[m]"
         echo ""
+        section_title "  Termux & Android Bridge"
+        menu_item 24 "CPU Wake Lock (prevent Android sleep)"
+        menu_item 25 "Open file or URL in Android host app"
+        menu_item 26 "Android System Clipboard (copy/paste)"
+        menu_item 27 "Send Android Toast / Notification"
+        echo ""
         printf '  %sh%s) Help  %sr%s) Refresh  %sw%s) Watch live  %sq%s) Exit%s\n\n' "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         read -r -p "Select an option: " choice
 
@@ -385,6 +400,31 @@ dashboard() {
                     3) bash "$REAL_SCRIPT" mode balanced ;;
                     *) bash "$REAL_SCRIPT" mode status ;;
                 esac
+                pause_dashboard ;;
+            24)
+                echo "Wake lock actions: 1) status  2) enable (on)  3) disable (off)"
+                read -r -p "Select action [1-3]: " w_act
+                case "$w_act" in
+                    2) bash "$REAL_SCRIPT" wakelock on ;;
+                    3) bash "$REAL_SCRIPT" wakelock off ;;
+                    *) bash "$REAL_SCRIPT" wakelock status ;;
+                esac
+                pause_dashboard ;;
+            25)
+                read -r -p "Enter file path or URL to open in Android host: " target_open
+                if [ -n "$target_open" ]; then bash "$REAL_SCRIPT" open "$target_open"; fi
+                pause_dashboard ;;
+            26)
+                echo "Clipboard actions: 1) paste (read)  2) copy (write)"
+                read -r -p "Select action [1-2]: " c_act
+                case "$c_act" in
+                    2) read -r -p "Text to copy to clipboard: " c_text; bash "$REAL_SCRIPT" clip copy "$c_text" ;;
+                    *) bash "$REAL_SCRIPT" clip paste ;;
+                esac
+                pause_dashboard ;;
+            27)
+                read -r -p "Message text: " n_text
+                if [ -n "$n_text" ]; then bash "$REAL_SCRIPT" toast "$n_text"; fi
                 pause_dashboard ;;
             h|H) show_help; pause_dashboard ;;
             r|R|"") ;;
@@ -665,6 +705,13 @@ case "${1:-}" in
             echo "[!] Restore failed; the existing Debian root was left unchanged."
             exit 1
         }
+        ;;
+    wakelock|wake|open|clip|clipboard|toast|notify|notification|storage)
+        bash "$SUPERKIT_DIR/core/termux-bridge.sh" "$@"
+        ;;
+    aid|gids)
+        shift
+        bash "$SUPERKIT_DIR/core/android-aid.sh" "$@"
         ;;
     help|-h|--help)
         show_help
