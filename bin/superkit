@@ -387,7 +387,7 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             h|H) show_help; pause_dashboard ;;
-            r|R) ;;
+            r|R|"") ;;
             w|W) watch_dashboard ;;
             q|Q) return 0 ;;
             *) echo "Invalid option: ${choice:-empty}"; pause_dashboard ;;
@@ -616,7 +616,6 @@ case "${1:-}" in
         BACKUP_FILE="$BACKUP_DIR/superkit-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
         PARTIAL_BACKUP="$BACKUP_FILE.partial"
 
-        local required_mb target_free_mb
         required_mb=$(su -c "du -sm '$DEBIANPATH' 2>/dev/null" | awk '{print $1}')
         target_free_mb=$(df -m "$BACKUP_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
         if [ -n "$required_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$required_mb" ]; then
@@ -625,7 +624,7 @@ case "${1:-}" in
         fi
 
         echo "[*] Creating backup at $BACKUP_FILE..."
-        if su -c "tar -czf '$PARTIAL_BACKUP' -C '$DEBIANPATH' ." && su -c "test -s '$PARTIAL_BACKUP'"; then
+        if su -c "tar --warning=no-file-changed -czf '$PARTIAL_BACKUP' --exclude='dev/*' --exclude='proc/*' --exclude='sys/*' --exclude='run/*' --exclude='tmp/*' -C '$DEBIANPATH' ." && su -c "test -s '$PARTIAL_BACKUP'"; then
             mv "$PARTIAL_BACKUP" "$BACKUP_FILE"
             echo "[✓] Backup completed: $BACKUP_FILE"
         else
@@ -651,7 +650,6 @@ case "${1:-}" in
             exit 1
         fi
 
-        local archive_size_mb target_free_mb
         archive_size_mb=$(du -sm "$RESTORE_FILE" 2>/dev/null | awk '{print $1 * 3}')
         target_free_mb=$(df -m "$DEBIANPATH" 2>/dev/null | awk 'NR==2 {print $4}')
         if [ -n "$archive_size_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$archive_size_mb" ]; then

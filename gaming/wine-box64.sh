@@ -25,13 +25,16 @@ setup_gaming() {
     su -c "chroot '$DEBIANPATH' /bin/bash -c '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         dpkg --add-architecture i386 2>/dev/null || true
-        echo \"deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware\" > /etc/apt/sources.list
+        CODENAME=\$(grep -oP \"(?<=VERSION_CODENAME=)[a-z]+\" /etc/os-release 2>/dev/null || echo trixie)
+        [ -n \"\$CODENAME\" ] || CODENAME=trixie
+        echo \"deb http://deb.debian.org/debian \$CODENAME main contrib non-free non-free-firmware\" > /etc/apt/sources.list
         apt-get update && apt-get install -y wine wine64 wine32:i386 box64 dxvk winetricks fonts-liberation libvulkan1 cabextract wget unzip || true
     '"
     echo "[*] Setting up Wine win64 prefix..."
     su -c "chroot '$DEBIANPATH' /bin/bash -c '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         export WINEARCH=win64
+        export WINEPREFIX=/root/.wine
         wineboot -u 2>/dev/null || true
     '"
     echo "[✓] Gaming Environment setup completed."
@@ -69,7 +72,10 @@ run_wine_exe() {
     superkit_gpu_apply
     echo "[*] Executing $EXE_PATH with Box64 + Wine64..."
     su -c "chroot '$DEBIANPATH' /bin/bash -c '
+        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         export DISPLAY=:0
+        export WINEARCH=win64
+        export WINEPREFIX=/root/.wine
         export DXVK_ASYNC=1
         export MALLOC_ARENA_MAX=2
         export BOX64_DYNAREC_STRONGMEM=2
