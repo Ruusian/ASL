@@ -25,9 +25,11 @@ setup_gaming() {
     su -c "chroot '$DEBIANPATH' /bin/bash -c '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         dpkg --add-architecture i386 2>/dev/null || true
-        CODENAME=\$(grep -oP \"(?<=VERSION_CODENAME=)[a-z]+\" /etc/os-release 2>/dev/null || echo trixie)
+        CODENAME=\$(grep \"VERSION_CODENAME=\" /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d \"\\\"'\" || echo trixie)
         [ -n \"\$CODENAME\" ] || CODENAME=trixie
-        echo \"deb http://deb.debian.org/debian \$CODENAME main contrib non-free non-free-firmware\" > /etc/apt/sources.list
+        if [ -f /etc/debian_version ]; then
+            echo \"deb http://deb.debian.org/debian \$CODENAME main contrib non-free non-free-firmware\" > /etc/apt/sources.list
+        fi
         apt-get update && apt-get install -y wine wine64 wine32:i386 box64 dxvk winetricks fonts-liberation libvulkan1 cabextract wget unzip || true
     '"
     echo "[*] Setting up Wine win64 prefix..."
@@ -71,7 +73,8 @@ run_wine_exe() {
 
     superkit_gpu_apply
     echo "[*] Executing $EXE_PATH with Box64 + Wine64..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    export TARGET_EXE="$EXE_PATH"
+    su -c "TARGET_EXE=\"$TARGET_EXE\" chroot '$DEBIANPATH' /bin/bash -c '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         export DISPLAY=:0
         export WINEARCH=win64
@@ -80,7 +83,7 @@ run_wine_exe() {
         export MALLOC_ARENA_MAX=2
         export BOX64_DYNAREC_STRONGMEM=2
         export BOX64_DYNAREC_SAFEFLAGS=2
-        wine \"$EXE_PATH\"
+        wine \"\$TARGET_EXE\"
     '"
 }
 

@@ -5,11 +5,9 @@
 [![Requirement](https://img.shields.io/badge/Requirements-Root%20(su)%20%2B%20Termux-red.svg)](#)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Android Subsystem for Linux (ASL)** (formerly AndroidLinux-SuperKit) is a high-performance, root-accelerated Linux chroot management subsystem and gaming container framework for Android ARM64. 
+**Android Subsystem for Linux (ASL)** (formerly AndroidLinux-SuperKit) is a high-performance, root-accelerated Linux chroot management subsystem, gaming container framework, and Android host bridge for ARM64 devices.
 
-Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** turns your Android device into a full Linux workstation and gaming machine using only **Root (`su`)** and **Termux**.
-
-It seamlessly bridges native **Debian Linux** environments with Android hardware acceleration (**Turnip Mesa Vulkan**, **Zink**, **VirGL**), high-performance **Box64 + Wine64** x86_64 emulation, and low-latency **Termux-X11 + PulseAudio** XFCE4 desktop integration.
+Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** turns your Android phone or tablet into a full Linux workstation and gaming machine using only **Root (`su`)** and **Termux**.
 
 ---
 
@@ -22,10 +20,11 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/mast
 ```
 
 ### 🐧 Distro Selection Options
-During installation, you can select your preferred Linux distribution interactively or specify it via command-line flags or environment variables:
+Select your preferred Linux distribution interactively during setup, or pass flags non-interactively:
 
 ```bash
 # Non-interactive distro installation flags:
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=debian
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=ubuntu
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=archlinux
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=alpine
@@ -33,24 +32,48 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/mast
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=fedora
 ```
 
-Once installed, launch the interactive terminal dashboard by running:
+Launch the interactive 3D console anytime after installation:
 ```bash
-asl
-# or
-superkit
+asl       # or superkit
 ```
 
 ---
 
-## 🔥 Key Features
+## 🔥 Unique Features & Capabilities
 
-- 🛡️ **Zero-Crash Isolated Subsystem Core**: Uses isolated bind mounts (`--make-rprivate` and `--make-rslave`) without mounting Android host `/system`, `/vendor`, `/apex`, or `/linkerconfig`. Eliminates Android OS crashes, reboot loops, and background app terminations.
-- 🎮 **MoBox Gaming & Direct3D Acceleration Engine**: Integrated **Turnip Mesa** Vulkan driver support for Qualcomm Adreno 6xx/7xx GPUs with DXVK 2.4+ async pipeline compilation, VKD3D Direct3D 12 translation, and Box64 dynarec stability flags tuned for Unity Mono C# garbage collection stack unwinding.
-- 🖥️ **Termux-X11 & Desktop Suite**: Low-latency XFCE4 desktop session with PulseAudio sound server integration, window decorations, wallpaper configuration, and one-click app launcher synchronization.
-- ⚡ **Auto-Hardware Detection & Performance Profiles**: Real-time GPU profile detection (`Adreno 6xx/7xx`, `Mali VirGL fallback`), kernel sysctl memory tuning (`vm.max_map_count=1048576`, `fs.inotify.max_user_watches=524288`), and glibc heap allocation optimizations (`MALLOC_ARENA_MAX=2`).
-- 📸 **Point-in-Time Filesystem Snapshots & Backups**: Instant chroot Btrfs/Tar snapshot creation, point-in-time state restoration, and compressed `/sdcard/Debian_Backups` archives.
-- 🌐 **Remote Access Bridge**: One-command management for background OpenSSH daemon (port 2222) and x11vnc server (port 5900).
-- 🌡️ **Telemetry, Swap & Thermal Monitor**: Live battery telemetry, RAM & Swap memory headroom (ZRAM + Swapfile), CPU governor, and CPU/GPU thermal zone temperature monitoring.
+### 🛡️ 1. Zero-Crash Isolated Subsystem Core
+- **100% Native Kernel Performance**: Unlike PRoot (which intercepts system calls via ptrace), ASL mounts Linux chroots directly using native root kernel privileges (`su`).
+- **Strict Mount Isolation**: Enforces private slave bind mounts (`--make-rprivate` and `--make-rslave`) without mounting Android host `/system`, `/vendor`, `/apex`, or `/linkerconfig`. Eliminates SELinux panics, mount deadlocks, and host OS reboots.
+
+### 🎮 2. Direct3D 11/12 Acceleration & MoBox Gaming Engine
+- **Turnip Mesa Vulkan Drivers**: Integrated Turnip driver profile support for Qualcomm Adreno 6xx/7xx GPUs with DXVK 2.4+ async pipeline compilation, VKD3D Direct3D 12 translation, and VirGL fallback for Mali GPUs.
+- **Unity Mono Stability Tuning**: Pre-configured Box64 dynarec stability flags (`BOX64_DYNAREC_STRONGMEM=2`, `SAFEFLAGS=2`) to prevent crashes during Mono C# JIT garbage collection unwinding (e.g. *Nine Sols*, *Hollow Knight*, Unity engine titles).
+- **Shader Cache on tmpfs**: Moves Mesa shader caching to `/dev/shm` to bypass storage bottlenecks.
+
+### 📱 3. Deep Android Host & Termux Integration Bridge
+- **Android AID (Android ID) Group Mapping**: Automatically maps host GIDs (`aid_graphics`, `aid_audio`, `aid_sdcard_rw`, `aid_gpu_service`, `aid_inet`) inside the Linux chroot so applications have direct hardware access to GPU device nodes, audio sockets, and `/sdcard`.
+- **Magisk / KernelSU / APatch Action Module**: Includes root module UI integration (`module/action.sh`) to start or stop the ASL subsystem directly from KernelSU or Magisk Manager UI.
+- **Bi-Directional Host Services**:
+  - 🔒 **CPU Wake Lock**: Prevent Android deep sleep during long builds or background server tasks (`asl wakelock on`).
+  - 🔗 **Host File & URL Launcher**: Open Linux files or web links directly in native Android apps (`asl open <path|url>`).
+  - 📋 **System Clipboard Bridge**: Sync clipboard contents between Linux and Android (`asl clip copy/paste`).
+  - 🔔 **Android System Toasts & Notifications**: Trigger native Android system toasts and notifications from Linux terminal scripts (`asl toast "Task Done"`).
+
+### 🐧 4. One-Click Multi-Distro Provisioning
+- Pulls official OCI container rootfs images via `proot-distro` and provisions them as full root chroots:
+  - 🐧 **Debian (Trixie)** — Recommended for Wine64, Box64 & Desktop
+  - 🟠 **Ubuntu (24.04 LTS)** — Modern Linux workstation stack
+  - 🏹 **Arch Linux** — Rolling release base
+  - 🏔️ **Alpine Linux** — Ultra-minimal footprint base
+  - 🐉 **Kali Linux** — Security & penetration testing suite
+  - 🎩 **Fedora Linux** — Red Hat ecosystem stack
+
+### 📸 5. Point-in-Time Filesystem Snapshots & Backups
+- **Instant Local Snapshots**: Create instant snapshots (`asl snapshot create <name>`) and safely restore chroot state in seconds.
+- **Rollback Safety**: Includes automated rollback protection and disk headroom validation prior to backup operations.
+
+### 🖥️ 6. Modern 3D TUI Dashboard
+- Clean terminal user interface with 3D drop-shadow banners, categorized card grid layout, real-time telemetry (RAM, Swap, CPU temp, battery, load, host IP, X11 status, WakeLock), and single-letter hotkeys (`[s]`, `[x]`, `[d]`, `[g]`, `[m]`, `[p]`, `[t]`, `[v]`, `[k]`, `[o]`, `[c]`, `[n]`, `[a]`).
 
 ---
 
@@ -58,62 +81,69 @@ superkit
 
 ```text
 AndroidLinux-SuperKit/
-├── install.sh            # One-line automated setup script for ASL
+├── install.sh            # One-line automated setup script with distro selector
 ├── bin/
-│   └── superkit          # Unified CLI entrypoint & dashboard (symlinked as 'asl')
+│   └── superkit          # 3D CLI entrypoint & dashboard (symlinked as 'asl')
 ├── core/
 │   ├── mount-chroot.sh   # Safe isolated chroot mount manager
-│   ├── stop-chroot.sh    # Safe unmount script
-│   ├── doctor.sh         # Non-mutating environment diagnostics
-│   ├── gpu-detect.sh     # SoC auto-detection & driver profile configuration
+│   ├── stop-chroot.sh    # Safe unmount & process termination manager
+│   ├── doctor.sh         # Non-mutating environment pre-flight check
+│   ├── gpu-detect.sh     # SoC auto-detection & driver profile manager
+│   ├── gpu-profile.sh    # Mesa Turnip / Zink / VirGL environment profile
 │   ├── thermal.sh        # Battery & CPU/GPU thermal zone monitor
-│   └── snapshot.sh       # Point-in-time chroot snapshot manager
+│   ├── termux-bridge.sh  # WakeLock, open, clipboard, and notification bridge
+│   ├── android-aid.sh    # Android AID GID group mapper
+│   └── snapshot.sh       # Point-in-time chroot snapshot & backup manager
 ├── gaming/
-│   └── wine-box64.sh     # Wine64, Box64, DXVK, winetricks & gaming setup tools
+│   └── wine-box64.sh     # Wine64, Box64, DXVK & Windows app launcher
 ├── desktop/
 │   ├── start-desktop.sh  # Termux-X11 desktop & PulseAudio launcher
 │   ├── theme.sh          # GTK theme & Papirus icon set switcher
-│   └── remote.sh         # SSH & VNC remote access manager
-└── docs/                 # Detailed technical guides
+│   └── remote.sh         # OpenSSH (2222) & x11vnc (5900) server manager
+└── module/
+    ├── action.sh         # Magisk / KernelSU / APatch UI action trigger
+    └── module.prop       # Root module metadata properties
 ```
 
 ---
 
 ## 🛠️ Complete Command Reference
 
-Both `asl` and `superkit` can be used interchangeably in the terminal.
+Both `asl` and `superkit` can be used interchangeably.
 
-### 1. Interactive Dashboard & Telemetry
+### 1. Interactive 3D Dashboard & Telemetry
 ```bash
-asl                       # Open full color-coded terminal dashboard
-asl dashboard             # Open interactive terminal dashboard
+asl                       # Open 3D terminal dashboard
+asl dashboard             # Open interactive 3D terminal dashboard
 asl overview              # Print concise live system status without dashboard
 asl thermal               # Monitor battery & CPU/GPU thermal zone temperatures
 ```
 
-### 2. Core Linux Chroot Operations
+### 2. Core Linux Subsystem Operations
 ```bash
-asl start                 # Safely mount Debian chroot environment
+asl start                 # Safely mount Linux chroot environment
 asl shell                 # Enter root bash session inside chroot
+asl exec <command>        # Execute a command inside chroot
 asl status                # Inspect mount points, chroot storage, and process state
-asl doctor                # Run non-mutating environment pre-flight check
+asl doctor                # Run environment pre-flight check
 asl stop                  # Safely terminate GUI sessions and unmount chroot
-asl install <pkgs>        # Install packages inside Debian via apt-get
-asl search <query>        # Search available Debian apt repositories
+asl install <pkgs>        # Install packages inside chroot via apt-get
+asl search <query>        # Search available apt repositories
 asl service <act> <svc>   # Manage background services (start|stop|restart|status)
-asl snapshot create <name> # Create instant point-in-time snapshot
+asl snapshot create <name># Create instant point-in-time snapshot
 asl snapshot list         # List available chroot snapshots
 asl snapshot restore <name># Restore chroot from a saved snapshot
-asl backup                # Create compressed backup in /sdcard/Debian_Backups
-asl restore <file>        # Restore chroot from tar.gz backup file
+asl backup                # Create compressed backup archive
+asl restore <file>        # Restore chroot from backup archive
+asl aid setup             # Map Android host AID GIDs inside chroot
 ```
 
-### 3. MoBox Gaming & Direct3D 11/12 Engine
+### 3. MoBox Gaming & Direct3D Engine
 ```bash
 asl gpu                   # Display active Turnip/Mesa GPU hardware runtime profile
 asl mode [gaming|performance|balanced] # Apply memory compaction & Turnip GPU tuning
-asl setup-gaming          # Auto-install Wine64, Box64, DXVK 2.4, and VKD3D
-asl game                  # Open interactive gaming launcher menu
+asl setup-gaming          # Auto-install Wine64, Box64, DXVK, and VKD3D
+asl game                  # Open interactive gaming menu
 asl game run <exe>        # Execute Windows application via Box64 + Wine64
 ```
 
@@ -122,24 +152,22 @@ asl game run <exe>        # Execute Windows application via Box64 + Wine64
 asl desktop start         # Launch hardware-accelerated XFCE4 desktop
 asl desktop status        # Inspect active desktop session state
 asl desktop stop          # Terminate current desktop session safely
-asl desktop sync-apps      # Generate X-SuperKit-Managed app shortcuts
-asl theme [dark|light|nord|dracula] # Switch GTK theme & Papirus icon presets
-asl resolution [720p|1080p|native] [scale] # Configure Termux:X11 display resolution
-asl remote ssh [start|stop|status] # Manage SSH server on port 2222
-asl remote vnc [start|stop|status] # Manage x11vnc server on port 5900
-asl audio [start|stop|test|volume <0-100>] # PulseAudio server management
+asl desktop sync-apps     # Sync Debian app shortcuts to Termux
+asl theme [dark|light|nord|dracula] # Switch GTK theme presets
+asl resolution [720p|1080p|native] # Configure Termux:X11 display resolution
+asl remote ssh [start|stop|status] # Manage SSH server (port 2222)
+asl remote vnc [start|stop|status] # Manage x11vnc server (port 5900)
+asl audio [start|stop|test] # PulseAudio server management
 ```
 
----
-
-## 🎮 Game Optimization Highlights (Nine Sols & Unity Mono)
-
-For heavy Windows 64-bit Unity Mono titles (such as *Nine Sols*), **ASL** includes specialized runtime flags:
-
-- **Box64 Dynarec**: Configured with `BOX64_DYNAREC_STRONGMEM=2`, `BOX64_DYNAREC_CALLRET=0`, `BOX64_DYNAREC_FASTNAN=0`, and `BOX64_DYNAREC_SAFEFLAGS=2` to ensure stability during Mono C# JIT garbage collection and stack unwinding.
-- **Turnip Mesa Vulkan**: Relocates shader caching to tmpfs (`/dev/shm/mesa_cache`) with `TU_DEBUG="sysmem,noconform"` to eliminate GMEM tile buffer resolves on Adreno GPUs.
-- **System Memory Protection**: Automatically allocates dedicated swap files (`/data/local/tmp/swapfile`), applies `oom_score_adj=-1000` to game processes, and restricts glibc heap fragmentation via `MALLOC_ARENA_MAX=2`.
-- **Windowed Input Fixes**: Applied `UseTakeFocus=N` and `GrabPointer=Y` in Wine X11 Driver registry to ensure proper keyboard and mouse event routing in windowed mode.
+### 5. Termux & Android Host Bridge
+```bash
+asl wakelock [on|off|status] # Control CPU Wake Lock
+asl open <file|url>         # Open file or URL in default Android host app
+asl clip [copy|paste]       # Read or write Android system clipboard
+asl toast <message>         # Send quick Android toast message
+asl notify <title> <msg>    # Send Android notification banner
+```
 
 ---
 

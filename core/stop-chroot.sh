@@ -18,7 +18,7 @@ echo "[*] Stopping Linux chroot environment..."
 su -c "
     mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
 
-    pids=\$(lsof -t \"$DEBIANPATH\" 2>/dev/null || true)
+    pids=\$(lsof -t \"$DEBIANPATH\" 2>/dev/null || fuser \"$DEBIANPATH\" 2>/dev/null || grep -l \"$DEBIANPATH\" /proc/[0-9]*/cwd 2>/dev/null | cut -d/ -f3 || true)
     if [ -n \"\$pids\" ]; then
         kill -TERM \$pids 2>/dev/null || true
         sleep 1
@@ -35,6 +35,7 @@ su -c "
         $DEBIANPATH/dev/shm
         $DEBIANPATH/dev/pts
         $DEBIANPATH/dev
+        $DEBIANPATH/proc/sys/fs/binfmt_misc
         $DEBIANPATH/proc
         $DEBIANPATH/sys
         $DEBIANPATH/run

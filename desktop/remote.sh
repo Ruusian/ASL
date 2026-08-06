@@ -30,12 +30,14 @@ ssh_control() {
             fi
             su -c "chroot '$DEBIANPATH' /usr/bin/ssh-keygen -A" 2>/dev/null || true
             su -c "chroot '$DEBIANPATH' /bin/mkdir -p /var/run/sshd" 2>/dev/null || true
+            su -c "chroot '$DEBIANPATH' /bin/bash -c 'grep -q \"^PermitRootLogin\" /etc/ssh/sshd_config || echo \"PermitRootLogin yes\" >> /etc/ssh/sshd_config'" 2>/dev/null || true
             if su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x sshd" >/dev/null 2>&1; then
                 echo "[*] SSH server is already running."
             else
                 echo "[*] Starting SSH daemon on port 2222..."
                 su -c "chroot '$DEBIANPATH' /usr/sbin/sshd -p 2222" || return 1
                 echo "[✓] SSH server active. Connect via: ssh root@127.0.0.1 -p 2222"
+                echo "    Note: If password authentication is required, set root password with: asl exec passwd"
             fi
             ;;
         stop)

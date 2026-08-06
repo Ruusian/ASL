@@ -95,6 +95,11 @@ case "$SELECTED_DISTRO" in
     *) IMAGE_REF="debian:trixie" ;;
 esac
 
+cleanup_installer() {
+    proot-distro remove asl-temp >/dev/null 2>&1 || true
+}
+trap cleanup_installer EXIT
+
 # 4. Rootfs Download & Chroot Provisioning
 DEBIANPATH="/data/local/tmp/chrootDebian"
 if [ -n "$IMAGE_REF" ]; then
@@ -116,7 +121,10 @@ if [ -n "$IMAGE_REF" ]; then
     if [ -n "$IMAGE_REF" ]; then
         echo -e "${GREEN}[*] Fetching and unpacking $IMAGE_REF via proot-distro...${RESET}"
         proot-distro remove asl-temp >/dev/null 2>&1 || true
-        proot-distro install -n asl-temp "$IMAGE_REF"
+        proot-distro install -n asl-temp "$IMAGE_REF" || {
+            echo -e "${RED}[!] Error: proot-distro failed to download or unpack $IMAGE_REF.${RESET}"
+            exit 1
+        }
 
         TEMP_ROOTFS="$PREFIX/var/lib/proot-distro/containers/asl-temp/rootfs"
         if [ -d "$TEMP_ROOTFS" ]; then
@@ -129,8 +137,9 @@ if [ -n "$IMAGE_REF" ]; then
             echo -e "${GREEN}[✓] Rootfs provisioned successfully.${RESET}"
         else
             echo -e "${RED}[!] Error: Failed to locate extracted rootfs for $IMAGE_REF.${RESET}"
+            exit 1
         fi
-    fi
+        fi
 fi
 
 # 5. Repository Setup

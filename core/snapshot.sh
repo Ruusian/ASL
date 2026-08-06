@@ -10,7 +10,7 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
 fi
 
 is_mounted() {
-    su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null
+    su -c "grep -E -q -w '$DEBIANPATH(/.*)?' /proc/mounts" 2>/dev/null
 }
 
 safe_name() { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }
@@ -79,16 +79,19 @@ restore_snapshot() {
 
     echo "[*] Restoring snapshot '$name'..."
     local rollback="$DEBIANPATH.pre-snapshot-restore-$(date +%Y%m%d_%H%M%S)"
-    su -c "
-        mv '$DEBIANPATH' '$rollback' && \
-        cp -a '$source' '$DEBIANPATH' && \
-        rm -rf '$rollback'
-    " || {
-        echo "[!] Restore failed; restoring original root state."
-        su -c "mv '$rollback' '$DEBIANPATH'" 2>/dev/null
+    if su -c "mv '$DEBIANPATH' '$rollback'"; then
+        if su -c "cp -a '$source' '$DEBIANPATH'"; then
+            su -c "rm -rf '$rollback'" 2>/dev/null || true
+            echo "[✓] Snapshot '$name' restored successfully."
+        else
+            echo "[!] Restore failed; cleaning up incomplete copy and rolling back original state."
+            su -c "rm -rf '$DEBIANPATH' && mv '$rollback' '$DEBIANPATH'" 2>/dev/null
+            exit 1
+        fi
+    else
+        echo "[!] Failed to move current chroot to rollback location."
         exit 1
-    }
-    echo "[✓] Snapshot '$name' restored successfully."
+    fi
 }
 
 delete_snapshot() {

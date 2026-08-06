@@ -9,7 +9,7 @@ superkit_gpu_detect() {
     case "$SUPERKIT_GPU_PLATFORM" in
         msm*|sm*|qcom*)
             DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-            if [ -d "$DEBIANPATH" ] && su -c "chroot '$DEBIANPATH' /usr/bin/test -f /usr/lib/aarch64-linux-gnu/dri/zink_dri.so -o -d /usr/share/vulkan/icd.d" 2>/dev/null; then
+            if [ -d "$DEBIANPATH" ] && su -c "chroot '$DEBIANPATH' /bin/bash -c 'compgen -G /usr/lib/*/dri/zink_dri.so >/dev/null || [ -d /usr/share/vulkan/icd.d ]'" 2>/dev/null; then
                 SUPERKIT_GPU_PROFILE="adreno-turnip-zink"
             else
                 SUPERKIT_GPU_PROFILE="generic-virgl"
