@@ -54,10 +54,10 @@ run_in_chroot() {
 
 show_help() {
     echo "============================================================"
-    echo "       AndroidLinux-SuperKit Console v1.0"
-    echo "  Combined Native Chroot + MoBox Gaming + Termux Desktops"
+    echo "    Android Subsystem for Linux (ASL) Console v1.0"
+    echo "  Root-Accelerated Linux Environment & Gaming Container"
     echo "============================================================"
-    echo "Usage: superkit [dashboard|command] [args]"
+    echo "Usage: asl [dashboard|command] [args]  (or superkit [command])"
     echo ""
     echo "Dashboard:"
     echo "  dashboard, menu  Open the interactive terminal dashboard"
@@ -107,6 +107,7 @@ pause_dashboard() {
 overview() {
     local desktop_state desktop_status desktop_detail x11_socket
     local mem_total mem_avail mem_used mem_pct disk_data load_avg
+    local swap_total swap_free swap_used swap_pct governor
     x11_socket="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0"
     desktop_state=$(bash "$SUPERKIT_DIR/desktop/start-desktop.sh" status 2>/dev/null | tr '\n' ' ')
     desktop_state=${desktop_state#Desktop: }
@@ -124,40 +125,64 @@ overview() {
     else
         mem_used=0; mem_pct=0
     fi
+
+    swap_total=$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+    swap_free=$(awk '/SwapFree/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+    if [ "$swap_total" -gt 0 ]; then
+        swap_used=$((swap_total - swap_free))
+        swap_pct=$((swap_used * 100 / swap_total))
+    else
+        swap_used=0; swap_pct=0
+    fi
+
+    governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
     disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')
     load_avg=$(su -c "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3)
     [ -n "$load_avg" ] || load_avg="unknown"
 
-    printf '%s=== AndroidLinux-SuperKit Overview ===%s\n' "$C_BOLD" "$C_RESET"
+    printf '%s=== Android Subsystem for Linux (ASL) Overview ===%s\n' "$C_BOLD" "$C_RESET"
     if is_mounted; then printf ' Chroot:  '; status_label ACTIVE; echo; else printf ' Chroot:  '; status_label INACTIVE; echo; fi
     printf ' Desktop: '; status_label "${desktop_status:-UNKNOWN}"; printf '%s\n' "$desktop_detail"
     if [ -S "$x11_socket" ]; then printf ' X11:     '; status_label READY; printf ' (DISPLAY=:0)\n'; else printf ' X11:     '; status_label STOPPED; echo; fi
     if pgrep -x pulseaudio >/dev/null 2>&1; then printf ' Audio:   '; status_label RUNNING; echo; else printf ' Audio:   '; status_label STOPPED; echo; fi
     printf ' GPU:     %s%s%s (%s)\n' "$C_YELLOW" "$SUPERKIT_GPU_PROFILE" "$C_RESET" "${SUPERKIT_GPU_PLATFORM:-unknown}"
-    printf ' Telemetry: RAM %s%dMB / %dMB (%d%%)%s | Data %s%s%s | Load %s%s%s\n' \
+    printf ' RAM:     %s%dMB / %dMB (%d%%)%s | Swap: %s%dMB / %dMB (%d%%)%s\n' \
         "$C_CYAN" "$mem_used" "$mem_total" "$mem_pct" "$C_RESET" \
+        "$C_CYAN" "$swap_used" "$swap_total" "$swap_pct" "$C_RESET"
+    printf ' System:  Data %s%s%s | Load %s%s%s | Governor %s%s%s\n' \
         "$C_CYAN" "${disk_data:-unknown}" "$C_RESET" \
-        "$C_YELLOW" "${load_avg}" "$C_RESET"
+        "$C_YELLOW" "${load_avg}" "$C_RESET" \
+        "$C_GREEN" "${governor}" "$C_RESET"
 }
 
 process_manager() {
+    local sort_mode="cpu"
     while true; do
         clear 2>/dev/null || true
         printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '%s           SuperKit Resource & Process Manager%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '%s============================================================%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '%sTop CPU / Memory Processes:%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        su -c "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 12" 2>/dev/null || ps aux | head -n 12
+        if [ "$sort_mode" = "mem" ]; then
+            printf '%sTop Processes by RAM / Memory Usage (%s%s%s):%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %MEM" "$C_CYAN$C_BOLD" "$C_RESET"
+            su -c "ps -eo pid,user,%cpu,%mem,rss,comm --sort=-%mem | head -n 12" 2>/dev/null || ps aux | head -n 12
+        else
+            printf '%sTop Processes by CPU Usage (%s%s%s):%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %CPU" "$C_CYAN$C_BOLD" "$C_RESET"
+            su -c "ps -eo pid,user,%cpu,%mem,rss,comm --sort=-%cpu | head -n 12" 2>/dev/null || ps aux | head -n 12
+        fi
         echo ""
         echo "Actions:"
         echo "  1) Refresh list"
-        echo "  2) Terminate process (SIGTERM)"
-        echo "  3) Force kill process (SIGKILL)"
-        echo "  4) Return to menu"
+        echo "  2) Toggle sort mode (CPU <-> RAM)"
+        echo "  3) Terminate process (SIGTERM)"
+        echo "  4) Force kill process (SIGKILL)"
+        echo "  5) Return to menu"
         echo ""
-        read -r -p "Select action [1-4]: " pm_act
+        read -r -p "Select action [1-5]: " pm_act
         case "$pm_act" in
             2)
+                if [ "$sort_mode" = "cpu" ]; then sort_mode="mem"; else sort_mode="cpu"; fi
+                ;;
+            3)
                 read -r -p "Enter PID to terminate: " target_pid
                 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
                     su -c "kill '$target_pid'" 2>/dev/null && echo "[✓] Sent SIGTERM to PID $target_pid" || echo "[!] Failed to terminate PID $target_pid"
@@ -166,7 +191,7 @@ process_manager() {
                 fi
                 pause_dashboard
                 ;;
-            3)
+            4)
                 read -r -p "Enter PID to force kill: " target_pid
                 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
                     su -c "kill -9 '$target_pid'" 2>/dev/null && echo "[✓] Sent SIGKILL to PID $target_pid" || echo "[!] Failed to kill PID $target_pid"
@@ -176,9 +201,9 @@ process_manager() {
                 pause_dashboard
                 ;;
             1) continue ;;
-            4|*) break ;;
+            5|*) break ;;
         esac
-    done
+        done
 }
 
 watch_dashboard() {
@@ -186,7 +211,7 @@ watch_dashboard() {
     while true; do
         clear 2>/dev/null || true
         printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '%s    AndroidLinux-SuperKit Live Monitor (Press Ctrl+C to stop)%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s    Android Subsystem for Linux (ASL) Live Monitor (Ctrl+C)%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         overview
         echo ""
@@ -201,7 +226,7 @@ dashboard() {
     while true; do
         clear 2>/dev/null || true
         printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '%s          AndroidLinux-SuperKit Dashboard%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s       Android Subsystem for Linux (ASL) Dashboard%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         overview
         echo ""
@@ -234,6 +259,7 @@ dashboard() {
         section_title "  Gaming"
         menu_item 21 "Setup Wine/Box64 gaming environment"
         menu_item 22 "Launch a Windows .exe (Wine + Box64)"
+        menu_item 23 "Tune performance profile (mode)"
         echo ""
         printf '  %sh%s) Help  %sr%s) Refresh  %sw%s) Watch live  %sq%s) Exit%s\n\n' "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         read -r -p "Select an option: " choice
@@ -301,6 +327,16 @@ dashboard() {
             22)
                 read -r -p "Full path to Windows .exe: " exe_path
                 if [ -n "$exe_path" ]; then bash "$REAL_SCRIPT" game run "$exe_path"; fi
+                pause_dashboard ;;
+            23)
+                echo "Modes: 1) gaming  2) performance  3) balanced"
+                read -r -p "Select mode [1-3]: " m_act
+                case "$m_act" in
+                    1) bash "$REAL_SCRIPT" mode gaming ;;
+                    2) bash "$REAL_SCRIPT" mode performance ;;
+                    3) bash "$REAL_SCRIPT" mode balanced ;;
+                    *) bash "$REAL_SCRIPT" mode status ;;
+                esac
                 pause_dashboard ;;
             h|H) show_help; pause_dashboard ;;
             r|R) ;;

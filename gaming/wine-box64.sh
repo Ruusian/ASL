@@ -44,9 +44,10 @@ show_gaming_menu() {
     if ! check_emulation_available; then
         echo "0) Auto-Install Wine / Box64 Gaming Packages"
     fi
-    echo "1) Launch Wine Config (winecfg)"
-    echo "2) Run Windows Executable (.exe)"
-    echo "3) Exit"
+    echo "1) Launch Wine Configuration (winecfg)"
+    echo "2) Launch Winetricks helper (winetricks)"
+    echo "3) Run Windows Executable (.exe)"
+    echo "4) Exit"
     echo ""
 }
 
@@ -66,13 +67,38 @@ run_wine_exe() {
     fi
 
     superkit_gpu_apply
-    echo "[*] Executing $EXE_PATH..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; wine \"$EXE_PATH\"'"
+    echo "[*] Executing $EXE_PATH with Box64 + Wine64..."
+    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+        export DISPLAY=:0
+        export DXVK_ASYNC=1
+        export MALLOC_ARENA_MAX=2
+        export BOX64_DYNAREC_STRONGMEM=2
+        export BOX64_DYNAREC_SAFEFLAGS=2
+        wine \"$EXE_PATH\"
+    '"
+}
+
+run_winecfg() {
+    if ! check_emulation_available; then return 1; fi
+    echo "[*] Opening Wine Configuration..."
+    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; winecfg'"
+}
+
+run_winetricks() {
+    if ! check_emulation_available; then return 1; fi
+    echo "[*] Launching Winetricks..."
+    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; winetricks'"
 }
 
 case "${1:-}" in
     setup|setup-gaming)
         setup_gaming
+        ;;
+    winecfg|cfg)
+        run_winecfg
+        ;;
+    winetricks|tricks)
+        run_winetricks
         ;;
     run)
         shift
