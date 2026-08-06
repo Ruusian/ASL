@@ -24,7 +24,9 @@ setup_gaming() {
     echo "[*] Initializing Gaming Environment dependencies inside Debian chroot..."
     su -c "chroot '$DEBIANPATH' /bin/bash -c '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-        apt-get update && apt-get install -y wine wine64 box64 dxvk libvulkan1 cabextract wget unzip 2>/dev/null || true
+        dpkg --add-architecture i386 2>/dev/null || true
+        echo \"deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware\" > /etc/apt/sources.list
+        apt-get update && apt-get install -y wine wine64 wine32:i386 box64 dxvk winetricks fonts-liberation libvulkan1 cabextract wget unzip || true
     '"
     echo "[*] Setting up Wine win64 prefix..."
     su -c "chroot '$DEBIANPATH' /bin/bash -c '

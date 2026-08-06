@@ -10,7 +10,7 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
 fi
 
 is_mounted() {
-    su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null
+    su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null
 }
 
 safe_name() { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }

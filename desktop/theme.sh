@@ -5,7 +5,7 @@ DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
 set_xfce_theme() {
     local gtk_theme="$1" icon_theme="$2" cursor_theme="${3:-Breeze_Snow}"
-    if ! su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null; then
+    if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
         echo "[!] Mount the Debian chroot before applying desktop themes."
         return 1
     fi
@@ -44,7 +44,7 @@ case "${1:-status}" in
         echo "  greybird - Greybird theme + Papirus icons"
         ;;
     status|"")
-        if su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null; then
+        if su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
             current=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; xfconf-query -c xsettings -p /Net/ThemeName 2>/dev/null || echo Unknown'")
             echo "Current Desktop Theme: $current"
         else

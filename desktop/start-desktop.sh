@@ -20,7 +20,7 @@ ensure_state_dir() {
 
 pid_start_time() {
     [ -n "${1:-}" ] || return 1
-    su -c 'awk '\''{print $22}'\'' /proc/'"$1"'/stat 2>/dev/null' || awk '{print $22}' "/proc/$1/stat" 2>/dev/null
+    su -c 'export PATH="/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:$PATH"; awk '\''{print $22}'\'' /proc/'"$1"'/stat 2>/dev/null' || awk '{print $22}' "/proc/$1/stat" 2>/dev/null
 }
 
 process_matches() {
@@ -28,7 +28,7 @@ process_matches() {
     actual=$(pid_start_time "$pid")
     [ -n "$actual" ] || return 1
     [ "$actual" = "$start" ] || return 1
-    cmd=$(su -c 'tr '\''\0'\'' '\'' '\'' < /proc/'"$1"'/cmdline 2>/dev/null')
+    cmd=$(su -c 'export PATH="/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:$PATH"; tr '\''\0'\'' '\'' '\'' < /proc/'"$1"'/cmdline 2>/dev/null')
     if [ -z "$cmd" ] && [ -r "/proc/$pid/cmdline" ]; then
         cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline")
     fi
@@ -78,7 +78,8 @@ start_audio() {
         return 1
     fi
     echo "[*] Initializing PulseAudio sound server..."
-    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1 2>/dev/null || return 1
+    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1 2>/dev/null || true
+    sleep 1
     PULSE_PID=$(pgrep -xo pulseaudio || true)
     [ -n "$PULSE_PID" ] || return 1
     PULSE_START=$(pid_start_time "$PULSE_PID")
@@ -156,7 +157,7 @@ start_desktop() {
     done
     [ -n "$X11_START" ] || { echo "[!] Termux:X11 failed to start."; cleanup_started; return 1; }
     for _i in 1 2 3 4 5 6 7 8 9 10; do
-        if su -c "grep -q '/data/data/com.termux/files/usr/tmp/.X11-unix/X0' /proc/net/unix" 2>/dev/null; then
+        if su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:\$PATH\"; grep -q '/data/data/com.termux/files/usr/tmp/.X11-unix/X0' /proc/net/unix" 2>/dev/null; then
             break
         fi
         if [ "$_i" -eq 10 ]; then
@@ -168,8 +169,7 @@ start_desktop() {
     done
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     mkdir -p "$termux_tmp/.X11-unix"
-    rm -f "$termux_tmp/.X11-unix/X0" 2>/dev/null || true
-    if command -v socat >/dev/null 2>&1; then
+    if [ ! -S "$termux_tmp/.X11-unix/X0" ] && command -v socat >/dev/null 2>&1; then
         socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=777 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
         SOCAT_PID=$!
         SOCAT_START=$(pid_start_time "$SOCAT_PID")
@@ -177,8 +177,8 @@ start_desktop() {
     superkit_gpu_apply
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
     [ -S /tmp/.virgl_test ] && chmod 777 /tmp/.virgl_test 2>/dev/null || true
-    mkdir -p "$termux_tmp"
-    local launcher_script="$termux_tmp/superkit-start-xfce.sh"
+    mkdir -p "$DEBIANPATH/tmp" "$termux_tmp"
+    local launcher_script="$DEBIANPATH/tmp/superkit-start-xfce.sh"
     umask 022
     cat << LAUNCHER_EOF > "$launcher_script"
 #!/bin/bash
@@ -226,6 +226,10 @@ exec dbus-run-session -- bash -c '
     xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/HintStyle -s hintslight 2>/dev/null || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/RGBA -s rgb 2>/dev/null || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -n -t int -s 5 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -n -t string -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-style -n -t int -s 5 2>/dev/null || true
     sleep 1
     xfce4-panel >> /tmp/xfce-panel.log 2>&1 &
     xfdesktop >> /tmp/xfce-desktop.log 2>&1 &
@@ -236,6 +240,7 @@ exec dbus-run-session -- bash -c '
 '
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
+    cp -f "$launcher_script" "$termux_tmp/superkit-start-xfce.sh" 2>/dev/null || true
     su -c "chroot '$DEBIANPATH' /bin/bash /tmp/superkit-start-xfce.sh" >/dev/null 2>&1 &
     SESSION_PID=
     SESSION_START=
@@ -272,7 +277,7 @@ stop_desktop() {
     local failed=0 pid
     echo "[*] Stopping SuperKit-managed desktop..."
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; killall -TERM xfwm4 xfdesktop xfce4-panel xfsettingsd xfce4-session 2>/dev/null'" 2>/dev/null || true
+    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -TERM -f \"xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query\" 2>/dev/null'" 2>/dev/null || true
     sleep 1
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
     if process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || failed=1; fi
@@ -285,7 +290,7 @@ stop_desktop() {
 
 force_stop_desktop() {
     echo "[*] Force-stopping all GUI, X11, GPU, and audio processes..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; killall -9 xfce4-session xfwm4 xfdesktop xfce4-panel xfsettingsd xfconfd dbus-daemon dbus-launch 2>/dev/null'" 2>/dev/null || true
+    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -9 -f \"xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|dbus-daemon|dbus-launch\" 2>/dev/null'" 2>/dev/null || true
     pkill -9 -x termux-x11 2>/dev/null || true
     pkill -9 -x virgl_test_server_android 2>/dev/null || true
     pkill -9 -x pulseaudio 2>/dev/null || true
@@ -323,7 +328,7 @@ launch_app() {
 }
 
 sync_apps() {
-    if ! su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null; then echo "[!] Mount the Debian chroot before synchronizing apps."; return 1; fi
+    if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then echo "[!] Mount the Debian chroot before synchronizing apps."; return 1; fi
     mkdir -p "$LAUNCHER_DIR" || return 1
     local file root id name target tmp count=0
     for target in "$LAUNCHER_DIR"/superkit-*.desktop; do
@@ -351,10 +356,17 @@ sync_apps() {
 }
 
 audio_control() {
-    local action="${1:-start}" level="${2:-}"
+    local action="${1:-status}" level="${2:-}"
     case "$action" in
-        start|"") start_audio ;;
+        start) start_audio ;;
         stop) pkill -x pulseaudio 2>/dev/null && echo "[✓] PulseAudio stopped." || echo "[*] PulseAudio is not running." ;;
+        status|"")
+            if pgrep -x pulseaudio >/dev/null 2>&1; then
+                echo "PulseAudio Server: RUNNING"
+            else
+                echo "PulseAudio Server: STOPPED"
+            fi
+            ;;
         test)
             if ! pgrep -x pulseaudio >/dev/null; then start_audio || return 1; fi
             echo "[*] Playing audio test tone..."

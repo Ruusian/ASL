@@ -22,7 +22,7 @@ su -c "
     mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
 
     domount_bind() {
-        if ! mountpoint -q \"\$2\" 2>/dev/null; then
+        if ! grep -q -w \"\$2\" /proc/mounts 2>/dev/null; then
             mkdir -p \"\$2\"
             mount --bind \"\$1\" \"\$2\"
             mount --make-rslave \"\$2\" 2>/dev/null || true
@@ -48,7 +48,7 @@ su -c "
     domount_fs sysfs $DEBIANPATH/sys
     domount_bind /dev/pts $DEBIANPATH/dev/pts
 
-    if [ -d /proc/sys/fs/binfmt_misc ] && mountpoint -q /proc/sys/fs/binfmt_misc 2>/dev/null; then
+    if [ -d /proc/sys/fs/binfmt_misc ] && grep -q -w "/proc/sys/fs/binfmt_misc" /proc/mounts 2>/dev/null; then
         domount_bind /proc/sys/fs/binfmt_misc $DEBIANPATH/proc/sys/fs/binfmt_misc
     fi
 
@@ -58,12 +58,12 @@ su -c "
 
     mkdir -p \"$TERMUX_TMP\"
     chmod 1777 \"$TERMUX_TMP\"
-    if ! mountpoint -q \"$DEBIANPATH/tmp\" 2>/dev/null; then
+    if ! grep -q -w \"$DEBIANPATH/tmp\" /proc/mounts 2>/dev/null; then
         mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/tmp\"
         mount --make-rslave \"$DEBIANPATH/tmp\" 2>/dev/null || true
     fi
     mkdir -p \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
-    if ! mountpoint -q \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" 2>/dev/null; then
+    if ! grep -q -w \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" /proc/mounts 2>/dev/null; then
         mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
         mount --make-rslave \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" 2>/dev/null || true
     fi
@@ -83,7 +83,7 @@ su -c "
     exit 1
 }
 
-if ! su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null; then
+if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
     echo "[!] Chroot mount verification failed."
     exit 1
 fi

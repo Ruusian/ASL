@@ -8,7 +8,7 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
     exit 2
 fi
 
-if ! su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null; then
+if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
     echo "[*] Debian chroot is already unmounted."
     exit 0
 fi

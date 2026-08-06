@@ -9,7 +9,7 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
 fi
 
 is_mounted() {
-    su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null
+    su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null
 }
 
 ensure_mounted() {
@@ -40,7 +40,7 @@ ssh_control() {
             ;;
         stop)
             if is_mounted && su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x sshd" >/dev/null 2>&1; then
-                su -c "chroot '$DEBIANPATH' /usr/bin/killall -TERM sshd 2>/dev/null" || true
+                su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -TERM -f sshd 2>/dev/null'" || true
                 echo "[✓] SSH daemon stopped."
             else
                 echo "[*] SSH server is not running."
@@ -75,7 +75,7 @@ vnc_control() {
             ;;
         stop)
             if is_mounted && su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x x11vnc" >/dev/null 2>&1; then
-                su -c "chroot '$DEBIANPATH' /usr/bin/killall -TERM x11vnc 2>/dev/null" || true
+                su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -TERM -f x11vnc 2>/dev/null'" || true
                 echo "[✓] VNC server stopped."
             else
                 echo "[*] VNC server is not running."

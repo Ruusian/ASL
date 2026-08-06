@@ -17,7 +17,7 @@ check() {
 
 if [ "$(su -c 'id -u' 2>/dev/null)" = 0 ]; then check root required "su grants root access" PASS; else check root required "root access through su is unavailable" FAIL; fi
 if [ -d "$DEBIANPATH" ]; then check debian-root required "$DEBIANPATH exists" PASS; else check debian-root required "$DEBIANPATH is missing" FAIL; fi
-if su -c "mountpoint -q '$DEBIANPATH/proc'" 2>/dev/null; then mounted=1; check chroot optional "mounted" PASS; else mounted=0; check chroot optional "not mounted; chroot checks skipped" WARN; fi
+if su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then mounted=1; check chroot optional "mounted" PASS; else mounted=0; check chroot optional "not mounted; chroot checks skipped" WARN; fi
 if command -v termux-x11 >/dev/null; then check termux-x11 required "client installed" PASS; else check termux-x11 required "install with: pkg install termux-x11" FAIL; fi
 if command -v pulseaudio >/dev/null; then check pulseaudio required "client installed" PASS; else check pulseaudio required "install with: pkg install pulseaudio" FAIL; fi
 if [ -d /sdcard ] && [ -w /sdcard ]; then check storage optional "/sdcard is writable" PASS; else check storage optional "/sdcard is unavailable or not writable" WARN; fi
