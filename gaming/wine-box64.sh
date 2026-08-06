@@ -80,9 +80,15 @@ run_wine_exe() {
         export WINEARCH=win64
         export WINEPREFIX=/root/.wine
         export DXVK_ASYNC=1
+        export DXVK_STATE_CACHE=1
+        export MESA_SHADER_CACHE_DIR=/dev/shm/mesa_shader_cache
         export MALLOC_ARENA_MAX=2
+        export PULSE_LATENCY_MSEC=60
+        export BOX64_DYNAREC_BIGLITTLE=1
         export BOX64_DYNAREC_STRONGMEM=2
         export BOX64_DYNAREC_SAFEFLAGS=2
+        export BOX64_DYNAREC_FASTNAN=1
+        export BOX64_DYNAREC_FASTROUND=1
         wine \"\$TARGET_EXE\"
     '"
 }

@@ -19,13 +19,15 @@ Install or update **ASL** instantly with a single command inside Termux:
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash
 ```
 
-### 🐧 Distro Selection Options
-Select your preferred Linux distribution interactively during setup, or pass flags non-interactively:
+### 🐧 Debian Subsystem Rootfs Options
+Select your preferred Debian rootfs edition interactively during setup, or pass flags non-interactively:
 
 ```bash
-# Non-interactive distro installation flags (Debian or Arch Linux):
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=debian
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=archlinux
+# ASL Exclusive Debian Modded Rootfs (Pre-baked Turnip Vulkan, Box64, Wine64, XFCE Desktop):
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --modded
+
+# Standard Clean Base Debian Rootfs (Official Debian Trixie via proot-distro):
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --standard
 ```
 
 Launch the interactive 3D console anytime after installation:
@@ -55,11 +57,10 @@ asl       # or superkit
   - 📋 **System Clipboard Bridge**: Sync clipboard contents between Linux and Android (`asl clip copy/paste`).
   - 🔔 **Android System Toasts & Notifications**: Trigger native Android system toasts and notifications from Linux terminal scripts (`asl toast "Task Done"`).
 
-### 🐧 4. Streamlined High-Performance Distros & Prebuilt Drivers
-- **Tuned for Maximum Gaming & Workstation Performance**:
-  - 🐧 **Debian (Trixie)** — Recommended baseline for Wine64, Box64, DXVK & XFCE Desktop
-  - 🏹 **Arch Linux** — Rolling release base for maximum performance & cutting-edge packages
-- **Auto-Provisioned Hardware Drivers**: Automatically provisions Turnip Mesa Vulkan, Zink, and VirGL drivers matching host SoC architecture during installation.
+### 🐧 4. Optimized Debian Subsystem & Turnip Vulkan Drivers
+- **Tuned Specifically for Snapdragon & Adreno GPUs**:
+  - 🐧 **Debian (Trixie)** — Highly optimized baseline environment for Turnip Mesa Vulkan, Zink Direct3D 12 translation, Wine64, Box64, and XFCE Desktop.
+- **Auto-Provisioned Hardware Drivers**: Automatically provisions Turnip Mesa Vulkan, Zink, and VirGL drivers matching host Qualcomm Snapdragon SoC architecture during installation.
 
 ### 📸 5. Point-in-Time Filesystem Snapshots & Backups
 - **Instant Local Snapshots**: Create instant snapshots (`asl snapshot create <name>`) and safely restore chroot state in seconds.

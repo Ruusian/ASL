@@ -21,7 +21,7 @@ superkit_gpu_detect() {
 
 superkit_gpu_apply() {
     superkit_gpu_detect
-    unset GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE MESA_VK_WINSYS TU_DEBUG
+    unset GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE MESA_VK_WINSYS TU_DEBUG MESA_SHADER_CACHE_DIR
 
     if pgrep -x virgl_test_server_android >/dev/null 2>&1 || pgrep -f virgl_test_server >/dev/null 2>&1; then
         export GALLIUM_DRIVER=virpipe
@@ -35,8 +35,11 @@ superkit_gpu_apply() {
             export GALLIUM_DRIVER=zink
             export MESA_LOADER_DRIVER_OVERRIDE=zink
             export MESA_VK_WINSYS=x11
+            export MESA_SHADER_CACHE_DIR="/dev/shm/mesa_shader_cache"
             case "$SUPERKIT_GPU_PLATFORM" in
-                sm8450|sm8475|sm7475) export TU_DEBUG=noconform ;;
+                sm8350*|sm8450*|sm8475*|sm8550*|sm8650*|sm8750*|sm7475*|sm7325*|sm7550*|sm7675*|msm*|sm*|qcom*)
+                    export TU_DEBUG=noconform,sysmem
+                    ;;
             esac
             ;;
         mali-virgl|generic-virgl)
