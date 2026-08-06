@@ -23,13 +23,9 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/mast
 Select your preferred Linux distribution interactively during setup, or pass flags non-interactively:
 
 ```bash
-# Non-interactive distro installation flags:
+# Non-interactive distro installation flags (Debian or Arch Linux):
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=debian
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=ubuntu
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=archlinux
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=alpine
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=kali
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=fedora
 ```
 
 Launch the interactive 3D console anytime after installation:
@@ -59,14 +55,11 @@ asl       # or superkit
   - 📋 **System Clipboard Bridge**: Sync clipboard contents between Linux and Android (`asl clip copy/paste`).
   - 🔔 **Android System Toasts & Notifications**: Trigger native Android system toasts and notifications from Linux terminal scripts (`asl toast "Task Done"`).
 
-### 🐧 4. One-Click Multi-Distro Provisioning
-- Pulls official OCI container rootfs images via `proot-distro` and provisions them as full root chroots:
-  - 🐧 **Debian (Trixie)** — Recommended for Wine64, Box64 & Desktop
-  - 🟠 **Ubuntu (24.04 LTS)** — Modern Linux workstation stack
-  - 🏹 **Arch Linux** — Rolling release base
-  - 🏔️ **Alpine Linux** — Ultra-minimal footprint base
-  - 🐉 **Kali Linux** — Security & penetration testing suite
-  - 🎩 **Fedora Linux** — Red Hat ecosystem stack
+### 🐧 4. Streamlined High-Performance Distros & Prebuilt Drivers
+- **Tuned for Maximum Gaming & Workstation Performance**:
+  - 🐧 **Debian (Trixie)** — Recommended baseline for Wine64, Box64, DXVK & XFCE Desktop
+  - 🏹 **Arch Linux** — Rolling release base for maximum performance & cutting-edge packages
+- **Auto-Provisioned Hardware Drivers**: Automatically provisions Turnip Mesa Vulkan, Zink, and VirGL drivers matching host SoC architecture during installation.
 
 ### 📸 5. Point-in-Time Filesystem Snapshots & Backups
 - **Instant Local Snapshots**: Create instant snapshots (`asl snapshot create <name>`) and safely restore chroot state in seconds.

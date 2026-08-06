@@ -56,3 +56,23 @@ superkit_gpu_report() {
     printf 'MESA_VK_WINSYS=%s\n' "${MESA_VK_WINSYS:-}"
     printf 'TU_DEBUG=%s\n' "${TU_DEBUG:-}"
 }
+
+superkit_gpu_install_drivers() {
+    superkit_gpu_detect
+    DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
+    echo "[*] Auto-installing prebuilt GPU drivers for profile: $SUPERKIT_GPU_PROFILE ($SUPERKIT_GPU_PLATFORM)..."
+    if [ ! -d "$DEBIANPATH" ]; then
+        echo "[!] Error: Chroot directory does not exist at $DEBIANPATH"
+        return 1
+    fi
+
+    if su -c "chroot '$DEBIANPATH' /usr/bin/test -f /etc/debian_version" 2>/dev/null; then
+        su -c "chroot '$DEBIANPATH' /bin/bash -c '
+            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            apt-get update && apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri vulkan-tools libvulkan1 2>/dev/null || true
+        '"
+        echo "[✓] Prebuilt GPU hardware acceleration drivers installed."
+    else
+        echo "[*] Non-Debian rootfs detected; skipping Debian apt driver package auto-installation."
+    fi
+}

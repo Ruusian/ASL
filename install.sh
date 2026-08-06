@@ -57,24 +57,16 @@ pkg install -y git pulseaudio termux-x11 virglrenderer-android tsu socat wget un
 if [ -z "$SELECTED_DISTRO" ]; then
     if [ -t 0 ]; then
         echo -e "\n${CYAN}====================================================${RESET}"
-        echo -e "${CYAN} 🐧 Choose Linux Distribution for ASL Chroot:        ${RESET}"
+        echo -e "${CYAN} 🐧 Select High-Performance Linux Distribution:     ${RESET}"
         echo -e "${CYAN}====================================================${RESET}"
-        echo -e "  1) ${GREEN}Debian${RESET} (Trixie/Bookworm - Recommended for Wine, Box64 & Desktop)"
-        echo -e "  2) ${GREEN}Ubuntu${RESET} (24.04 LTS Noble)"
-        echo -e "  3) ${GREEN}Arch Linux${RESET} (Rolling)"
-        echo -e "  4) ${GREEN}Alpine Linux${RESET} (Ultra-lightweight)"
-        echo -e "  5) ${GREEN}Kali Linux${RESET} (Penetration Testing)"
-        echo -e "  6) ${GREEN}Fedora Linux${RESET} (Latest)"
-        echo -e "  7) ${YELLOW}Skip rootfs setup${RESET} (Use existing rootfs at /data/local/tmp/chrootDebian)"
+        echo -e "  1) ${GREEN}Debian${RESET} (Trixie/Bookworm - Recommended for Wine, Box64 & XFCE Desktop)"
+        echo -e "  2) ${GREEN}Arch Linux${RESET} (Rolling - Maximum Performance & Bleeding-Edge Drivers)"
+        echo -e "  3) ${YELLOW}Skip rootfs setup${RESET} (Use existing rootfs at /data/local/tmp/chrootDebian)"
         echo -e ""
-        read -r -p "Select choice [1-7, default: 1]: " distro_choice
+        read -r -p "Select choice [1-3, default: 1]: " distro_choice
         case "$distro_choice" in
-            2) SELECTED_DISTRO="ubuntu" ;;
-            3) SELECTED_DISTRO="archlinux" ;;
-            4) SELECTED_DISTRO="alpine" ;;
-            5) SELECTED_DISTRO="kali" ;;
-            6) SELECTED_DISTRO="fedora" ;;
-            7) SELECTED_DISTRO="skip" ;;
+            2) SELECTED_DISTRO="archlinux" ;;
+            3) SELECTED_DISTRO="skip" ;;
             1|"") SELECTED_DISTRO="debian" ;;
             *) SELECTED_DISTRO="debian" ;;
         esac
@@ -86,11 +78,7 @@ fi
 IMAGE_REF=""
 case "$SELECTED_DISTRO" in
     debian) IMAGE_REF="debian:trixie" ;;
-    ubuntu) IMAGE_REF="ubuntu:24.04" ;;
     arch|archlinux) IMAGE_REF="archlinux/archlinux:latest" ;;
-    alpine) IMAGE_REF="alpine:latest" ;;
-    kali|kalilinux) IMAGE_REF="kalilinux/kali-rolling" ;;
-    fedora) IMAGE_REF="fedora:latest" ;;
     skip) IMAGE_REF="" ;;
     *) IMAGE_REF="debian:trixie" ;;
 esac
@@ -168,6 +156,12 @@ ln -sf "$TARGET_DIR/bin/superkit" "$PREFIX/bin/superkit"
 
 echo -e "${GREEN}[*] Applying Android GID mappings...${RESET}"
 "$TARGET_DIR/core/android-aid.sh" setup >/dev/null 2>&1 || true
+
+echo -e "${GREEN}[*] Provisioning auto-configured SoC GPU drivers & hardware acceleration...${RESET}"
+(
+    source "$TARGET_DIR/core/gpu-profile.sh"
+    superkit_gpu_install_drivers >/dev/null 2>&1 || true
+)
 
 echo -e "${CYAN}====================================================${RESET}"
 echo -e "${GREEN}[✓] Android Subsystem for Linux (ASL) Installed!     ${RESET}"
