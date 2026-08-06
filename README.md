@@ -21,6 +21,18 @@ Install or update **ASL** instantly with a single command inside Termux:
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash
 ```
 
+### 🐧 Distro Selection Options
+During installation, you can select your preferred Linux distribution interactively or specify it via command-line flags or environment variables:
+
+```bash
+# Non-interactive distro installation flags:
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=ubuntu
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=archlinux
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=alpine
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=kali
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --distro=fedora
+```
+
 Once installed, launch the interactive terminal dashboard by running:
 ```bash
 asl
