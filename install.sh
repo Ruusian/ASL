@@ -4,6 +4,8 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -115,7 +117,11 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
 
             if wget -q --show-progress -O "$TEMP_TAR" "$RELEASE_URL" 2>/dev/null || curl -L -o "$TEMP_TAR" "$RELEASE_URL"; then
                 echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
-                su -c "mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"
+                su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null && {
+                    echo -e "${YELLOW}[*] Stopping active chroot before overwrite...${RESET}"
+                    bash "$SCRIPT_DIR/core/stop-chroot.sh" >/dev/null 2>&1 || true
+                }
+                su -c "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"
                 rm -f "$TEMP_TAR"
                 # Configure DNS & hosts
                 su -c "chroot '$DEBIANPATH' /bin/sh -c 'echo \"nameserver 1.1.1.1\" > /etc/resolv.conf && echo \"nameserver 8.8.8.8\" >> /etc/resolv.conf && echo \"127.0.0.1 localhost\" > /etc/hosts'" 2>/dev/null || true
@@ -137,7 +143,11 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
             TEMP_ROOTFS="$PREFIX/var/lib/proot-distro/containers/asl-temp/rootfs"
             if [ -d "$TEMP_ROOTFS" ]; then
                 echo -e "${GREEN}[*] Copying Debian rootfs into chroot location ($DEBIANPATH)...${RESET}"
-                su -c "mkdir -p '$DEBIANPATH' && cp -af '$TEMP_ROOTFS/.' '$DEBIANPATH/'"
+                su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null && {
+                    echo -e "${YELLOW}[*] Stopping active chroot before overwrite...${RESET}"
+                    bash "$SCRIPT_DIR/core/stop-chroot.sh" >/dev/null 2>&1 || true
+                }
+                su -c "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && cp -af '$TEMP_ROOTFS/.' '$DEBIANPATH/'"
                 proot-distro remove asl-temp >/dev/null 2>&1 || true
 
                 # Configure DNS & hosts

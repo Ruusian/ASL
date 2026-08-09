@@ -29,11 +29,23 @@ run_asl() {
 }
 
 umount_chroot() {
-    umount -l "$DEBIANPATH/proc" 2>/dev/null
-    umount -l "$DEBIANPATH/sys" 2>/dev/null
-    umount -l "$DEBIANPATH/dev/pts" 2>/dev/null
-    umount -l "$DEBIANPATH/dev" 2>/dev/null
-    umount -l "$DEBIANPATH/sdcard" 2>/dev/null
+    pkill -9 -f asl-start-xfce 2>/dev/null
+    chroot "$DEBIANPATH" /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -9 -f "xfwm4|xfdesktop|xfce4-panel|xfsettingsd|dbus-run-session|dbus-daemon|wine|wine64|wineserver|box64" 2>/dev/null' 2>/dev/null
+    for mp in \
+        "$DEBIANPATH/sdcard" \
+        "$DEBIANPATH/var/lock" \
+        "$DEBIANPATH/dev/shm" \
+        "$DEBIANPATH/dev/pts" \
+        "$DEBIANPATH/dev" \
+        "$DEBIANPATH/proc/sys/fs/binfmt_misc" \
+        "$DEBIANPATH/proc" \
+        "$DEBIANPATH/sys" \
+        "$DEBIANPATH/run" \
+        "$DEBIANPATH/data/data/com.termux/files/usr/tmp" \
+        "$DEBIANPATH/tmp" \
+        "$DEBIANPATH"; do
+        umount -l "$mp" 2>/dev/null
+    done
 }
 
 if is_chroot_active; then

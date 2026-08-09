@@ -70,9 +70,17 @@ vnc_control() {
             if su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x x11vnc" >/dev/null 2>&1; then
                 echo "[*] VNC server is already running."
             else
+                PWFILE="/root/.asl-vncpasswd"
+                if ! su -c "chroot '$DEBIANPATH' /usr/bin/test -s '$PWFILE'" 2>/dev/null; then
+                    VNCPW=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; tr -dc A-Za-z0-9 < /dev/urandom | head -c 12'" 2>/dev/null)
+                    [ -n "$VNCPW" ] || VNCPW="asl$(date +%s)"
+                    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; /usr/bin/x11vnc -storepasswd \"$VNCPW\" \"$PWFILE\" >/dev/null 2>&1 && chmod 600 \"$PWFILE\"'" || return 1
+                    echo "    VNC password set to: $VNCPW (stored at $PWFILE in chroot)"
+                fi
                 echo "[*] Starting x11vnc server on port 5900..."
-                su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; x11vnc -display :0 -forever -shared -rfbport 5900 -nopw -bg >/dev/null 2>&1'" || return 1
+                su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; x11vnc -display :0 -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1'" || return 1
                 echo "[✓] VNC server active. Connect via VNC client to 127.0.0.1:5900."
+                echo "    To reset the password, delete $PWFILE inside the chroot and start again."
             fi
             ;;
         stop)

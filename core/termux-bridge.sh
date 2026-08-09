@@ -26,7 +26,7 @@ termux_wakelock() {
             fi
             ;;
         status|*)
-            if pgrep -f "termux-wake-lock" >/dev/null 2>&1 || [ -f "/data/data/com.termux/files/usr/tmp/termux-wake-lock" ]; then
+            if pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
                 echo "[*] CPU Wake Lock: ACTIVE"
             else
                 echo "[*] CPU Wake Lock: INACTIVE"

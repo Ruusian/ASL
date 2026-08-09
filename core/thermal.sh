@@ -26,9 +26,14 @@ asl_thermal_report() {
         for p in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp; do
             if [ -r "$p" ]; then
                 raw_temp=$(cat "$p" 2>/dev/null || true)
-                if [ -n "$raw_temp" ] && [ "$raw_temp" -gt 0 ]; then
-                    [ "$raw_temp" -gt 1000 ] && raw_temp=$((raw_temp / 100))
-                    batt_temp="$raw_temp"
+                if [ -n "$raw_temp" ] && [[ "$raw_temp" =~ ^[0-9]+$ ]] && [ "$raw_temp" -gt 0 ]; then
+                    if [ "$raw_temp" -gt 1000 ]; then
+                        batt_temp=$((raw_temp / 1000))
+                    elif [ "$raw_temp" -gt 100 ]; then
+                        batt_temp=$(((raw_temp + 5) / 10))
+                    else
+                        batt_temp="$raw_temp"
+                    fi
                     break
                 fi
             fi

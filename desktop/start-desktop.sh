@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/core/gpu-profile.sh"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/asl/desktop"
 STATE_FILE="$STATE_DIR/state"
 LAUNCHER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+MAXMAP_BACKUP="/data/local/tmp/asl_desktop_max_map_count"
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
@@ -16,6 +17,23 @@ fi
 ensure_state_dir() {
     mkdir -p "$STATE_DIR" || return 1
     chmod 700 "$STATE_DIR"
+}
+
+sysctl_maxmap_backup() {
+    local cur
+    cur=$(su -c "sysctl -n vm.max_map_count" 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$cur" ] && [ "$cur" != "1048576" ]; then
+        su -c "echo '$cur' > '$MAXMAP_BACKUP'" 2>/dev/null || true
+    fi
+}
+
+sysctl_maxmap_restore() {
+    local orig
+    orig=$(su -c "cat '$MAXMAP_BACKUP' 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$orig" ]; then
+        su -c "sysctl -w vm.max_map_count='$orig'" 2>/dev/null || true
+        su -c "rm -f '$MAXMAP_BACKUP'" 2>/dev/null || true
+    fi
 }
 
 pid_start_time() {
@@ -143,6 +161,7 @@ start_desktop() {
     start_audio || return 1
     start_gpu || true
     echo "[*] Optimizing system memory before desktop startup..."
+    sysctl_maxmap_backup
     su -c "sysctl -w vm.max_map_count=1048576; sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
     DISPLAY_ID=:0
     am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
@@ -303,11 +322,15 @@ stop_desktop() {
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
+    su -c "chroot '$DEBIANPATH' /bin/bash -c 'echo x > /tmp/xfce-keepalive 2>/dev/null || true'" 2>/dev/null || true
+    sleep 1
+    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -TERM -f \"asl-start-xfce|dbus-run-session|dbus-daemon\" 2>/dev/null || true'" 2>/dev/null || true
     if process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || failed=1; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || failed=1; fi
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" 2>/dev/null || true
+    sysctl_maxmap_restore
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi
     rm -f "$STATE_FILE"
     echo "[✓] ASL-managed desktop stopped."
@@ -322,6 +345,7 @@ force_stop_desktop() {
     pkill -9 -f "asl-start-xfce|socat" 2>/dev/null || true
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
+    sysctl_maxmap_restore
     sleep 1
     echo "[✓] Complete stop: All GUI and gaming processes terminated and state cleared."
 }
@@ -338,6 +362,24 @@ status_desktop() {
     fi
 }
 
+refresh_x11_state() {
+    if ! read_state; then return 0; fi
+    local new_pid new_start _i
+    new_pid=$(pgrep -f "termux-x11.*:[0-9]" | head -n1 || true)
+    [ -n "$new_pid" ] || { echo "[!] Termux:X11 process not found."; return 1; }
+    new_start=
+    for _i in 1 2 3; do
+        new_start=$(pid_start_time "$new_pid")
+        [ -n "$new_start" ] && break
+        sleep 1
+    done
+    [ -n "$new_start" ] || { echo "[!] Could not read Termux:X11 start time."; return 1; }
+    X11_PID="$new_pid"
+    X11_START="$new_start"
+    write_state || return 1
+    echo "[✓] Termux:X11 state updated."
+}
+
 safe_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
 launch_app() {
@@ -345,7 +387,7 @@ launch_app() {
     safe_id "$id" || { echo "[!] Invalid desktop application ID."; return 1; }
     for root in /usr/share/applications /usr/local/share/applications /root/.local/share/applications; do
         if su -c "chroot '$DEBIANPATH' /usr/bin/test -f '$root/$id.desktop'" 2>/dev/null; then
-            exec su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin;\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\"'"
+            exec su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\"'"
         fi
     done
     echo "[!] Debian desktop entry not found: $id"
@@ -422,8 +464,9 @@ case "${1:-start}" in
     force-stop|kill) force_stop_desktop ;;
     restart) force_stop_desktop && start_desktop ;;
     status) status_desktop ;;
+    refresh-x11) refresh_x11_state ;;
     audio) shift; audio_control "$@" ;;
     sync-apps) sync_apps ;;
     launch) shift; launch_app "$@" ;;
-    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|audio|sync-apps|launch}"; exit 1 ;;
+    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|audio|sync-apps|launch}"; exit 1 ;;
 esac

@@ -45,6 +45,8 @@ create_snapshot() {
     echo "[*] Creating snapshot '$name' (~${required_mb}MB)..."
     if su -c "cp -a '$DEBIANPATH' '$target'"; then
         echo "[✓] Snapshot '$name' created successfully."
+        echo "[*] Re-mounting chroot..."
+        bash "$SCRIPT_DIR/mount-chroot.sh" || echo "[!] Warning: chroot remount failed; run 'asl start' to mount it."
     else
         su -c "rm -rf '$target'" 2>/dev/null
         echo "[!] Snapshot creation failed."

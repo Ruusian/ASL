@@ -44,7 +44,9 @@ su -c "
     }
 
     domount_bind /dev $DEBIANPATH/dev
-    chmod -R 0666 /dev/input/* 2>/dev/null || true
+    for dev in /dev/input/*; do
+        [ -e "$dev" ] && chmod 0666 "$dev" 2>/dev/null
+    done
     domount_fs proc $DEBIANPATH/proc
     domount_fs sysfs $DEBIANPATH/sys
     domount_bind /dev/pts $DEBIANPATH/dev/pts

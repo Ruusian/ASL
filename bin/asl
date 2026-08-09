@@ -541,7 +541,7 @@ case "${1:-}" in
     desktop)
         shift
         DESKTOP_ACTION="${1:-start}"
-        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, or launch."; exit 1 ;; esac
+        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, or refresh-x11."; exit 1 ;; esac
         if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = restart || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]] && ! is_mounted; then
             bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         fi
@@ -554,6 +554,14 @@ case "${1:-}" in
             echo "Usage: asl install <package_name...>"
             exit 1
         fi
+        pkg=
+        for pkg in "$@"; do
+            if [[ ! "$pkg" =~ ^[A-Za-z0-9][A-Za-z0-9.+_-]*$ ]]; then
+                echo "Error: Invalid package name: $pkg"
+                exit 1
+            fi
+        done
+        unset pkg
         if ! is_mounted; then
             bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         fi
@@ -566,6 +574,14 @@ case "${1:-}" in
             echo "Usage: asl search <query>"
             exit 1
         fi
+        term=
+        for term in "$@"; do
+            if [[ ! "$term" =~ ^[A-Za-z0-9][A-Za-z0-9.+:_-]*$ ]]; then
+                echo "Error: Invalid search term: $term"
+                exit 1
+            fi
+        done
+        unset term
         if ! is_mounted; then
             bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         fi
@@ -574,28 +590,36 @@ case "${1:-}" in
     mode)
         shift
         TARGET_MODE="${1:-status}"
+        MODE_STATE="/data/local/tmp/asl_mode_state"
         case "$TARGET_MODE" in
             gaming|game)
                 echo "[*] Applying Gaming Performance Profile & CPU Governor..."
                 su -c "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
                 su -c "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
-                export TU_DEBUG=noconform
+                su -c "echo noconform > '$MODE_STATE'" 2>/dev/null || true
                 echo "[✓] Gaming mode active: RAM compacted, CPU governor set to performance, Turnip flags enabled."
                 ;;
             performance|perf)
                 echo "[*] Applying Maximum Performance Mode..."
                 su -c "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
                 su -c "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
+                su -c "echo noconform > '$MODE_STATE'" 2>/dev/null || true
                 echo "[✓] Performance mode active: RAM freed, CPU governor set to performance."
                 ;;
             balanced|normal)
                 su -c "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > \"\$g\" 2>/dev/null || echo powersave > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
+                su -c "rm -f '$MODE_STATE'" 2>/dev/null || true
                 unset TU_DEBUG
                 echo "[✓] Balanced profile active: CPU governor reset."
                 ;;
             status|"")
                 GOV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
-                echo "Current Profile Mode: ${TU_DEBUG:+Gaming (noconform)}${TU_DEBUG:-Balanced} | Governor: $GOV"
+                TU_MODE=$(su -c "cat '$MODE_STATE' 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+                if [ -n "$TU_MODE" ]; then
+                    echo "Current Profile Mode: Gaming ($TU_MODE) | Governor: $GOV"
+                else
+                    echo "Current Profile Mode: Balanced | Governor: $GOV"
+                fi
                 ;;
             *)
                 echo "Usage: asl mode [gaming|performance|balanced|status]"
@@ -631,8 +655,15 @@ case "${1:-}" in
                 exit 1
                 ;;
         esac
+        if [ "$RES" = 720p ] || [ "$RES" = 1080p ] || [ "$RES" = native ]; then
+            bash "$ASL_DIR/desktop/start-desktop.sh" refresh-x11 >/dev/null 2>&1 || true
+        fi
         if is_mounted && [ -n "$SCALE" ]; then
-            run_in_chroot "DISPLAY=:0 xfconf-query -c xsettings -p /Gtk/ScaleFactor -s $SCALE 2>/dev/null || true"
+            if [[ "$SCALE" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                run_in_chroot "DISPLAY=:0 xfconf-query -c xsettings -p /Gtk/ScaleFactor -s $SCALE 2>/dev/null || true"
+            else
+                echo "Error: Scale must be a number (e.g. 1.25)."
+            fi
         fi
         ;;
     service)
@@ -641,6 +672,14 @@ case "${1:-}" in
         SVC="${2:-}"
         if [ -z "$SVC" ]; then
             echo "Usage: asl service <start|stop|restart|status> <service_name>"
+            exit 1
+        fi
+        case "$ACTION" in
+            start|stop|restart|status) ;;
+            *) echo "Error: Invalid service action: $ACTION"; exit 1 ;;
+        esac
+        if [[ ! "$SVC" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Error: Invalid service name: $SVC"
             exit 1
         fi
         if ! is_mounted; then
@@ -707,8 +746,8 @@ case "${1:-}" in
             bash "$ASL_DIR/core/stop-chroot.sh" || exit 1
         fi
         echo "[*] Staging restore from $RESTORE_FILE..."
-        su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.asl-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; mv \"\$target\" \"\$rollback\" && mv \"\$stage\" \"\$target\" || exit 1; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
-            echo "[!] Restore failed; the existing Debian root was left unchanged."
+        su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.asl-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; if ! mv \"\$target\" \"\$rollback\"; then echo '[!] Restore failed: could not move current root aside.' >&2; exit 1; fi; if ! mv \"\$stage\" \"\$target\"; then echo '[!] Restore failed: moving staged root into place failed; rolling back original root.' >&2; mv \"\$rollback\" \"\$target\" 2>/dev/null || true; exit 1; fi; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
+            echo "[!] Restore failed; the Debian root is unchanged (or was rolled back)."
             exit 1
         }
         ;;

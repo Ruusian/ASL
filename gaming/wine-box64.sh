@@ -21,10 +21,10 @@ check_emulation_available() {
 }
 
 build_gaming_env_exports() {
-    local gpu_vars
+    local gpu_vars snippet
     gpu_vars=$(asl_gpu_env_exports)
 
-    cat << EOF
+    snippet=$(cat << 'EOF'
 if [ -d /opt/wine-x64/bin ]; then
     export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
     [ -x /opt/wine-x64/bin/wineserver-wrapper ] && export WINESERVER=/opt/wine-x64/bin/wineserver-wrapper
@@ -40,7 +40,7 @@ export SDL_GAMECONTROLLERCONFIG_FILE=/etc/gamecontrollerdb.txt
 export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1
 export WINEDLLOVERRIDES="d3d11,dxgi=n,b;winebus.sys=d;winebth.sys=d;wineusb.sys=d;winealsa.drv=d;winemenubuilder.exe=d;mscoree,mshtml=d"
 export WINEDEBUG=-all
-$gpu_vars
+@GPU_VARS@
 export DXVK_CONFIG_FILE=/etc/dxvk.conf
 export PULSE_SERVER=127.0.0.1
 export BOX64_MAXTHREADS=8
@@ -64,6 +64,8 @@ export DXVK_ASYNC=1
 export DXVK_GPL=1
 mkdir -p /run/user/0 /dev/shm/mesa_shader_cache 2>/dev/null || true
 EOF
+)
+    printf '%s' "${snippet/@GPU_VARS@/$gpu_vars}"
 }
 
 ensure_wine_desktop_launchers() {
@@ -80,9 +82,7 @@ ensure_wine_desktop_launchers() {
 
         cat << \"EOF_ASLBIN\" > /usr/local/bin/asl
 #!/bin/bash
-if [ -f /data/data/com.termux/files/home/ASL/bin/asl ]; then
-    exec /data/data/com.termux/files/home/ASL/bin/asl \"\$@\"
-elif [ \"\$1\" = \"game\" ] || [ \"\$1\" = \"gaming\" ] || [ -z \"\$1\" ]; then
+if [ \"\$1\" = \"game\" ] || [ \"\$1\" = \"gaming\" ] || [ -z \"\$1\" ]; then
     exec asl-wine-launch wine64 explorer
 else
     exec asl-wine-launch \"\$@\"
@@ -305,9 +305,8 @@ show_gaming_menu() {
             6) run_winecfg ;;
             7) run_winetricks ;;
             8)
-                echo "[*] Launching XFCE4 Desktop in Debian chroot..."
-                su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; startxfce4 >/tmp/xfce.log 2>&1 &'"
-                echo "[✓] XFCE4 launched."
+                echo "[*] Launching ASL-managed XFCE4 Desktop..."
+                bash "$SCRIPT_DIR/desktop/start-desktop.sh" start
                 ;;
             9) run_gpu_benchmark ;;
             10|q|exit) break ;;
@@ -348,7 +347,7 @@ run_gui_picker() {
     if ! check_emulation_available; then return 1; fi
     echo "[*] Opening Graphical File Picker..."
     EXE=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; zenity --file-selection --file-filter=\"Executable files (*.exe) | *.exe\" --title=\"Select Windows Executable\"'" 2>/dev/null)
-    if [ -n "$EXE" ] && [ -f "$EXE" ]; then
+    if [ -n "$EXE" ]; then
         run_wine_exe "$EXE"
     else
         echo "[!] No valid executable selected."
@@ -377,14 +376,25 @@ run_wine_exe() {
         echo -n "Enter full path to .exe file: "
         read -r EXE_PATH
     fi
+    if [ -z "$EXE_PATH" ]; then
+        echo "[!] No executable path provided."
+        return 1
+    fi
 
-    if [ ! -f "$EXE_PATH" ]; then
+    local host_path="$EXE_PATH"
+    if [[ "$host_path" == "$DEBIANPATH"* ]]; then
+        host_path="$EXE_PATH"
+    elif [ ! -e "$host_path" ] && su -c "chroot '$DEBIANPATH' /usr/bin/test -f '$EXE_PATH'" 2>/dev/null; then
+        host_path="$DEBIANPATH$EXE_PATH"
+    fi
+
+    if [ ! -e "$host_path" ]; then
         echo "[!] File not found: $EXE_PATH"
         return 1
     fi
 
-    EXE_PATH=$(realpath "$EXE_PATH" 2>/dev/null || readlink -f "$EXE_PATH" 2>/dev/null || echo "$EXE_PATH")
-    local internal_exe="$EXE_PATH"
+    host_path=$(realpath "$host_path" 2>/dev/null || readlink -f "$host_path" 2>/dev/null || echo "$host_path")
+    local internal_exe="$host_path"
     if [[ "$internal_exe" == "$DEBIANPATH"* ]]; then
         internal_exe="${internal_exe#$DEBIANPATH}"
     fi
