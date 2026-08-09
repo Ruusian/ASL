@@ -1,11 +1,23 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: Safe Chroot Stop Script
+# Android Subsystem for Linux (ASL): Safe Chroot Stop Script
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
+fi
+
+# Restore host sysctl tuning that mount-chroot.sh applied (even if unmounted already)
+SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"
+if su -c "test -s '$SYSCTL_BACKUP'" 2>/dev/null; then
+    echo "[*] Restoring host sysctl tuning..."
+    su -c "
+        while IFS='=' read -r key val; do
+            [ -n \"\$key\" ] && [ -n \"\$val\" ] && sysctl -w \"\$key=\$val\" 2>/dev/null || true
+        done < '$SYSCTL_BACKUP'
+        rm -f '$SYSCTL_BACKUP'
+    " || true
 fi
 
 if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
@@ -18,7 +30,9 @@ echo "[*] Stopping Linux chroot environment..."
 su -c "
     mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
 
-    pids=\$(lsof -t \"$DEBIANPATH\" 2>/dev/null || fuser \"$DEBIANPATH\" 2>/dev/null || grep -l \"$DEBIANPATH\" /proc/[0-9]*/cwd 2>/dev/null | cut -d/ -f3 || true)
+    chroot \"$DEBIANPATH\" /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; wineserver -k 2>/dev/null || true; pkill -9 -x \"wine|wine64|wineserver|box64\" 2>/dev/null || true' 2>/dev/null || true
+
+    pids=\$(lsof -t \"$DEBIANPATH\" 2>/dev/null || fuser \"$DEBIANPATH\" 2>/dev/null || (for p in /proc/[0-9]*; do target=\$(readlink -f \"\$p/cwd\" 2>/dev/null || readlink -f \"\$p/root\" 2>/dev/null || true); [[ \"\$target\" == \"$DEBIANPATH\"* ]] && echo \"\${p##*/}\"; done) || true)
     if [ -n \"\$pids\" ]; then
         kill -TERM \$pids 2>/dev/null || true
         sleep 1

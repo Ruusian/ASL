@@ -1,5 +1,5 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: Safe Chroot Mount Script
+# Android Subsystem for Linux (ASL): Safe Chroot Mount Script
 # ZERO host system/vendor/apex mounts to protect Android OS stability
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
@@ -44,6 +44,7 @@ su -c "
     }
 
     domount_bind /dev $DEBIANPATH/dev
+    chmod -R 0666 /dev/input/* 2>/dev/null || true
     domount_fs proc $DEBIANPATH/proc
     domount_fs sysfs $DEBIANPATH/sys
     domount_bind /dev/pts $DEBIANPATH/dev/pts
@@ -78,6 +79,7 @@ su -c "
         mkdir -p $DEBIANPATH/etc
         printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > $DEBIANPATH/etc/resolv.conf
     fi
+
 " || {
     echo "[!] Chroot mount failed."
     exit 1
@@ -87,5 +89,18 @@ if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
     echo "[!] Chroot mount verification failed."
     exit 1
 fi
+
+# Sysctl tuning is host-kernel; always apply if root.
+# Save previous values first so `asl stop` can restore them.
+SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"
+su -c "rm -f '$SYSCTL_BACKUP'" 2>/dev/null || true
+for kv in vm.swappiness=60 vm.vfs_cache_pressure=50 vm.dirty_ratio=15 vm.dirty_background_ratio=5; do
+    key="${kv%%=*}"
+    cur="$(su -c "sysctl -n '$key'" 2>/dev/null | tr -d '[:space:]')"
+    if [ -n "$cur" ] && [ "$cur" != "${kv#*=}" ]; then
+        su -c "echo '$key=$cur' >> '$SYSCTL_BACKUP'" 2>/dev/null || true
+    fi
+    su -c "sysctl -w '$kv'" 2>/dev/null || true
+done
 
 echo "[✓] Chroot mounted successfully."

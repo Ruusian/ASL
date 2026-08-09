@@ -1,10 +1,10 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: managed Termux:X11, PulseAudio, and XFCE lifecycle.
+# ASL: managed Termux:X11, PulseAudio, and XFCE lifecycle.
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/core/gpu-profile.sh"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/superkit/desktop"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/asl/desktop"
 STATE_FILE="$STATE_DIR/state"
 LAUNCHER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
@@ -90,6 +90,11 @@ start_audio() {
 
 start_gpu() {
     VIRGL_OWNED=0 VIRGL_PID= VIRGL_START=
+    asl_gpu_detect
+    if [ "$ASL_GPU_PROFILE" = "adreno-turnip-zink" ]; then
+        echo "[*] Direct Adreno Turnip + Zink Vulkan acceleration active; VirGL server not needed."
+        return 0
+    fi
     if pgrep -x virgl_test_server_android >/dev/null || pgrep -f virgl_test_server >/dev/null; then
         echo "[*] Reusing active VirGL GPU hardware acceleration server."
         [ -S /tmp/.virgl_test ] && chmod 777 /tmp/.virgl_test 2>/dev/null || true
@@ -115,7 +120,7 @@ cleanup_started() {
 }
 
 start_desktop() {
-    ensure_state_dir || { echo "[!] Cannot create SuperKit state directory."; return 1; }
+    ensure_state_dir || { echo "[!] Cannot create ASL state directory."; return 1; }
     if read_state; then
         if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then
             echo "[*] Desktop is already running on $DISPLAY_ID."
@@ -138,7 +143,7 @@ start_desktop() {
     start_audio || return 1
     start_gpu || true
     echo "[*] Optimizing system memory before desktop startup..."
-    su -c "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
+    su -c "sysctl -w vm.max_map_count=1048576; sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
     DISPLAY_ID=:0
     am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[*] Starting Termux:X11 display server..."
@@ -174,16 +179,16 @@ start_desktop() {
         SOCAT_PID=$!
         SOCAT_START=$(pid_start_time "$SOCAT_PID")
     fi
-    superkit_gpu_apply
+    asl_gpu_apply
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
     [ -S /tmp/.virgl_test ] && chmod 777 /tmp/.virgl_test 2>/dev/null || true
-    mkdir -p "$DEBIANPATH/tmp" "$termux_tmp"
-    local launcher_script="$DEBIANPATH/tmp/superkit-start-xfce.sh"
+    mkdir -p "$termux_tmp"
+    local launcher_script="$termux_tmp/asl-start-xfce.sh"
     umask 022
     cat << LAUNCHER_EOF > "$launcher_script"
 #!/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-export LD_PRELOAD=/usr/local/lib/libno_close_range.so
+[ -f /usr/local/lib/libno_close_range.so ] && export LD_PRELOAD=/usr/local/lib/libno_close_range.so
 # Sanitize environment — remove leaked Termux/Android vars
 for v in \$(env | grep -E -o '^(TERMUX|SHELL_CMD|ANDROID|OPENAI|CLAUDE|OPENCLAUDE|COREPACK|NODE_OPTIONS|DEX2OAT|BOOTCLASS|SYSTEMSERVER|GIT_EDITOR|ASEC_|NoDefault)[A-Za-z_]*'); do
     unset "\$v"
@@ -197,6 +202,9 @@ export HOME=/root
 export USER=root
 export SHELL=/bin/bash
 export XDG_RUNTIME_DIR=/run/user/0
+export XDG_MENU_PREFIX=xfce-
+export XDG_DATA_DIRS=/usr/local/share:/usr/share
+export XDG_CONFIG_DIRS=/etc/xdg
 export NO_AT_BRIDGE=1
 export GIO_USE_PORTALS=0
 export GIO_USE_VFS=local
@@ -204,20 +212,35 @@ export WEBKIT_FORCE_SANDBOX=0
 export QT_QPA_PLATFORM=xcb
 export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
-export MESA_SHADER_CACHE_DIR=/tmp/.cache
-export GALLIUM_DRIVER="virpipe"
-export MESA_GL_VERSION_OVERRIDE=4.0
-export MESA_VK_WINSYS="x11"
+$(asl_gpu_env_exports)
 
-mkdir -p /run/user/0 2>/dev/null
+mkdir -p /run/user/0 /dev/shm/mesa_shader_cache 2>/dev/null
 chmod 700 /run/user/0 2>/dev/null
 mkdir -p /tmp/.cache 2>/dev/null
 
 rm -f /tmp/xfce-keepalive
 mkfifo /tmp/xfce-keepalive
 exec dbus-run-session -- bash -c '
+    (
+        sleep 2
+        export DISPLAY=:0
+        xrandr --newmode "1280x720" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
+        xrandr --addmode builtin "1280x720" 2>/dev/null || true
+        xrandr --newmode "1600x900" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true
+        xrandr --addmode builtin "1600x900" 2>/dev/null || true
+        xrandr --newmode "1366x768" 85.50 1366 1436 1579 1792 768 771 774 798 -hsync +vsync 2>/dev/null || true
+        xrandr --addmode builtin "1366x768" 2>/dev/null || true
+        xrandr --newmode "1024x768" 65.00 1024 1048 1184 1344 768 771 777 806 -hsync +vsync 2>/dev/null || true
+        xrandr --addmode builtin "1024x768" 2>/dev/null || true
+        xrandr --newmode "800x600" 40.00 800 840 920 1056 600 601 605 628 +hsync +vsync 2>/dev/null || true
+        xrandr --addmode builtin "800x600" 2>/dev/null || true
+    ) &
+
     xfwm4 --replace --compositor=off >> /tmp/xfce-xfwm4.log 2>&1 &
     sleep 1
+    xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xsettings -p /Net/IconThemeName -s Papirus-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s Papirus-Dark 2>/dev/null || true
     xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Arc-Dark 2>/dev/null || true
     xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Breeze_Snow 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Breeze_Snow 2>/dev/null || true
@@ -240,8 +263,8 @@ exec dbus-run-session -- bash -c '
 '
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
-    cp -f "$launcher_script" "$termux_tmp/superkit-start-xfce.sh" 2>/dev/null || true
-    su -c "chroot '$DEBIANPATH' /bin/bash /tmp/superkit-start-xfce.sh" >/dev/null 2>&1 &
+    cp -f "$launcher_script" "$termux_tmp/asl-start-xfce.sh" 2>/dev/null || true
+    su -c "chroot '$DEBIANPATH' /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
     SESSION_PID=
     SESSION_START=
     for _i in 1 2 3 4 5 6 7 8 9 10; do
@@ -271,34 +294,36 @@ LAUNCHER_EOF
 
 stop_desktop() {
     if ! read_state; then
-        echo "[*] No SuperKit-managed desktop session is active."
+        echo "[*] No ASL-managed desktop session is active."
         return 0
     fi
     local failed=0 pid
-    echo "[*] Stopping SuperKit-managed desktop..."
+    echo "[*] Stopping ASL-managed desktop..."
+    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true; pkill -9 -x \"wine|wine64|wineserver|box64\" 2>/dev/null || true; pkill -TERM -f \"xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query\" 2>/dev/null'" 2>/dev/null || true
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -TERM -f \"xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query\" 2>/dev/null'" 2>/dev/null || true
     sleep 1
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
     if process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || failed=1; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || failed=1; fi
+    local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+    rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" 2>/dev/null || true
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi
     rm -f "$STATE_FILE"
-    echo "[✓] SuperKit-managed desktop stopped."
+    echo "[✓] ASL-managed desktop stopped."
 }
 
 force_stop_desktop() {
-    echo "[*] Force-stopping all GUI, X11, GPU, and audio processes..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -9 -f \"xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|dbus-daemon|dbus-launch\" 2>/dev/null'" 2>/dev/null || true
+    echo "[*] Force-stopping all GUI, X11, GPU, Wine, Box64, and audio processes..."
+    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true; pkill -9 -x \"wine|wine64|wineserver|box64|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|xfconf-query|dbus-daemon|dbus-launch\" 2>/dev/null || true'" 2>/dev/null || true
     pkill -9 -x termux-x11 2>/dev/null || true
     pkill -9 -x virgl_test_server_android 2>/dev/null || true
     pkill -9 -x pulseaudio 2>/dev/null || true
-    pkill -9 -f "superkit-start-xfce|socat" 2>/dev/null || true
+    pkill -9 -f "asl-start-xfce|socat" 2>/dev/null || true
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    rm -rf "$termux_tmp/.X11-unix"/X* "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
+    rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
     sleep 1
-    echo "[✓] Complete stop: All GUI processes terminated and state cleared."
+    echo "[✓] Complete stop: All GUI and gaming processes terminated and state cleared."
 }
 
 status_desktop() {
@@ -320,7 +345,7 @@ launch_app() {
     safe_id "$id" || { echo "[!] Invalid desktop application ID."; return 1; }
     for root in /usr/share/applications /usr/local/share/applications /root/.local/share/applications; do
         if su -c "chroot '$DEBIANPATH' /usr/bin/test -f '$root/$id.desktop'" 2>/dev/null; then
-            exec su -c "chroot '$DEBIANPATH' /usr/bin/gtk-launch '$id'"
+            exec su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin;\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\"'"
         fi
     done
     echo "[!] Debian desktop entry not found: $id"
@@ -331,8 +356,8 @@ sync_apps() {
     if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then echo "[!] Mount the Debian chroot before synchronizing apps."; return 1; fi
     mkdir -p "$LAUNCHER_DIR" || return 1
     local file root id name target tmp count=0
-    for target in "$LAUNCHER_DIR"/superkit-*.desktop; do
-        [ -f "$target" ] && [ ! -L "$target" ] && grep -qx 'X-SuperKit-Managed=true' "$target" && rm -f "$target"
+    for target in "$LAUNCHER_DIR"/asl-*.desktop; do
+        [ -f "$target" ] && [ ! -L "$target" ] && grep -qx 'X-ASL-Managed=true' "$target" && rm -f "$target"
     done
     while IFS= read -r -d '' file; do
         root=
@@ -344,15 +369,15 @@ sync_apps() {
         safe_id "$id" || continue
         name=$(su -c "chroot '$DEBIANPATH' /usr/bin/awk -F= 'BEGIN { type=\"\"; hidden=0; nodisplay=0 } /^Type=/{type=\$2} /^Hidden=true$/{hidden=1} /^NoDisplay=true$/{nodisplay=1} /^Name=/{if (name == \"\") name=substr(\$0, 6)} END {if (type == \"Application\" && !hidden && !nodisplay && name != \"\") print name}' '$root/$id.desktop'" 2>/dev/null) || continue
         [ -n "$name" ] || continue
-        target="$LAUNCHER_DIR/superkit-$id.desktop"; tmp="$target.tmp.$$"
+        target="$LAUNCHER_DIR/asl-$id.desktop"; tmp="$target.tmp.$$"
         umask 077
         {
             printf '[Desktop Entry]\nType=Application\nName=%s\n' "${name//$'\n'/ }"
-            printf 'Exec=%s desktop launch %s\n' "${0%/*}/../bin/superkit" "$id"
-            printf 'Terminal=false\nX-SuperKit-Managed=true\nX-SuperKit-Desktop-Id=%s\n' "$id"
+            printf 'Exec=%s desktop launch %s\n' "${0%/*}/../bin/asl" "$id"
+            printf 'Terminal=false\nX-ASL-Managed=true\nX-ASL-Desktop-Id=%s\n' "$id"
         } > "$tmp" && mv -f "$tmp" "$target" && count=$((count + 1))
     done < <(su -c "chroot '$DEBIANPATH' /usr/bin/find /usr/share/applications /usr/local/share/applications /root/.local/share/applications -type f -name '*.desktop' -print0 2>/dev/null" 2>/dev/null)
-    echo "[✓] Synchronized $count SuperKit-owned launchers."
+    echo "[✓] Synchronized $count ASL-owned launchers."
 }
 
 audio_control() {
@@ -384,7 +409,7 @@ audio_control() {
                     echo "[!] pactl is not installed in Termux."
                 fi
             else
-                echo "Usage: superkit audio volume <0-100>"
+                echo "Usage: asl audio volume <0-100>"
             fi
             ;;
         *) echo "Usage: start-desktop.sh audio {start|stop|test|volume <level>}" ;;

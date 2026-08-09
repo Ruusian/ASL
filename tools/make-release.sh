@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 RESET='\033[0m'
 
 DEBIANPATH="/data/local/tmp/chrootDebian"
-RELEASE_TAG="${1:-v2.5.0}"
+RELEASE_TAG="${1:-2.5.1}"
 DISTRO_NAME="${2:-debian}"
 OUTPUT_TAR="/data/local/tmp/asl-${DISTRO_NAME}-modded-arm64.tar.xz"
 

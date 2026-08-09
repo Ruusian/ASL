@@ -1,5 +1,5 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: Termux & Android Host Bridge
+# ASL: Termux & Android Host Bridge
 # Provides deep integration between ASL chroot/CLI and Android host features.
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
@@ -38,7 +38,7 @@ termux_wakelock() {
 termux_open_file() {
     local target="${1:-}"
     if [ -z "$target" ]; then
-        echo "Usage: superkit open <file-path-or-url>"
+        echo "Usage: asl open <file-path-or-url>"
         return 1
     fi
     if ! command -v termux-open >/dev/null 2>&1; then
@@ -48,7 +48,7 @@ termux_open_file() {
 
     # Handle paths relative to chroot root if prefixed or inside chroot path
     if [[ "$target" == "$DEBIANPATH"* ]] && [ -f "$target" ]; then
-        local tmp_copy="/sdcard/Download/superkit-shared-$(basename "$target")"
+        local tmp_copy="/sdcard/Download/asl-shared-$(basename "$target")"
         cp "$target" "$tmp_copy" 2>/dev/null || true
         termux-open "$tmp_copy"
         echo "[✓] Opened chroot file in Android host: $tmp_copy"
@@ -84,7 +84,7 @@ termux_clipboard() {
             fi
             ;;
         *)
-            echo "Usage: superkit clip [copy <text> | paste]"
+            echo "Usage: asl clip [copy <text> | paste]"
             return 1
             ;;
     esac
@@ -92,7 +92,7 @@ termux_clipboard() {
 
 termux_toast_msg() {
     local msg="$*"
-    [ -n "$msg" ] || msg="SuperKit Notification"
+    [ -n "$msg" ] || msg="ASL Notification"
     if command -v termux-toast >/dev/null 2>&1; then
         termux-toast "$msg"
     else
@@ -101,7 +101,7 @@ termux_toast_msg() {
 }
 
 termux_notification_msg() {
-    local title="${1:-SuperKit}"
+    local title="${1:-ASL}"
     local content="${2:-Notification}"
     if command -v termux-notification >/dev/null 2>&1; then
         termux-notification --title "$title" --content "$content"
@@ -145,7 +145,8 @@ case "${1:-}" in
         termux_storage_setup
         ;;
     *)
-        echo "SuperKit Termux & Android Host Bridge"
-        echo "Usage: superkit [wakelock|open|clip|toast|notify|storage]"
+        echo "ASL Termux & Android Host Bridge"
+        echo "Usage: asl [wakelock|open|clip|toast|notify|storage]"
         ;;
 esac
+

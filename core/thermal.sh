@@ -1,7 +1,7 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: Thermal & Battery Monitor
+# ASL: Thermal & Battery Monitor
 
-superkit_thermal_report() {
+asl_thermal_report() {
     local c_reset=$'\033[0m' c_bold=$'\033[1m' c_cyan=$'\033[36m'
     local c_green=$'\033[32m' c_yellow=$'\033[33m' c_red=$'\033[31m'
     local tz_path type raw_temp temp_c
@@ -17,7 +17,7 @@ superkit_thermal_report() {
         fi
     }
 
-    printf '%s=== AndroidLinux-SuperKit Thermal & Battery Status ===%s\n' "$c_cyan$c_bold" "$c_reset"
+    printf '%s=== ASL Thermal & Battery Status ===%s\n' "$c_cyan$c_bold" "$c_reset"
 
     # Battery Temperature via dumpsys or sysfs
     local batt_temp=""
@@ -60,7 +60,7 @@ superkit_thermal_report() {
         # Filter valid temperature ranges (1°C to 125°C) and relevant sensor names
         if [ "$temp_c" -ge 1 ] && [ "$temp_c" -le 125 ]; then
             case "$type" in
-                *cpu-[0-9]*-usr|*gpuss-[0-9]*-usr|soc|cpuss-[0-9]*-usr)
+                *cpu*|*gpu*|soc|*soc*|*tsens*|*qcom*|*ap-thermal*|*mtk*|*exynos*|*quiet-therm*)
                     printf '  %-22s ' "$type:"
                     format_temp "$temp_c"
                     echo
@@ -75,6 +75,9 @@ superkit_thermal_report() {
     fi
 }
 
-if [ "${BASH_SOURCE[0]}" -eq "${0}" 2>/dev/null ] || [ "$0" = "$BASH_SOURCE" ]; then
-    superkit_thermal_report
+superkit_thermal_report() { asl_thermal_report "$@"; }
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    asl_thermal_report
 fi
+

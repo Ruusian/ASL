@@ -1,5 +1,5 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: Remote Access Bridge (SSH & VNC)
+# ASL: Remote Access Bridge (SSH & VNC)
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
@@ -30,7 +30,7 @@ ssh_control() {
             fi
             su -c "chroot '$DEBIANPATH' /usr/bin/ssh-keygen -A" 2>/dev/null || true
             su -c "chroot '$DEBIANPATH' /bin/mkdir -p /var/run/sshd" 2>/dev/null || true
-            su -c "chroot '$DEBIANPATH' /bin/bash -c 'grep -q \"^PermitRootLogin\" /etc/ssh/sshd_config || echo \"PermitRootLogin yes\" >> /etc/ssh/sshd_config'" 2>/dev/null || true
+            su -c "chroot '$DEBIANPATH' /bin/bash -c 'if grep -qE \"^[#]?PermitRootLogin\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PermitRootLogin.*/PermitRootLogin yes/\" /etc/ssh/sshd_config; else echo \"PermitRootLogin yes\" >> /etc/ssh/sshd_config; fi'" 2>/dev/null || true
             if su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x sshd" >/dev/null 2>&1; then
                 echo "[*] SSH server is already running."
             else
@@ -104,7 +104,7 @@ case "$TARGET" in
         vnc_control status
         ;;
     *)
-        echo "Usage: superkit remote [ssh|vnc] [start|stop|status]"
+        echo "Usage: asl remote [ssh|vnc] [start|stop|status]"
         exit 1
         ;;
 esac

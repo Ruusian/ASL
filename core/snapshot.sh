@@ -1,8 +1,9 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: Chroot Snapshot Manager
+# ASL: Chroot Snapshot Manager
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-SNAPSHOT_DIR="/data/local/tmp/.superkit-snapshots"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SNAPSHOT_DIR="/data/local/tmp/.asl-snapshots"
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
@@ -29,7 +30,7 @@ create_snapshot() {
 
     if is_mounted; then
         echo "[!] Stopping chroot before creating snapshot..."
-        bash "${0%/*}/stop-chroot.sh" || exit 1
+        bash "$SCRIPT_DIR/stop-chroot.sh" || exit 1
     fi
 
     local required_mb target_free_mb
@@ -52,7 +53,7 @@ create_snapshot() {
 }
 
 list_snapshots() {
-    echo "=== AndroidLinux-SuperKit Snapshots ==="
+    echo "=== ASL Snapshots ==="
     if [ ! -d "$SNAPSHOT_DIR" ] || [ -z "$(su -c "ls -A '$SNAPSHOT_DIR' 2>/dev/null")" ]; then
         echo " No snapshots found."
         return 0
@@ -63,7 +64,7 @@ list_snapshots() {
 restore_snapshot() {
     local name="${1:-}"
     if [ -z "$name" ] || ! safe_name "$name"; then
-        echo "Error: Valid snapshot name required. Usage: superkit snapshot restore <name>"
+        echo "Error: Valid snapshot name required. Usage: asl snapshot restore <name>"
         exit 1
     fi
     local source="$SNAPSHOT_DIR/$name"
@@ -74,7 +75,7 @@ restore_snapshot() {
 
     if is_mounted; then
         echo "[!] Stopping chroot before restoring snapshot..."
-        bash "${0%/*}/stop-chroot.sh" || exit 1
+        bash "$SCRIPT_DIR/stop-chroot.sh" || exit 1
     fi
 
     echo "[*] Restoring snapshot '$name'..."
@@ -97,7 +98,7 @@ restore_snapshot() {
 delete_snapshot() {
     local name="${1:-}"
     if [ -z "$name" ] || ! safe_name "$name"; then
-        echo "Error: Valid snapshot name required. Usage: superkit snapshot delete <name>"
+        echo "Error: Valid snapshot name required. Usage: asl snapshot delete <name>"
         exit 1
     fi
     local target="$SNAPSHOT_DIR/$name"
@@ -114,5 +115,6 @@ case "${1:-list}" in
     list) list_snapshots ;;
     restore) shift; restore_snapshot "$@" ;;
     delete|remove) shift; delete_snapshot "$@" ;;
-    *) echo "Usage: superkit snapshot [create|list|restore|delete] <name>"; exit 1 ;;
+    *) echo "Usage: asl snapshot [create|list|restore|delete] <name>"; exit 1 ;;
 esac
+

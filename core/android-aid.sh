@@ -1,5 +1,5 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: Android AID (Android ID) Group Mapper
+# ASL: Android AID (Android ID) Group Mapper
 # Maps Android system GIDs inside Debian chroot for seamless hardware & media access.
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
@@ -41,6 +41,7 @@ case "${1:-setup}" in
         setup_android_aids
         ;;
     *)
-        echo "Usage: superkit aid [setup]"
+        echo "Usage: asl aid [setup]"
         ;;
 esac
+

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Android Subsystem for Linux (ASL) / AndroidLinux-SuperKit: Automated One-Line Installer
+# Android Subsystem for Linux (ASL): Automated One-Line Installer
 # Installs dependencies, sets up ASL environment, downloads selected distro rootfs, and registers CLI commands.
 
 set -e
@@ -84,7 +84,7 @@ IS_MODDED=false
 
 cleanup_installer() {
     proot-distro remove asl-temp >/dev/null 2>&1 || true
-    rm -f /data/local/tmp/asl-modded-temp.tar.xz >/dev/null 2>&1 || true
+    rm -f "$PREFIX/tmp/asl-modded-temp.tar.xz" >/dev/null 2>&1 || true
 }
 trap cleanup_installer EXIT
 
@@ -109,7 +109,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
     if [ "$DISTRO_TYPE" != "skip" ]; then
         if [ "$IS_MODDED" = "true" ]; then
             RELEASE_URL="https://github.com/Ruusian5/AndroidLinux-SuperKit/releases/latest/download/asl-debian-modded-arm64.tar.xz"
-            TEMP_TAR="/data/local/tmp/asl-modded-temp.tar.xz"
+            TEMP_TAR="$PREFIX/tmp/asl-modded-temp.tar.xz"
             echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
             echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
 
@@ -152,7 +152,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
 fi
 
 # 5. Repository Setup
-TARGET_DIR="$HOME/AndroidLinux-SuperKit"
+TARGET_DIR="$HOME/ASL"
 
 if [ -d "$TARGET_DIR/.git" ]; then
     echo -e "${GREEN}[*] Updating existing ASL repository at $TARGET_DIR...${RESET}"
@@ -165,15 +165,15 @@ else
 fi
 
 # 6. Global Binary Linking & Android AID setup
-echo -e "${GREEN}[*] Registering 'asl' and 'superkit' CLI executables...${RESET}"
-chmod +x "$TARGET_DIR/bin/superkit"
+echo -e "${GREEN}[*] Registering 'asl' CLI executable...${RESET}"
+chmod +x "$TARGET_DIR/bin/asl"
 chmod +x "$TARGET_DIR/core/"*.sh
 chmod +x "$TARGET_DIR/desktop/"*.sh
 chmod +x "$TARGET_DIR/gaming/"*.sh
 
 mkdir -p "$PREFIX/bin"
-ln -sf "$TARGET_DIR/bin/superkit" "$PREFIX/bin/asl"
-ln -sf "$TARGET_DIR/bin/superkit" "$PREFIX/bin/superkit"
+ln -sf "$TARGET_DIR/bin/asl" "$PREFIX/bin/asl"
+ln -sf "$TARGET_DIR/bin/asl" "$PREFIX/bin/superkit" 2>/dev/null || echo -e "${YELLOW}[!] Could not create superkit symlink in \$PREFIX/bin${RESET}"
 
 echo -e "${GREEN}[*] Applying Android GID mappings...${RESET}"
 "$TARGET_DIR/core/android-aid.sh" setup >/dev/null 2>&1 || true
@@ -181,13 +181,13 @@ echo -e "${GREEN}[*] Applying Android GID mappings...${RESET}"
 echo -e "${GREEN}[*] Provisioning auto-configured SoC GPU drivers & hardware acceleration...${RESET}"
 (
     source "$TARGET_DIR/core/gpu-profile.sh"
-    superkit_gpu_install_drivers >/dev/null 2>&1 || true
+    asl_gpu_install_drivers >/dev/null 2>&1 || true
 )
 
 echo -e "${CYAN}====================================================${RESET}"
 echo -e "${GREEN}[✓] Android Subsystem for Linux (ASL) Installed!     ${RESET}"
 echo -e "${CYAN}====================================================${RESET}"
-echo -e "Type ${YELLOW}asl${RESET} (or ${YELLOW}superkit${RESET}) to open the interactive dashboard."
+echo -e "Type ${YELLOW}asl${RESET} to open the interactive dashboard."
 echo -e "Type ${YELLOW}asl start${RESET} to mount your Linux chroot environment."
 echo -e "Type ${YELLOW}asl desktop start${RESET} to launch XFCE4 desktop with Termux:X11."
 echo -e "Type ${YELLOW}asl setup-gaming${RESET} to auto-configure Wine, Box64 & DXVK."

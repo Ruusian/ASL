@@ -1,5 +1,5 @@
 #!/bin/bash
-# AndroidLinux-SuperKit: Desktop Theme Switcher
+# ASL: Desktop Theme Switcher
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
@@ -36,7 +36,7 @@ case "${1:-status}" in
         set_xfce_theme "Greybird" "Papirus"
         ;;
     list)
-        echo "Available SuperKit Desktop Presets:"
+        echo "Available ASL Desktop Presets:"
         echo "  dark     - Arc-Dark theme + Papirus-Dark icons"
         echo "  light    - Arc Light theme + Papirus icons"
         echo "  nord     - Nordic theme + Papirus-Dark icons"
@@ -52,7 +52,7 @@ case "${1:-status}" in
         fi
         ;;
     *)
-        echo "Usage: superkit theme [dark|light|nord|dracula|greybird|list|status]"
+        echo "Usage: asl theme [dark|light|nord|dracula|greybird|list|status]"
         exit 1
         ;;
 esac
