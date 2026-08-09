@@ -262,7 +262,7 @@ exec dbus-run-session -- bash -c '
     xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xsettings -p /Net/IconThemeName -s Papirus-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s Papirus-Dark 2>/dev/null || true
     xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Arc-Dark 2>/dev/null || true
-    xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Breeze_Snow 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Breeze_Snow 2>/dev/null || true
+    xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Breeze_Light 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Breeze_Light 2>/dev/null || true
     xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 28 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeSize -n -t int -s 28 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
