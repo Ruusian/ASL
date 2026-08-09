@@ -237,6 +237,13 @@ mkdir -p /run/user/0 /dev/shm/mesa_shader_cache 2>/dev/null
 chmod 700 /run/user/0 2>/dev/null
 mkdir -p /tmp/.cache 2>/dev/null
 
+# Start the D-Bus system bus (the session bus is started below via dbus-run-session).
+mkdir -p /run/dbus 2>/dev/null
+if ! pgrep -f "dbus-daemon --system" >/dev/null 2>&1; then
+    rm -f /run/dbus/system_bus_socket 2>/dev/null
+    /usr/bin/dbus-daemon --system >/tmp/dbus-system.log 2>&1 &
+fi
+
 rm -f /tmp/xfce-keepalive
 mkfifo /tmp/xfce-keepalive
 exec dbus-run-session -- bash -c '
@@ -329,7 +336,7 @@ stop_desktop() {
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || failed=1; fi
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" 2>/dev/null || true
+    rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" 2>/dev/null || true
     sysctl_maxmap_restore
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi
     rm -f "$STATE_FILE"
@@ -344,7 +351,7 @@ force_stop_desktop() {
     pkill -9 -x pulseaudio 2>/dev/null || true
     pkill -9 -f "asl-start-xfce|socat" 2>/dev/null || true
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
+    rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
     sysctl_maxmap_restore
     sleep 1
     echo "[✓] Complete stop: All GUI and gaming processes terminated and state cleared."
