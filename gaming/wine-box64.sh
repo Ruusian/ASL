@@ -26,13 +26,14 @@ build_gaming_env_exports() {
 
     snippet=$(cat << 'EOF'
 if [ -d /opt/wine-x64/bin ]; then
-    export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+    export PATH=/usr/local/bin:/opt/wine-x64/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
     [ -x /opt/wine-x64/bin/wineserver-wrapper ] && export WINESERVER=/opt/wine-x64/bin/wineserver-wrapper
-    [ -x /opt/wine-x64/bin/wine64 ] && export WINELOADER=/opt/wine-x64/bin/wine64
+    [ -x /usr/local/bin/wine64 ] && export WINELOADER=/usr/local/bin/wine64
 else
-    export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+    export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
 fi
 export DISPLAY=:0
+export TMPDIR=/tmp
 export WINEARCH=win64
 export WINEPREFIX="\${WINEPREFIX:-/root/.wine-x64}"
 export XDG_RUNTIME_DIR=/run/user/0
@@ -98,7 +99,8 @@ EOF_WINE64
 
         cat << \"EOF_WINE\" > /usr/local/bin/wine
 #!/bin/bash
-exec /usr/local/bin/asl-wine-launch /opt/wine-x64/bin/wine \"\$@\"
+# Win64-only project: route plain \"wine\" to wine64 (ELF32 \"wine\" can't run under box64).
+exec /usr/local/bin/asl-wine-launch /opt/wine-x64/bin/wine64 \"\$@\"
 EOF_WINE
         chmod 755 /usr/local/bin/wine
 
@@ -412,7 +414,7 @@ run_wine_exe() {
         workdir=\$(dirname \"\$TARGET_EXE\")
         [ -d \"\$workdir\" ] && cd \"\$workdir\" 2>/dev/null || true
         wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true
-        nohup taskset -c $mask box64 wine64 explorer /desktop=\"\$TARGET_NAME\",1280x720 \"\$TARGET_EXE\" >/tmp/\"\${TARGET_NAME}_wine.log\" 2>&1 &
+        nohup taskset -c $mask box64 /opt/wine-x64/bin/wine64 explorer /desktop=\"\$TARGET_NAME\",1280x720 \"\$TARGET_EXE\" >/tmp/\"\${TARGET_NAME}_wine.log\" 2>&1 &
         sleep 1
     '"
 }
