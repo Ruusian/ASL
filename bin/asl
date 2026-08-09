@@ -136,14 +136,65 @@ draw_bar() {
     printf '%s' "$C_RESET"
 }
 
+asl_uptime() {
+    local up d h m
+    up=$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null || true)
+    [ -n "$up" ] && [ "$up" -gt 0 ] 2>/dev/null || up=$(su -c "awk '{printf \"%d\", \$1}' /proc/uptime 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    [ -n "$up" ] || { printf '?'; return; }
+    d=$((up / 86400)); up=$((up % 86400))
+    h=$((up / 3600)); m=$(((up % 3600) / 60))
+    if [ "$d" -gt 0 ]; then printf '%dd %dh' "$d" "$h"
+    elif [ "$h" -gt 0 ]; then printf '%dh %02dm' "$h" "$m"
+    else printf '%dm' "$m"; fi
+}
+
+asl_cpu_freq() {
+    local f
+    f=$(su -c "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$f" ] && [ "$f" -gt 0 ] 2>/dev/null; then
+        printf '%dMHz' "$((f / 1000))"
+    else
+        printf '?'
+    fi
+}
+
+asl_host_ip() {
+    local ip
+    ip=$(ip -o -4 addr show 2>/dev/null | awk '$2 != "lo" {sub(/\/.*/, "", $4); print $4; exit}')
+    [ -n "$ip" ] || ip=$(ifconfig 2>/dev/null | awk '/inet / && !/127.0.0.1/ {sub(/addr:/, ""); print $2; exit}')
+    printf '%s' "${ip:-127.0.0.1}"
+}
+
+batt_temp_c() {
+    local raw
+    raw=$(cat /sys/class/power_supply/battery/temp 2>/dev/null | tr -d '[:space:]')
+    if [[ "$raw" =~ ^[0-9]+$ ]] && [ "$raw" -gt 0 ]; then
+        if [ "$raw" -gt 1000 ]; then printf '%d' "$((raw / 1000))"
+        elif [ "$raw" -gt 100 ]; then printf '%d' "$((raw / 10))"
+        else printf '%d' "$raw"; fi
+        return
+    fi
+    su -c "dumpsys battery" 2>/dev/null | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
+}
+
+asl_gpu_cached() {
+    local now
+    now=$(date +%s 2>/dev/null || echo 0)
+    if [ "$((now - ${ASL_GPU_CACHE_T:-0}))" -lt 30 ] && [ -n "${ASL_GPU_PROFILE:-}" ]; then
+        return 0
+    fi
+    asl_gpu_detect
+    ASL_GPU_CACHE_T=$now
+}
+
 overview() {
     local desktop_state desktop_status desktop_detail x11_socket
     local mem_total mem_avail mem_used mem_pct disk_data load_avg
     local swap_total swap_free swap_used swap_pct governor
     local batt_level batt_temp cpu_temp batt_str cpu_str host_ip wlock_status
+    local up_str freq_str swap_from_zram
 
-    host_ip=$(ifconfig 2>/dev/null | awk '/inet / && !/127.0.0.1/ {sub(/addr:/,""); print $2; exit}')
-    [ -n "$host_ip" ] || host_ip="127.0.0.1"
+    host_ip=$(asl_host_ip)
 
     wlock_status="OFF"
     if pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
@@ -157,7 +208,7 @@ overview() {
     desktop_status=${desktop_state%% *}
     desktop_detail=${desktop_state#"$desktop_status"}
     source "$ASL_DIR/core/gpu-profile.sh"
-    asl_gpu_detect
+    asl_gpu_cached
 
     mem_total=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
     mem_avail=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
@@ -168,23 +219,38 @@ overview() {
         mem_used=0; mem_pct=0
     fi
 
+    swap_from_zram=0
     swap_total=$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
     swap_free=$(awk '/SwapFree/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
-    if [ "$swap_total" -gt 0 ]; then
-        swap_used=$((swap_total - swap_free))
-        swap_pct=$((swap_used * 100 / swap_total))
-    else
-        swap_used=0; swap_pct=0
+    if [ "$swap_total" -le 0 ]; then
+        local zram_size zram_used_raw
+        zram_size=$(su -c "cat /sys/block/zram0/disksize 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+        zram_used_raw=$(su -c "cat /sys/block/zram0/mem_used_total 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+        if [ -n "$zram_size" ] && [ "$zram_size" -gt 0 ] 2>/dev/null; then
+            swap_total=$((zram_size / 1048576))
+            swap_used=$((zram_used_raw / 1048576))
+            [ "$swap_used" -gt "$swap_total" ] && swap_used=$swap_total
+            swap_pct=$((swap_used * 100 / swap_total))
+            swap_from_zram=1
+        fi
+    fi
+    if [ "$swap_from_zram" -eq 0 ]; then
+        if [ "$swap_total" -gt 0 ]; then
+            swap_used=$((swap_total - swap_free))
+            swap_pct=$((swap_used * 100 / swap_total))
+        else
+            swap_used=0; swap_pct=0
+        fi
     fi
 
     governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
     disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')
+    [ -n "$disk_data" ] || disk_data="unknown"
     load_avg=$(su -c "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3)
     [ -n "$load_avg" ] || load_avg="unknown"
 
     batt_level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || su -c "dumpsys battery" 2>/dev/null | awk '/level:/ {print $2}')
-    batt_temp=$(cat /sys/class/power_supply/battery/temp 2>/dev/null || su -c "dumpsys battery" 2>/dev/null | awk '/temperature:/ {print int($2/10)}')
-    if [ -n "$batt_temp" ] && [ "$batt_temp" -gt 100 ]; then batt_temp=$((batt_temp / 10)); fi
+    batt_temp=$(batt_temp_c)
     cpu_temp=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1>1000 {$1=int($1/1000)} $1>=20 && $1<=100 {print $1; exit}')
 
     if [ -n "$batt_level" ]; then
@@ -194,6 +260,8 @@ overview() {
         batt_str="N/A"
     fi
     cpu_str="${cpu_temp:-N/A}°C"
+    up_str=$(asl_uptime)
+    freq_str=$(asl_cpu_freq)
 
     printf '%s╔══════════════════════════════════════════════════════════════════════════════╗%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
     printf '%s║ 🚀 %sANDROID SUBSYSTEM FOR LINUX (ASL)%s                                      ║%s█%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
@@ -207,16 +275,17 @@ overview() {
     if [ -S "$x11_socket" ]; then status_label READY; else status_label STOPPED; fi
     printf '        🔊 Audio:   '
     if pgrep -x pulseaudio >/dev/null 2>&1; then status_label RUNNING; else status_label STOPPED; fi
-    printf '      ⚙️ Gov: %s%-11s%s %s║%s█%s\n' "$C_GREEN" "$governor" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s 🔋 Batt:    %s%-13s%s 🌡️ CPU: %s%-8s%s  🔒 Wake: %s%-3s%s             %s║%s█%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_RESET" "$C_GREEN" "$wlock_status" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s 🌐 Host IP: %s%-15s%s                       📊 Data: %s%-17s%s %s║%s█%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_RESET" "$C_CYAN" "${disk_data:-unknown}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
+    printf '      ⚙️ Gov: %s%-11s%s %s║%s█%s\n' "$C_GREEN" "${governor:0:11}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
+    printf '%s║%s 🔋 Batt:    %s%-13s%s 🌡️ CPU: %s%-8s%s  🔒 Wake: %s%-3s%s             %s║%s█%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "${batt_str:0:13}" "$C_RESET" "$C_YELLOW" "${cpu_str:0:8}" "$C_RESET" "$C_GREEN" "${wlock_status:0:3}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
+    printf '%s║%s 🌐 Host IP: %s%-15s%s                       📊 Data: %s%-17s%s %s║%s█%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "${host_ip:0:15}" "$C_RESET" "$C_CYAN" "${disk_data:0:17}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
     printf '%s╟──────────────────────────────────────────────────────────────────────────────╢%s█%s\n' "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
     printf '%s║%s 💾 RAM:  [' "$C_CYAN$C_BOLD" "$C_RESET"
     draw_bar "$mem_pct" 12
-    printf '] %3d%%  (%4d / %4d MB)   Load: %s%-16s%s %s║%s█%s\n' "$mem_pct" "$mem_used" "$mem_total" "$C_YELLOW" "${load_avg}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
+    printf '] %3d%%  (%4d / %4d MB)   Load: %s%-16s%s %s║%s█%s\n' "$mem_pct" "$mem_used" "$mem_total" "$C_YELLOW" "${load_avg:0:16}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
     printf '%s║%s 🔄 Swap: [' "$C_CYAN$C_BOLD" "$C_RESET"
     draw_bar "$swap_pct" 12
     printf '] %3d%%  (%4d / %4d MB)                                %s║%s█%s\n' "$swap_pct" "$swap_used" "$swap_total" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
+    printf '%s║%s ⏱️ Uptime:  %s%-16s%s        ⚡ Freq: %s%-7s%s %s║%s█%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_RESET" "$C_GREEN" "$freq_str" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
     printf '%s╚══════════════════════════════════════════════════════════════════════════════╝%s█%s\n' "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
     printf ' %s▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀%s\n' "$C_SHADOW" "$C_RESET"
 }
@@ -278,8 +347,11 @@ watch_dashboard() {
         clear 2>/dev/null || true
         overview
         echo ""
-        printf '%sActive High CPU Processes:%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        su -c "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 8" 2>/dev/null || true
+        printf '%sTop Processes by CPU Usage%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s%-7s %-8s %7s %6s  %s%s\n' "$C_DIM" "PID" "USER" "%CPU" "%MEM" "COMMAND" "$C_RESET"
+        su -c "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || true
+        echo ""
+        printf '%s[%s] Up %s | Ctrl+C to return to dashboard%s\n' "$C_DIM" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$C_RESET"
         sleep 2
     done
     trap - INT
