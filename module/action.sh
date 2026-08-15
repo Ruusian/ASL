@@ -28,9 +28,23 @@ run_asl() {
     fi
 }
 
+# Kill only processes whose /proc/<pid>/root resolves to the expected root
+# ($DEBIANPATH for chroot-jailed processes). A bare `pkill -f` — from the host
+# OR from inside the chroot (whose /proc is a bind mount of the host's) —
+# matches against every host process's cmdline and can kill unrelated ones.
+kill_guarded() {
+    _exp_root="$1" _sig="$2" _pat="$3"
+    for _pid in /proc/[0-9]*; do
+        [ -d "$_pid" ] || continue
+        _pid="${_pid#/proc/}"
+        [ "$(readlink "/proc/$_pid/root" 2>/dev/null)" = "$_exp_root" ] || continue
+        grep -qE "$_pat" "/proc/$_pid/comm" "/proc/$_pid/cmdline" 2>/dev/null || continue
+        kill "-$_sig" "$_pid" 2>/dev/null
+    done
+}
+
 umount_chroot() {
-    pkill -9 -f asl-start-xfce 2>/dev/null
-    chroot "$DEBIANPATH" /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -9 -f "xfwm4|xfdesktop|xfce4-panel|xfsettingsd|dbus-run-session|dbus-daemon|wine|wine64|wineserver|box64" 2>/dev/null' 2>/dev/null
+    kill_guarded "$DEBIANPATH" 9 '\b(asl-start-xfce|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|dbus-run-session|dbus-daemon|wine|wine64|wineserver|box64)\b'
     for mp in \
         "$DEBIANPATH/sdcard" \
         "$DEBIANPATH/var/lock" \

@@ -90,6 +90,22 @@ cleanup_installer() {
 }
 trap cleanup_installer EXIT
 
+# Rootfs replacement is destructive. Stop ASL first and independently verify
+# that no mount remains at or below the chroot before removing any files.
+ensure_chroot_unmounted_for_replace() {
+    if su -c "awk -v root='$DEBIANPATH' '\$2 == root || index(\$2, root \"/\") == 1 { found=1 } END { exit !found }' /proc/mounts" 2>/dev/null; then
+        echo -e "${YELLOW}[*] Stopping active chroot before overwrite...${RESET}"
+        if ! bash "$SCRIPT_DIR/core/stop-chroot.sh"; then
+            echo -e "${RED}[!] Failed to stop the active chroot; refusing to replace its rootfs.${RESET}"
+            return 1
+        fi
+    fi
+    if su -c "awk -v root='$DEBIANPATH' '\$2 == root || index(\$2, root \"/\") == 1 { found=1 } END { exit !found }' /proc/mounts" 2>/dev/null; then
+        echo -e "${RED}[!] ASL mounts remain below $DEBIANPATH; refusing to replace its rootfs.${RESET}"
+        return 1
+    fi
+}
+
 # 4. Rootfs Download & Chroot Provisioning
 DEBIANPATH="/data/local/tmp/chrootDebian"
 if [ "$DISTRO_TYPE" != "skip" ]; then
@@ -116,15 +132,45 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
             echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
 
             if wget -q --show-progress -O "$TEMP_TAR" "$RELEASE_URL" 2>/dev/null || curl -L -o "$TEMP_TAR" "$RELEASE_URL"; then
+                echo -e "${GREEN}[*] Verifying downloaded archive checksum...${RESET}"
+                SHA256SUMS_URL="https://github.com/Ruusian5/AndroidLinux-SuperKit/releases/latest/download/SHA256SUMS"
+                TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
+                EXPECTED=""
+                if ! (wget -q -O "$TEMP_SUMS" "$SHA256SUMS_URL" 2>/dev/null || curl -fsSL -o "$TEMP_SUMS" "$SHA256SUMS_URL"); then
+                    echo -e "${RED}[!] Could not download the SHA256SUMS sidecar; refusing to extract.${RESET}"
+                    rm -f "$TEMP_TAR" "$TEMP_SUMS"
+                    exit 1
+                fi
+                EXPECTED=$(awk '$2 == "asl-debian-modded-arm64.tar.xz" && $1 ~ /^[[:xdigit:]]{64}$/ { print $1 }' "$TEMP_SUMS" | head -n 1)
+                rm -f "$TEMP_SUMS"
+                if [ -z "$EXPECTED" ]; then
+                    echo -e "${RED}[!] SHA256SUMS is missing a valid checksum for the modded rootfs; refusing to extract.${RESET}"
+                    rm -f "$TEMP_TAR"
+                    exit 1
+                fi
+                ACTUAL=$(sha256sum "$TEMP_TAR" | awk '{ print $1 }')
+                if [ "$ACTUAL" != "$EXPECTED" ]; then
+                    echo -e "${RED}[!] Checksum verification FAILED for modded rootfs archive.${RESET}"
+                    echo -e "${RED}    Expected: $EXPECTED${RESET}"
+                    echo -e "${RED}    Actual:   $ACTUAL${RESET}"
+                    echo -e "${RED}    Refusing to extract. The release artifact may be corrupted or tampered with.${RESET}"
+                    rm -f "$TEMP_TAR"
+                    exit 1
+                fi
+                echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
                 echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
-                su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null && {
-                    echo -e "${YELLOW}[*] Stopping active chroot before overwrite...${RESET}"
-                    bash "$SCRIPT_DIR/core/stop-chroot.sh" >/dev/null 2>&1 || true
-                }
-                su -c "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"
+                ensure_chroot_unmounted_for_replace || exit 1
+                if ! su -c "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
+                    echo -e "${RED}[!] Failed to extract the modded rootfs.${RESET}"
+                    rm -f "$TEMP_TAR"
+                    exit 1
+                fi
                 rm -f "$TEMP_TAR"
                 # Configure DNS & hosts
                 su -c "chroot '$DEBIANPATH' /bin/sh -c 'echo \"nameserver 1.1.1.1\" > /etc/resolv.conf && echo \"nameserver 8.8.8.8\" >> /etc/resolv.conf && echo \"127.0.0.1 localhost\" > /etc/hosts'" 2>/dev/null || true
+                # The release tarball excludes /etc/shadow; regenerate an empty one so
+                # login works but root stays password-locked until the user runs passwd.
+                su -c "chroot '$DEBIANPATH' /bin/sh -c 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi'" 2>/dev/null || true
                 echo -e "${GREEN}[✓] ASL Exclusive Debian Modded Rootfs provisioned successfully!${RESET}"
             else
                 echo -e "${YELLOW}[!] Modded release asset not found online yet. Falling back to Debian Trixie base image...${RESET}"
@@ -143,11 +189,11 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
             TEMP_ROOTFS="$PREFIX/var/lib/proot-distro/containers/asl-temp/rootfs"
             if [ -d "$TEMP_ROOTFS" ]; then
                 echo -e "${GREEN}[*] Copying Debian rootfs into chroot location ($DEBIANPATH)...${RESET}"
-                su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null && {
-                    echo -e "${YELLOW}[*] Stopping active chroot before overwrite...${RESET}"
-                    bash "$SCRIPT_DIR/core/stop-chroot.sh" >/dev/null 2>&1 || true
-                }
-                su -c "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && cp -af '$TEMP_ROOTFS/.' '$DEBIANPATH/'"
+                ensure_chroot_unmounted_for_replace || exit 1
+                if ! su -c "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && cp -af '$TEMP_ROOTFS/.' '$DEBIANPATH/'"; then
+                    echo -e "${RED}[!] Failed to copy the Debian base rootfs.${RESET}"
+                    exit 1
+                fi
                 proot-distro remove asl-temp >/dev/null 2>&1 || true
 
                 # Configure DNS & hosts
@@ -186,13 +232,19 @@ ln -sf "$TARGET_DIR/bin/asl" "$PREFIX/bin/asl"
 ln -sf "$TARGET_DIR/bin/asl" "$PREFIX/bin/superkit" 2>/dev/null || echo -e "${YELLOW}[!] Could not create superkit symlink in \$PREFIX/bin${RESET}"
 
 echo -e "${GREEN}[*] Applying Android GID mappings...${RESET}"
-"$TARGET_DIR/core/android-aid.sh" setup >/dev/null 2>&1 || true
+if ! "$TARGET_DIR/core/android-aid.sh" setup; then
+    echo -e "${RED}[!] Android GID mapping failed. Installation cannot continue safely.${RESET}"
+    exit 1
+fi
 
 echo -e "${GREEN}[*] Provisioning auto-configured SoC GPU drivers & hardware acceleration...${RESET}"
-(
+if ! (
     source "$TARGET_DIR/core/gpu-profile.sh"
-    asl_gpu_install_drivers >/dev/null 2>&1 || true
-)
+    asl_gpu_install_drivers
+); then
+    echo -e "${RED}[!] GPU driver provisioning failed. Installation cannot continue safely.${RESET}"
+    exit 1
+fi
 
 echo -e "${CYAN}====================================================${RESET}"
 echo -e "${GREEN}[✓] Android Subsystem for Linux (ASL) Installed!     ${RESET}"
@@ -200,5 +252,5 @@ echo -e "${CYAN}====================================================${RESET}"
 echo -e "Type ${YELLOW}asl${RESET} to open the interactive dashboard."
 echo -e "Type ${YELLOW}asl start${RESET} to mount your Linux chroot environment."
 echo -e "Type ${YELLOW}asl desktop start${RESET} to launch XFCE4 desktop with Termux:X11."
-echo -e "Type ${YELLOW}asl setup-gaming${RESET} to auto-configure Wine, Box64 & DXVK."
+echo -e "Type ${YELLOW}asl setup-gaming${RESET} to install Wine and Box64; add DXVK per Wine prefix with Winetricks."
 echo -e "${CYAN}====================================================${RESET}"

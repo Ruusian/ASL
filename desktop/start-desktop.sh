@@ -54,6 +54,38 @@ process_matches() {
     [[ "$cmd" == *"$expected"* ]]
 }
 
+# Kill processes jailed in the chroot whose comm/cmdline matches an ERE pattern.
+# The chroot's /proc is a bind mount of the host /proc, so a bare `pkill -f`
+# run inside the chroot can kill HOST processes whose cmdline merely contains
+# the pattern. Guarding on /proc/<pid>/root restricts the kill to processes
+# actually jailed in $DEBIANPATH. The guard must run from the host root view:
+# from inside the chroot, every process (host or chroot) resolves to "/".
+# Note: $pat is expanded by the outer shell; all other vars run under su.
+chroot_pkill() {
+    local sig="$1" pat="$2"
+    su -c "
+        pids=\$(grep -lE \"$pat\" /proc/[0-9]*/comm /proc/[0-9]*/cmdline 2>/dev/null | cut -d/ -f3 | sort -u)
+        for pid in \$pids; do
+            [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
+            kill $sig \"\$pid\" 2>/dev/null || true
+        done
+    " 2>/dev/null || true
+}
+
+# Kill host processes (root "/") whose comm/cmdline matches an ERE pattern.
+# The reverse guard to chroot_pkill: a host-side pattern must never reach a
+# chroot-jailed process — those are reaped via chroot_pkill instead.
+host_pkill() {
+    local sig="$1" pat="$2"
+    su -c "
+        pids=\$(grep -lE \"$pat\" /proc/[0-9]*/comm /proc/[0-9]*/cmdline 2>/dev/null | cut -d/ -f3 | sort -u)
+        for pid in \$pids; do
+            [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"/\" ] || continue
+            kill $sig \"\$pid\" 2>/dev/null || true
+        done
+    " 2>/dev/null || true
+}
+
 read_state() {
     [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ] || return 1
     [ "$(stat -c %U "$STATE_FILE" 2>/dev/null)" = "$(id -un)" ] || return 1
@@ -115,7 +147,7 @@ start_gpu() {
     fi
     if pgrep -x virgl_test_server_android >/dev/null || pgrep -f virgl_test_server >/dev/null; then
         echo "[*] Reusing active VirGL GPU hardware acceleration server."
-        [ -S /tmp/.virgl_test ] && chmod 777 /tmp/.virgl_test 2>/dev/null || true
+        [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
         return 0
     fi
     if command -v virgl_test_server_android >/dev/null; then
@@ -125,7 +157,7 @@ start_gpu() {
         VIRGL_START=$(pid_start_time "$VIRGL_PID")
         VIRGL_OWNED=1
         sleep 1
-        [ -S /tmp/.virgl_test ] && chmod 777 /tmp/.virgl_test 2>/dev/null || true
+        [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
         echo "[✓] VirGL GPU hardware acceleration active."
     fi
 }
@@ -168,6 +200,10 @@ start_desktop() {
     echo "[*] Starting Termux:X11 display server..."
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
         rm -f "/data/data/com.termux/files/usr/tmp/.X11-unix/X0" "/data/data/com.termux/files/usr/tmp/.X0-lock" 2>/dev/null || true
+        # -ac disables X host access control (Termux:X11's auth model relies on
+        # the socket being reachable by chroot clients without xauth). The X
+        # socket is exposed only via the socat bridge above with mode=700, so
+        # access is limited to the Termux user + root rather than any local app.
         termux-x11 "$DISPLAY_ID" +iglx -ac >/dev/null 2>&1 &
         sleep 1
     fi
@@ -194,13 +230,16 @@ start_desktop() {
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     mkdir -p "$termux_tmp/.X11-unix"
     if [ ! -S "$termux_tmp/.X11-unix/X0" ] && command -v socat >/dev/null 2>&1; then
-        socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=777 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
+        # mode=700: only the Termux user (plus root, who bypasses mode checks)
+        # may connect to the X socket; world-accessible 777 would let any local
+        # app drive the display.
+        socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=700 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
         SOCAT_PID=$!
         SOCAT_START=$(pid_start_time "$SOCAT_PID")
     fi
     asl_gpu_apply
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
-    [ -S /tmp/.virgl_test ] && chmod 777 /tmp/.virgl_test 2>/dev/null || true
+    [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
     mkdir -p "$termux_tmp"
     local launcher_script="$termux_tmp/asl-start-xfce.sh"
     umask 022
@@ -267,6 +306,8 @@ exec dbus-run-session -- bash -c '
     xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xsettings -p /Net/IconThemeName -s Papirus-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s Papirus-Dark 2>/dev/null || true
     xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Arc-Dark 2>/dev/null || true
     xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Breeze_Light 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Breeze_Light 2>/dev/null || true
@@ -280,6 +321,7 @@ exec dbus-run-session -- bash -c '
     xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -n -t string -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true
     xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-style -n -t int -s 5 2>/dev/null || true
     sleep 1
+    picom --backend xrender --no-fading-openclose -b >> /tmp/xfce-picom.log 2>&1 &
     xfce4-panel >> /tmp/xfce-panel.log 2>&1 &
     xfdesktop >> /tmp/xfce-desktop.log 2>&1 &
     xfsettingsd >> /tmp/xfce-settings.log 2>&1 &
@@ -325,18 +367,23 @@ stop_desktop() {
     fi
     local failed=0 pid
     echo "[*] Stopping ASL-managed desktop..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true; pkill -9 -x \"wine|wine64|wineserver|box64\" 2>/dev/null || true; pkill -TERM -f \"xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query\" 2>/dev/null'" 2>/dev/null || true
+    # Wine shutdown can block indefinitely under Box64. Terminate only
+    # processes actually rooted in this chroot, then continue cleanup.
+    chroot_pkill TERM '\b(wine|wine64|wineserver|box64)\b'
+    sleep 1
+    chroot_pkill 9 '\b(wine|wine64|wineserver|box64)\b'
+    chroot_pkill TERM '\b(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query|picom)\b'
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
     su -c "chroot '$DEBIANPATH' /bin/bash -c 'echo x > /tmp/xfce-keepalive 2>/dev/null || true'" 2>/dev/null || true
     sleep 1
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; pkill -TERM -f \"asl-start-xfce|dbus-run-session|dbus-daemon\" 2>/dev/null || true'" 2>/dev/null || true
+    chroot_pkill TERM '\b(asl-start-xfce|dbus-run-session|dbus-daemon)\b'
     if process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || failed=1; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || failed=1; fi
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" 2>/dev/null || true
+    rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$DEBIANPATH/tmp/.X11-vnc" "$DEBIANPATH/tmp/.vnc"/*.pid 2>/dev/null || true
     sysctl_maxmap_restore
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi
     rm -f "$STATE_FILE"
@@ -345,13 +392,14 @@ stop_desktop() {
 
 force_stop_desktop() {
     echo "[*] Force-stopping all GUI, X11, GPU, Wine, Box64, and audio processes..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true; pkill -9 -x \"wine|wine64|wineserver|box64|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|xfconf-query|dbus-daemon|dbus-launch\" 2>/dev/null || true'" 2>/dev/null || true
-    pkill -9 -x termux-x11 2>/dev/null || true
-    pkill -9 -x virgl_test_server_android 2>/dev/null || true
-    pkill -9 -x pulseaudio 2>/dev/null || true
-    pkill -9 -f "asl-start-xfce|socat" 2>/dev/null || true
+    # Do not invoke wineserver -k: it may block indefinitely under Box64.
+    chroot_pkill TERM '\b(wine|wine64|wineserver|box64)\b'
+    sleep 1
+    chroot_pkill 9 '\b(wine|wine64|wineserver|box64|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|xfconf-query|picom|dbus-daemon|dbus-launch|x11vnc)\b'
+    chroot_pkill 9 '\b(asl-start-xfce)\b'
+    host_pkill 9 '\b(termux-x11|virgl_test_server_android|pulseaudio|socat)\b'
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
+    rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$DEBIANPATH/tmp/.X11-vnc" "$DEBIANPATH/tmp/.vnc"/*.pid "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
     sysctl_maxmap_restore
     sleep 1
     echo "[✓] Complete stop: All GUI and gaming processes terminated and state cleared."
@@ -365,7 +413,7 @@ status_desktop() {
         return 0
     else
         echo "Desktop: STALE STATE"
-        return 1
+        return 0
     fi
 }
 
@@ -433,7 +481,20 @@ audio_control() {
     local action="${1:-status}" level="${2:-}"
     case "$action" in
         start) start_audio ;;
-        stop) pkill -x pulseaudio 2>/dev/null && echo "[✓] PulseAudio stopped." || echo "[*] PulseAudio is not running." ;;
+        stop)
+            if read_state && [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then
+                if kill -TERM "$PULSE_PID" 2>/dev/null; then
+                    PULSE_OWNED=0 PULSE_PID= PULSE_START=
+                    write_state || return 1
+                    echo "[✓] ASL-managed PulseAudio stopped."
+                else
+                    echo "[!] Failed to stop ASL-managed PulseAudio."
+                    return 1
+                fi
+            else
+                echo "[*] No ASL-managed PulseAudio server is running."
+            fi
+            ;;
         status|"")
             if pgrep -x pulseaudio >/dev/null 2>&1; then
                 echo "PulseAudio Server: RUNNING"

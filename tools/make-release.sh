@@ -30,16 +30,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bash "$SCRIPT_DIR/core/stop-chroot.sh" >/dev/null 2>&1 || true
 
 echo -e "${GREEN}[*] Packaging modded rootfs into $OUTPUT_TAR...${RESET}"
-su -c "PATH=\"$PREFIX/bin:\$PATH\" tar --exclude='./proc/*' --exclude='./sys/*' --exclude='./dev/*' --exclude='./sdcard/*' --exclude='./tmp/*' -cJf '$OUTPUT_TAR' -C '$DEBIANPATH' ."
+# Secrets & machine identity are excluded so a published release tarball never
+# ships live SSH host keys, VNC/API credentials, the shadow database, or a
+# ready-to-use root password. install.sh regenerates an empty /etc/shadow
+# post-extraction (root stays locked until the user runs `asl exec passwd`).
+su -c "PATH=\"$PREFIX/bin:\$PATH\" tar \
+    --exclude='./proc/*' --exclude='./sys/*' --exclude='./dev/*' --exclude='./sdcard/*' --exclude='./tmp/*' \
+    --exclude='./root/.asl-*' --exclude='./etc/ssh/ssh_host_*' --exclude='./root/.bash_history' \
+    --exclude='./var/cache/apt/*' --exclude='./etc/shadow' --exclude='./etc/shadow-' \
+    --exclude='./root/.wine-x64' --exclude='./root/.local' --exclude='./root/.cache' \
+    -cJf '$OUTPUT_TAR' -C '$DEBIANPATH' ."
 
 echo -e "${GREEN}[✓] Archive created: $OUTPUT_TAR ($(du -h "$OUTPUT_TAR" | cut -f1))${RESET}"
 
+echo -e "${GREEN}[*] Generating SHA256SUMS checksum sidecar...${RESET}"
+ARCHIVE_NAME="$(basename "$OUTPUT_TAR")"
+ARCHIVE_SUM="$(sha256sum "$OUTPUT_TAR" | awk '{print $1}')"
+su -c "printf '%s  %s\n' '$ARCHIVE_SUM' '$ARCHIVE_NAME' > '$(dirname "$OUTPUT_TAR")/SHA256SUMS' && chmod 644 '$(dirname "$OUTPUT_TAR")/SHA256SUMS'" 2>/dev/null || \
+    printf '%s  %s\n' "$ARCHIVE_SUM" "$ARCHIVE_NAME" > "$(dirname "$OUTPUT_TAR")/SHA256SUMS" || true
+echo -e "${GREEN}[✓] SHA256SUMS generated ($ARCHIVE_SUM)${RESET}"
+
 if command -v gh >/dev/null 2>&1; then
     echo -e "${GREEN}[*] Creating GitHub Release $RELEASE_TAG and uploading modded asset...${RESET}"
-    gh release create "$RELEASE_TAG" "$OUTPUT_TAR" --title "ASL Modded Subsystem Release $RELEASE_TAG" --notes "Prebuilt modded ASL rootfs with Turnip Mesa Vulkan, Box64, Wine64, and XFCE desktop pre-configured." --repo Ruusian5/AndroidLinux-SuperKit 2>/dev/null || \
-    gh release upload "$RELEASE_TAG" "$OUTPUT_TAR" --clobber --repo Ruusian5/AndroidLinux-SuperKit
+    RELEASE_SUMS="$(dirname "$OUTPUT_TAR")/SHA256SUMS"
+    gh release create "$RELEASE_TAG" "$OUTPUT_TAR" "$RELEASE_SUMS" --title "ASL Modded Subsystem Release $RELEASE_TAG" --notes "Prebuilt modded ASL rootfs with Turnip Mesa Vulkan, Box64, Wine64, and XFCE desktop pre-configured." --repo Ruusian5/AndroidLinux-SuperKit 2>/dev/null || \
+    gh release upload "$RELEASE_TAG" "$OUTPUT_TAR" "$RELEASE_SUMS" --clobber --repo Ruusian5/AndroidLinux-SuperKit
     echo -e "${GREEN}[✓] GitHub release asset uploaded successfully!${RESET}"
 else
     echo -e "${YELLOW}[!] GitHub CLI (gh) not found. To upload manually, run:${RESET}"
-    echo -e "    gh release create $RELEASE_TAG $OUTPUT_TAR"
+    echo -e "    gh release create $RELEASE_TAG $OUTPUT_TAR $(dirname "$OUTPUT_TAR")/SHA256SUMS"
 fi

@@ -44,8 +44,13 @@ su -c "
     }
 
     domount_bind /dev $DEBIANPATH/dev
-    for dev in /dev/input/*; do
-        [ -e "\$dev" ] && chmod 0666 "\$dev" 2>/dev/null
+    # Android's graphics group (GID 1003) owns /dev/input nodes; grant that
+    # group rw access for the chroot instead of making devices world-writable
+    # (0666 lets any host or chroot process inject input events).
+    for dev in /dev/input/event* /dev/input/js* /dev/input/mouse* /dev/input/mice; do
+        [ -e "\$dev" ] || continue
+        chgrp 1003 "\$dev" 2>/dev/null || true
+        chmod 0660 "\$dev" 2>/dev/null || true
     done
     domount_fs proc $DEBIANPATH/proc
     domount_fs sysfs $DEBIANPATH/sys
@@ -79,7 +84,17 @@ su -c "
 
     if [ ! -s $DEBIANPATH/etc/resolv.conf ]; then
         mkdir -p $DEBIANPATH/etc
-        printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > $DEBIANPATH/etc/resolv.conf
+        dns1=\$(getprop net.dns1 2>/dev/null)
+        dns2=\$(getprop net.dns2 2>/dev/null)
+        if [ -n \"\$dns1\" ]; then
+            printf 'nameserver %s\n' \"\$dns1\" > $DEBIANPATH/etc/resolv.conf
+            [ -n \"\$dns2\" ] && printf 'nameserver %s\n' \"\$dns2\" >> $DEBIANPATH/etc/resolv.conf
+        elif [ -f /data/data/com.termux/files/usr/etc/resolv.conf ]; then
+            cp /data/data/com.termux/files/usr/etc/resolv.conf $DEBIANPATH/etc/resolv.conf 2>/dev/null || true
+        fi
+        if [ ! -s $DEBIANPATH/etc/resolv.conf ]; then
+            printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > $DEBIANPATH/etc/resolv.conf
+        fi
     fi
 
 " || {
@@ -95,13 +110,18 @@ fi
 # Sysctl tuning is host-kernel; always apply if root.
 # Save previous values first so `asl stop` can restore them.
 SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"
-su -c "rm -f '$SYSCTL_BACKUP'" 2>/dev/null || true
+# A repeated `asl start` must retain the values from before ASL's first tune.
+# Create the backup once; stop-chroot removes it after restoration.
+if ! su -c "test -e '$SYSCTL_BACKUP'" 2>/dev/null; then
+    for kv in vm.swappiness=60 vm.vfs_cache_pressure=50 vm.dirty_ratio=15 vm.dirty_background_ratio=5; do
+        key="${kv%%=*}"
+        cur="$(su -c "sysctl -n '$key'" 2>/dev/null | tr -d '[:space:]')"
+        if [ -n "$cur" ] && [ "$cur" != "${kv#*=}" ]; then
+            su -c "printf '%s\\n' '$key=$cur' >> '$SYSCTL_BACKUP'" 2>/dev/null || true
+        fi
+    done
+fi
 for kv in vm.swappiness=60 vm.vfs_cache_pressure=50 vm.dirty_ratio=15 vm.dirty_background_ratio=5; do
-    key="${kv%%=*}"
-    cur="$(su -c "sysctl -n '$key'" 2>/dev/null | tr -d '[:space:]')"
-    if [ -n "$cur" ] && [ "$cur" != "${kv#*=}" ]; then
-        su -c "echo '$key=$cur' >> '$SYSCTL_BACKUP'" 2>/dev/null || true
-    fi
     su -c "sysctl -w '$kv'" 2>/dev/null || true
 done
 

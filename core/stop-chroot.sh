@@ -30,7 +30,26 @@ echo "[*] Stopping Linux chroot environment..."
 su -c "
     mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
 
-    chroot \"$DEBIANPATH\" /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; wineserver -k 2>/dev/null || true; pkill -9 -x \"wine|wine64|wineserver|box64\" 2>/dev/null || true' 2>/dev/null || true
+    # wineserver -k can block indefinitely under Box64. Signal only processes
+    # whose root is this chroot; /proc itself is shared with the Android host.
+    chroot_pkill() {
+        sig="\$1"
+        for proc in /proc/[0-9]*; do
+            [ -d "\$proc" ] || continue
+            root=\$(readlink "\$proc/root" 2>/dev/null || true)
+            [ "\$root" = "$DEBIANPATH" ] || continue
+            comm=\$(cat "\$proc/comm" 2>/dev/null || true)
+            case "\$comm" in
+                wine|wine64|wine-preloader|wine64-preloader|wineserver|wineserver-wrapper|box64)
+                    kill -"\$sig" "\${proc#/proc/}" 2>/dev/null || true
+                    ;;
+            esac
+        done
+    }
+    chroot_pkill TERM
+    sleep 1
+    chroot_pkill KILL
+
 
     pids=\$(lsof -t \"$DEBIANPATH\" 2>/dev/null || fuser \"$DEBIANPATH\" 2>/dev/null || (for p in /proc/[0-9]*; do target=\$(readlink -f \"\$p/cwd\" 2>/dev/null || readlink -f \"\$p/root\" 2>/dev/null || true); [[ \"\$target\" == \"$DEBIANPATH\"* ]] && echo \"\${p##*/}\"; done) || true)
     if [ -n \"\$pids\" ]; then

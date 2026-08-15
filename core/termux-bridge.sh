@@ -46,14 +46,36 @@ termux_open_file() {
         return 1
     fi
 
-    # Handle paths relative to chroot root if prefixed or inside chroot path
+    # Files inside the chroot are not directly visible to Android apps.
     if [[ "$target" == "$DEBIANPATH"* ]] && [ -f "$target" ]; then
-        local tmp_copy="/sdcard/Download/asl-shared-$(basename "$target")"
-        cp "$target" "$tmp_copy" 2>/dev/null || true
-        termux-open "$tmp_copy"
+        local download_dir="/sdcard/Download" base stem ext tmp_copy
+        if [ ! -d "$download_dir" ]; then
+            echo "[!] Android Download directory is unavailable. Run: asl storage"
+            return 1
+        fi
+        base=$(basename "$target")
+        stem="${base%.*}"
+        ext="${base##*.}"
+        [ "$stem" = "$base" ] && ext="" || ext=".$ext"
+        tmp_copy=$(mktemp "$download_dir/asl-shared-${stem}.XXXXXX${ext}") || {
+            echo "[!] Could not allocate a unique file in Android Download."
+            return 1
+        }
+        if ! cp "$target" "$tmp_copy"; then
+            rm -f "$tmp_copy"
+            echo "[!] Failed to copy chroot file to Android Download."
+            return 1
+        fi
+        if ! termux-open "$tmp_copy"; then
+            echo "[!] termux-open failed for: $tmp_copy"
+            return 1
+        fi
         echo "[✓] Opened chroot file in Android host: $tmp_copy"
     else
-        termux-open "$target"
+        if ! termux-open "$target"; then
+            echo "[!] termux-open failed for: $target"
+            return 1
+        fi
         echo "[✓] Opened target in Android host: $target"
     fi
 }

@@ -80,8 +80,6 @@ asl_thermal_report() {
     fi
 }
 
-superkit_thermal_report() { asl_thermal_report "$@"; }
-
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     asl_thermal_report
 fi

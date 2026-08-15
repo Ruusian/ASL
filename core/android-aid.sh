@@ -13,35 +13,68 @@ fi
 setup_android_aids() {
     echo "[*] Setting up Android AID GID mappings inside Debian chroot..."
     if ! grep -q -w "$DEBIANPATH/proc" /proc/mounts 2>/dev/null; then
-        bash "$SCRIPT_DIR/core/mount-chroot.sh" >/dev/null 2>&1 || true
+        if ! bash "$SCRIPT_DIR/core/mount-chroot.sh"; then
+            echo "[!] Unable to mount the Debian chroot for Android AID setup."
+            return 1
+        fi
     fi
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
-        groupadd -g 1003 aid_graphics || true
-        groupadd -g 1004 aid_input || true
-        groupadd -g 1005 aid_audio || true
-        groupadd -g 1006 aid_camera || true
-        groupadd -g 1010 aid_wifi || true
-        groupadd -g 1015 aid_sdcard_rw || true
-        groupadd -g 1023 aid_media_rw || true
-        groupadd -g 1028 aid_sdcard_r || true
-        groupadd -g 1035 aid_sdcard_all || true
-        groupadd -g 1072 aid_gpu_service || true
-        groupadd -g 2000 aid_shell || true
-        groupadd -g 3003 aid_inet || true
+    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '
+        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        set -e
+        ensure_group() {
+            local name=\"\$1\" gid=\"\$2\" existing_name existing_gid gid_name
+            existing_name=\$(getent group \"\$name\" || true)
+            existing_gid=\$(getent group \"\$gid\" || true)
+            if [ -n \"\$existing_name\" ]; then
+                [ \"\${existing_name#*:*:}\" != \"\$existing_name\" ] || exit 1
+                [ \"\$(printf %s \"\$existing_name\" | cut -d: -f3)\" = \"\$gid\" ] || { echo \"[!] Group \$name has an unexpected GID.\" >&2; exit 1; }
+            elif [ -n \"\$existing_gid\" ]; then
+                gid_name=\$(printf %s \"\$existing_gid\" | cut -d: -f1)
+                echo \"[!] GID \$gid is already assigned to \$gid_name, not \$name.\" >&2
+                exit 1
+            else
+                groupadd -g \"\$gid\" \"\$name\"
+            fi
+        }
+
+        ensure_group aid_graphics 1003
+        ensure_group aid_input 1004
+        ensure_group aid_audio 1005
+        ensure_group aid_camera 1006
+        ensure_group aid_wifi 1010
+        ensure_group aid_sdcard_rw 1015
+        ensure_group aid_media_rw 1023
+        ensure_group aid_sdcard_r 1028
+        ensure_group aid_sdcard_all 1035
+        ensure_group aid_gpu_service 1072
+        ensure_group aid_shell 2000
+        ensure_group aid_inet 3003
 
         for g in aid_graphics aid_input aid_audio aid_sdcard_rw aid_media_rw aid_sdcard_r aid_sdcard_all aid_gpu_service aid_shell aid_inet; do
-            usermod -aG \"\$g\" root || true
+            id -nG root | tr \" \" \"\\n\" | grep -qx \"\$g\" || usermod -aG \"\$g\" root
         done
-    '" >/dev/null 2>&1
+    '"; then
+        echo "[!] Android AID GID mapping failed."
+        return 1
+    fi
     echo "[✓] Android AID GID mapping completed."
 }
 
-case "${1:-setup}" in
+case "${1:-status}" in
     setup|sync)
         setup_android_aids
         ;;
+    status)
+        if ! grep -q -w "$DEBIANPATH/proc" /proc/mounts 2>/dev/null; then
+            echo "Android AID GID Mapping: Chroot unmounted"
+        else
+            aid_count=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; getent group'" 2>/dev/null | grep -c '^aid_' || echo 0)
+            aid_count=$(echo "$aid_count" | tr -d '[:space:]')
+            echo "Android AID GID Mapping: ACTIVE ($aid_count AID groups mapped)"
+        fi
+        ;;
     *)
-        echo "Usage: asl aid [setup]"
+        echo "Usage: asl aid [setup|status]"
         ;;
 esac
 

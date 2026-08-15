@@ -14,21 +14,23 @@ if [ "${NO_COLOR:-}" = "" ]; then
     C_RESET=$'\033[0m'
     C_BOLD=$'\033[1m'
     C_CYAN=$'\033[36m'
+    C_BLUE=$'\033[34m'
     C_GREEN=$'\033[32m'
     C_YELLOW=$'\033[33m'
     C_RED=$'\033[31m'
+    C_PURPLE=$'\033[35m'
     C_DIM=$'\033[2m'
     C_SHADOW=$'\033[90m'
 else
-    C_RESET= C_BOLD= C_CYAN= C_GREEN= C_YELLOW= C_RED= C_DIM= C_SHADOW=
+    C_RESET= C_BOLD= C_CYAN= C_BLUE= C_GREEN= C_YELLOW= C_RED= C_PURPLE= C_DIM= C_SHADOW=
 fi
 
 status_label() {
     local state="$1"
     case "$state" in
-        ACTIVE|RUNNING|READY) printf '%s%s%s' "$C_GREEN" "$state" "$C_RESET" ;;
-        INACTIVE|STOPPED) printf '%s%s%s' "$C_DIM" "$state" "$C_RESET" ;;
-        *) printf '%s%s%s' "$C_YELLOW" "$state" "$C_RESET" ;;
+        ACTIVE|RUNNING|READY|ON) printf '%s[%s]%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
+        INACTIVE|STOPPED|OFF) printf '%s[%s]%s' "$C_DIM" "$state" "$C_RESET" ;;
+        *) printf '%s[%s]%s' "$C_YELLOW$C_BOLD" "$state" "$C_RESET" ;;
     esac
 }
 
@@ -55,7 +57,7 @@ run_in_chroot() {
     local command_b64
 
     command_b64=$(printf '%s' "$command_text" | base64 | tr -d '\n')
-    su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; printf %s $command_b64 | /usr/bin/base64 -d | /bin/bash'"
+    su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'"
 }
 
 show_help() {
@@ -98,7 +100,7 @@ show_help() {
     echo "  desktop sync-apps Create ASL-owned Termux launchers"
     echo "  theme [preset]   Set XFCE look & feel (dark|light|nord|dracula)"
     echo "  resolution [preset] Set Termux:X11 display resolution (720p|1080p|native)"
-    echo "  remote [ssh|vnc] Manage SSH/VNC remote access servers"
+    echo "  remote [ssh|vnc|public]      Manage SSH/VNC remote servers & Public Internet tunnel"
     echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
     echo ""
     echo "Termux & Android Bridge Commands:"
@@ -150,8 +152,8 @@ asl_uptime() {
 
 asl_cpu_freq() {
     local f
-    f=$(su -c "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
-    if [ -n "$f" ] && [ "$f" -gt 0 ] 2>/dev/null; then
+    f=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || su -c "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$f" ] && [[ "$f" =~ ^[0-9]+$ ]] && [ "$f" -gt 0 ]; then
         printf '%dMHz' "$((f / 1000))"
     else
         printf '?'
@@ -177,6 +179,25 @@ batt_temp_c() {
     su -c "dumpsys battery" 2>/dev/null | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
 }
 
+asl_cpu_temp_c() {
+    local zone type raw temp
+    for zone in /sys/class/thermal/thermal_zone*; do
+        [ -d "$zone" ] || continue
+        type=$(cat "$zone/type" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        case "$type" in
+            *cpu*|*cpuss*) ;;
+            *) continue ;;
+        esac
+        raw=$(cat "$zone/temp" 2>/dev/null | tr -d '[:space:]')
+        [[ "$raw" =~ ^[0-9]+$ ]] || continue
+        if [ "$raw" -gt 1000 ]; then temp=$((raw / 1000)); else temp=$raw; fi
+        if [ "$temp" -ge 1 ] && [ "$temp" -le 125 ]; then
+            printf '%d' "$temp"
+            return
+        fi
+    done
+}
+
 asl_gpu_cached() {
     local now
     now=$(date +%s 2>/dev/null || echo 0)
@@ -187,12 +208,24 @@ asl_gpu_cached() {
     ASL_GPU_CACHE_T=$now
 }
 
+asl_remote_summary() {
+    local active=()
+    if su -c "chroot '$DEBIANPATH' pgrep -x sshd" >/dev/null 2>&1; then active+=("SSH:2222"); fi
+    if su -c "chroot '$DEBIANPATH' pgrep -x x11vnc" >/dev/null 2>&1; then active+=("VNC:5900"); fi
+    if pgrep -f "pinggy.io" >/dev/null 2>&1; then active+=("Tunnel"); fi
+    if [ ${#active[@]} -gt 0 ]; then
+        printf '%s' "${active[*]}"
+    else
+        printf 'OFF'
+    fi
+}
+
 overview() {
     local desktop_state desktop_status desktop_detail x11_socket
     local mem_total mem_avail mem_used mem_pct disk_data load_avg
     local swap_total swap_free swap_used swap_pct governor
     local batt_level batt_temp cpu_temp batt_str cpu_str host_ip wlock_status
-    local up_str freq_str swap_from_zram
+    local up_str freq_str swap_from_zram remote_summary audio_status
 
     host_ip=$(asl_host_ip)
 
@@ -251,7 +284,7 @@ overview() {
 
     batt_level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || su -c "dumpsys battery" 2>/dev/null | awk '/level:/ {print $2}')
     batt_temp=$(batt_temp_c)
-    cpu_temp=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1>1000 {$1=int($1/1000)} $1>=20 && $1<=100 {print $1; exit}')
+    cpu_temp=$(asl_cpu_temp_c)
 
     if [ -n "$batt_level" ]; then
         batt_str="${batt_level}%"
@@ -262,32 +295,44 @@ overview() {
     cpu_str="${cpu_temp:-N/A}°C"
     up_str=$(asl_uptime)
     freq_str=$(asl_cpu_freq)
+    remote_summary=$(asl_remote_summary)
 
-    printf '%s╔══════════════════════════════════════════════════════════════════════════════╗%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-    printf '%s║ 🚀 %sANDROID SUBSYSTEM FOR LINUX (ASL)%s                                      ║%s█%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s╠══════════════════════════════════════════════════════════════════════════════╣%s█%s\n' "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s 🛡️ Chroot:  ' "$C_CYAN$C_BOLD" "$C_RESET"
-    if is_mounted; then status_label ACTIVE; else status_label INACTIVE; fi
-    printf '   🖥️ Desktop: '
-    status_label "${desktop_status:-UNKNOWN}"
-    printf ' %-16s ⚡ GPU: %s%-18s%s %s║%s█%s\n' "${desktop_detail:0:16}" "$C_YELLOW" "${ASL_GPU_PROFILE:0:18}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s 📡 X11:     ' "$C_CYAN$C_BOLD" "$C_RESET"
-    if [ -S "$x11_socket" ]; then status_label READY; else status_label STOPPED; fi
-    printf '        🔊 Audio:   '
-    if pgrep -x pulseaudio >/dev/null 2>&1; then status_label RUNNING; else status_label STOPPED; fi
-    printf '      ⚙️ Gov: %s%-11s%s %s║%s█%s\n' "$C_GREEN" "${governor:0:11}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s 🔋 Batt:    %s%-13s%s 🌡️ CPU: %s%-8s%s  🔒 Wake: %s%-3s%s             %s║%s█%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "${batt_str:0:13}" "$C_RESET" "$C_YELLOW" "${cpu_str:0:8}" "$C_RESET" "$C_GREEN" "${wlock_status:0:3}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s 🌐 Host IP: %s%-15s%s                       📊 Data: %s%-17s%s %s║%s█%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "${host_ip:0:15}" "$C_RESET" "$C_CYAN" "${disk_data:0:17}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s╟──────────────────────────────────────────────────────────────────────────────╢%s█%s\n' "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s 💾 RAM:  [' "$C_CYAN$C_BOLD" "$C_RESET"
-    draw_bar "$mem_pct" 12
-    printf '] %3d%%  (%4d / %4d MB)   Load: %s%-16s%s %s║%s█%s\n' "$mem_pct" "$mem_used" "$mem_total" "$C_YELLOW" "${load_avg:0:16}" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s 🔄 Swap: [' "$C_CYAN$C_BOLD" "$C_RESET"
-    draw_bar "$swap_pct" 12
-    printf '] %3d%%  (%4d / %4d MB)                                %s║%s█%s\n' "$swap_pct" "$swap_used" "$swap_total" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s║%s ⏱️ Uptime:  %s%-16s%s        ⚡ Freq: %s%-7s%s %s║%s█%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_RESET" "$C_GREEN" "$freq_str" "$C_RESET" "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf '%s╚══════════════════════════════════════════════════════════════════════════════╝%s█%s\n' "$C_CYAN$C_BOLD" "$C_SHADOW" "$C_RESET"
-    printf ' %s▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀%s\n' "$C_SHADOW" "$C_RESET"
+    if pgrep -x pulseaudio >/dev/null 2>&1; then audio_status="RUNNING"; else audio_status="STOPPED"; fi
+
+    local chroot_lbl desktop_lbl x11_lbl audio_lbl
+    if is_mounted; then chroot_lbl="$(status_label ACTIVE)"; else chroot_lbl="$(status_label INACTIVE)"; fi
+    desktop_lbl="$(status_label "${desktop_status:-UNKNOWN}")"
+    if [ -S "$x11_socket" ]; then x11_lbl="$(status_label READY)"; else x11_lbl="$(status_label STOPPED)"; fi
+    audio_lbl="$(status_label "$audio_status")"
+
+    printf '%s━━━ %sAndroid Subsystem for Linux (ASL)%s %sConsole v1.1%s %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_DIM" "$C_CYAN$C_BOLD" "$C_CYAN$C_BOLD" "$C_RESET"
+    printf '  %sChroot:%s %s   %sDesktop:%s %s   %sGPU:%s %s%s\n' "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW$ASL_GPU_PROFILE$C_RESET"
+    printf '  %sDisplay:%s %s  %sAudio:%s %s     %sGov:%s %s%s\n' "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN$governor$C_RESET"
+    printf '  %sBattery:%s %s%-13s %sCPU Temp:%s %s%-6s %sWake Lock:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_BOLD" "$C_RESET" "$C_GREEN" "$wlock_status"
+    printf '  %sHost IP:%s %s%-13s %sRemote:%s %s%-10s %sStorage:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_BOLD" "$C_RESET" "$C_CYAN$disk_data$C_RESET"
+    printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
+    printf '  %sRAM:%s  [' "$C_BOLD" "$C_RESET"; draw_bar "$mem_pct" 12; printf '] %3d%% (%d/%d MB)  %sLoad:%s %s%s\n' "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg"
+    printf '  %sSwap:%s [' "$C_BOLD" "$C_RESET"; draw_bar "$swap_pct" 12; printf '] %3d%% (%d/%d MB)  %sUptime:%s %s%s  %sFreq:%s %s%s\n' "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_BOLD" "$C_RESET" "$C_GREEN" "$freq_str"
+    printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+}
+
+is_safe_target_pid() {
+    local pid="$1"
+    [ -n "$pid" ] && [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+    [ "$pid" -le 100 ] && return 1
+
+    local termux_uid proc_uid proc_root
+    termux_uid=$(id -u 2>/dev/null || echo "")
+    proc_uid=$(su -c "awk '/Uid:/ {print \$2}' /proc/$pid/status 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    proc_root=$(su -c "readlink /proc/$pid/root 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+
+    if [ -n "$termux_uid" ] && [ "$proc_uid" = "$termux_uid" ]; then
+        return 0
+    fi
+    if [ "$proc_root" = "$DEBIANPATH" ]; then
+        return 0
+    fi
+    return 1
 }
 
 process_manager() {
@@ -320,7 +365,15 @@ process_manager() {
             3)
                 read -r -p "Enter PID to terminate: " target_pid
                 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
-                    su -c "kill '$target_pid'" 2>/dev/null && echo "[✓] Sent SIGTERM to PID $target_pid" || echo "[!] Failed to terminate PID $target_pid"
+                    if is_safe_target_pid "$target_pid"; then
+                        if kill "$target_pid" 2>/dev/null || su -c "kill '$target_pid'" 2>/dev/null; then
+                            echo "[✓] Sent SIGTERM to PID $target_pid"
+                        else
+                            echo "[!] Failed to terminate PID $target_pid"
+                        fi
+                    else
+                        echo "[!] Refused: PID $target_pid is a system process outside ASL/Termux."
+                    fi
                 else
                     echo "[!] Invalid PID format."
                 fi
@@ -329,7 +382,15 @@ process_manager() {
             4)
                 read -r -p "Enter PID to force kill: " target_pid
                 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
-                    su -c "kill -9 '$target_pid'" 2>/dev/null && echo "[✓] Sent SIGKILL to PID $target_pid" || echo "[!] Failed to kill PID $target_pid"
+                    if is_safe_target_pid "$target_pid"; then
+                        if kill -9 "$target_pid" 2>/dev/null || su -c "kill -9 '$target_pid'" 2>/dev/null; then
+                            echo "[✓] Sent SIGKILL to PID $target_pid"
+                        else
+                            echo "[!] Failed to kill PID $target_pid"
+                        fi
+                    else
+                        echo "[!] Refused: PID $target_pid is a system process outside ASL/Termux."
+                    fi
                 else
                     echo "[!] Invalid PID format."
                 fi
@@ -349,7 +410,7 @@ watch_dashboard() {
         echo ""
         printf '%sTop Processes by CPU Usage%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '%s%-7s %-8s %7s %6s  %s%s\n' "$C_DIM" "PID" "USER" "%CPU" "%MEM" "COMMAND" "$C_RESET"
-        su -c "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || true
+        su -c "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || ps aux | head -n 9 | tail -n +2 || true
         echo ""
         printf '%s[%s] Up %s | Ctrl+C to return to dashboard%s\n' "$C_DIM" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$C_RESET"
         sleep 2
@@ -363,27 +424,25 @@ dashboard() {
         clear 2>/dev/null || true
         overview
         echo ""
-        printf '  %s┌─ 🐧 Linux Chroot ──────────────┐%s   %s┌─ 🖥️ Desktop & Remote ─────────────┐%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s %s[s]%s 1. Start / Mount Chroot    %s│%s   %s│%s %s[d]%s 7. Start XFCE4 Desktop     %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s %s[x]%s 2. Stop & Unmount Chroot   %s│%s   %s│%s    8. Desktop Status / Stop     %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s    3. Open Root Shell         %s│%s   %s│%s    9. Theme & Resolution        %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s    4. Run Single Command      %s│%s   %s│%s %s[v]%s 10. Remote SSH / VNC Manager %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s    5. Snapshots & Backups     %s│%s   %s│%s    11. PulseAudio Audio Control %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s %s[a]%s 6. Android AID Group Setup %s│%s   %s│%s    12. Sync Debian App Launchers%s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s└────────────────────────────────┘%s   %s└────────────────────────────────┘%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-
-        printf '  %s┌─ 🎮 Gaming Engine ─────────────┐%s   %s┌─ 📱 Android Bridge ────────────┐%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s %s[g]%s 13. Run Windows .exe       %s│%s   %s│%s %s[k]%s 16. CPU Wake Lock Toggle   %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s %s[m]%s 14. Performance Mode       %s│%s   %s│%s %s[o]%s 17. Open File in Host App  %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s    15. Setup Wine / Box64     %s│%s   %s│%s %s[c]%s 18. System Clipboard Sync  %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s                              %s│%s   %s│%s %s[n]%s 19. Send Toast / Notice    %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s└────────────────────────────────┘%s   %s└────────────────────────────────┘%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-
-        printf '  %s┌─ 📊 Diagnostics & Monitor ──────────────────────────────────────────┐%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s %s[p]%s 20. Resource & Process Manager    %s[t]%s 21. Thermal & Battery Monitor %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s│%s    22. Read-Only Environment Check       23. GPU Hardware Profile     %s│%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '  %s└─────────────────────────────────────────────────────────────────────┘%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET"
-
+        printf '  %s[ 🐧 Linux Chroot ]%s                     %s[ 🖥️ Desktop & Remote ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '   1. %s[s]%s Start / Mount Chroot            7. %s[d]%s Start XFCE4 Desktop\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET"
+        printf '   2. %s[x]%s Stop & Unmount Chroot           8. Desktop Status / Stop\n' "$C_YELLOW" "$C_RESET"
+        printf '   3. Open Root Shell                         9. Theme & Resolution\n'
+        printf '   4. Run Single Command                     10. %s[v]%s Remote SSH / VNC Manager\n' "$C_YELLOW" "$C_RESET"
+        printf '   5. Snapshots & Backups                    11. PulseAudio Audio Control\n'
+        printf '   6. %s[a]%s Android AID Group Setup         12. Sync Debian App Launchers\n' "$C_YELLOW" "$C_RESET"
+        echo ""
+        printf '  %s[ 🎮 Gaming Engine ]%s                    %s[ 📱 Android Bridge ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '  13. %s[g]%s Run Windows .exe               16. %s[k]%s CPU Wake Lock Toggle\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET"
+        printf '  14. %s[m]%s Performance Mode               17. %s[o]%s Open File in Host App\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET"
+        printf '  15. Setup Wine / Box64                     18. %s[c]%s System Clipboard Sync\n' "$C_YELLOW" "$C_RESET"
+        printf '                                             19. %s[n]%s Send Toast Notice\n' "$C_YELLOW" "$C_RESET"
+        echo ""
+        printf '  %s[ 📊 Diagnostics & Tools ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '  20. %s[p]%s Resource & Process Manager     22. Read-Only Environment Check\n' "$C_YELLOW" "$C_RESET"
+        printf '  21. %s[t]%s Thermal & Battery Monitor      23. GPU Hardware Profile\n' "$C_YELLOW" "$C_RESET"
+        echo ""
+        printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
         printf '  %s[h]%s Help   %s[r]%s Refresh   %s[w]%s Watch Live   %s[q]%s Exit\n\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET"
         read -r -p "Select choice or hotkey: " choice
 
@@ -399,24 +458,26 @@ dashboard() {
                 if [ -n "$command" ]; then bash "$REAL_SCRIPT" exec "$command"; fi
                 pause_dashboard ;;
             5)
-                echo "Snapshot actions: 1) list  2) create  3) restore  4) delete  5) backup (tar.gz)"
-                read -r -p "Select action [1-5]: " s_act
+                echo "Snapshot actions: 1) list  2) create  3) restore  4) delete  5) backup (tar.gz)  6) restore archive"
+                read -r -p "Select action [1-6]: " s_act
                 case "$s_act" in
                     1) bash "$REAL_SCRIPT" snapshot list ;;
                     2) read -r -p "Snapshot name: " s_name; bash "$REAL_SCRIPT" snapshot create "$s_name" ;;
                     3) read -r -p "Snapshot name to restore: " s_name; bash "$REAL_SCRIPT" snapshot restore "$s_name" ;;
                     4) read -r -p "Snapshot name to delete: " s_name; bash "$REAL_SCRIPT" snapshot delete "$s_name" ;;
                     5) bash "$REAL_SCRIPT" backup ;;
+                    6) read -r -p "Backup tar.gz file path to restore: " r_file; bash "$REAL_SCRIPT" restore "$r_file" ;;
                 esac
                 pause_dashboard ;;
             6|a|A) bash "$REAL_SCRIPT" aid setup; pause_dashboard ;;
             7|d|D) bash "$REAL_SCRIPT" desktop start; pause_dashboard ;;
             8)
-                echo "Desktop actions: 1) status  2) restart  3) stop"
-                read -r -p "Select action [1-3]: " d_act
+                echo "Desktop actions: 1) status  2) restart  3) stop  4) force-stop"
+                read -r -p "Select action [1-4]: " d_act
                 case "$d_act" in
                     2) bash "$REAL_SCRIPT" desktop restart ;;
                     3) bash "$REAL_SCRIPT" desktop stop ;;
+                    4) bash "$REAL_SCRIPT" desktop force-stop ;;
                     *) bash "$REAL_SCRIPT" desktop status ;;
                 esac
                 pause_dashboard ;;
@@ -425,7 +486,7 @@ dashboard() {
                 read -r -p "Select option [1-2]: " app_act
                 case "$app_act" in
                     1)
-                        echo "Presets: dark, light, nord, dracula, greybird"
+                        echo "Presets: tokyonight, aesthetic, graphite, habiboow, dark, light, nord, dracula, greybird"
                         read -r -p "Theme name: " t_preset
                         [ -n "$t_preset" ] && bash "$REAL_SCRIPT" theme "$t_preset"
                         ;;
@@ -437,21 +498,52 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             10|v|V)
-                echo "Remote actions: 1) SSH start  2) SSH stop  3) VNC start  4) VNC stop  5) status"
-                read -r -p "Select action [1-5]: " r_act
+                echo "Remote actions: 1) SSH start  2) SSH stop  3) VNC start  4) VNC stop  5) VNC clean"
+                echo "                6) VNC reset password  7) Public SSH start  8) Public SSH stop"
+                echo "                9) status"
+                read -r -p "Select action [1-9]: " r_act
                 case "$r_act" in
                     1) bash "$REAL_SCRIPT" remote ssh start ;;
                     2) bash "$REAL_SCRIPT" remote ssh stop ;;
                     3) bash "$REAL_SCRIPT" remote vnc start ;;
                     4) bash "$REAL_SCRIPT" remote vnc stop ;;
+                    5) bash "$REAL_SCRIPT" remote vnc clean ;;
+                    6) bash "$REAL_SCRIPT" remote vnc clean reset-auth ;;
+                    7) bash "$REAL_SCRIPT" remote public start ;;
+                    8) bash "$REAL_SCRIPT" remote public stop ;;
                     *) bash "$REAL_SCRIPT" remote status ;;
                 esac
                 pause_dashboard ;;
-            11) bash "$REAL_SCRIPT" audio; pause_dashboard ;;
+            11)
+                echo "PulseAudio actions: 1) status  2) start  3) stop  4) test tone  5) set volume"
+                read -r -p "Select action [1-5]: " au_act
+                case "$au_act" in
+                    2) bash "$REAL_SCRIPT" audio start ;;
+                    3) bash "$REAL_SCRIPT" audio stop ;;
+                    4) bash "$REAL_SCRIPT" audio test ;;
+                    5) read -r -p "Master volume percentage (0-100): " vol_val; [ -n "$vol_val" ] && bash "$REAL_SCRIPT" audio volume "$vol_val" ;;
+                    *) bash "$REAL_SCRIPT" audio status ;;
+                esac
+                pause_dashboard ;;
             12) bash "$REAL_SCRIPT" desktop sync-apps; pause_dashboard ;;
             13|g|G)
-                read -r -p "Full path to Windows .exe: " exe_path
-                if [ -n "$exe_path" ]; then bash "$REAL_SCRIPT" game run "$exe_path"; fi
+                echo "Gaming actions: 1) Run .exe  2) Wine Explorer  3) Wine File Manager  4) Winecfg  5) Winetricks  6) Setup Gaming Layer"
+                read -r -p "Select action [1-6]: " g_act
+                case "$g_act" in
+                    2) bash "$REAL_SCRIPT" game desktop ;;
+                    3) bash "$REAL_SCRIPT" game winefile ;;
+                    4) bash "$REAL_SCRIPT" game winecfg ;;
+                    5) bash "$REAL_SCRIPT" game winetricks ;;
+                    6) bash "$REAL_SCRIPT" setup-gaming ;;
+                    *)
+                        read -r -p "Full path to Windows .exe (or leave empty for GUI file picker): " exe_path
+                        if [ -n "$exe_path" ]; then
+                            bash "$REAL_SCRIPT" game run "$exe_path"
+                        else
+                            bash "$REAL_SCRIPT" game picker
+                        fi
+                        ;;
+                esac
                 pause_dashboard ;;
             14|m|M)
                 echo "Modes: 1) gaming  2) performance  3) balanced"
@@ -486,8 +578,19 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             19|n|N)
-                read -r -p "Message text: " n_text
-                if [ -n "$n_text" ]; then bash "$REAL_SCRIPT" toast "$n_text"; fi
+                echo "Notification actions: 1) Toast popup  2) Banner notification"
+                read -r -p "Select action [1-2]: " n_act
+                case "$n_act" in
+                    2)
+                        read -r -p "Notification title: " n_title
+                        read -r -p "Notification content: " n_text
+                        if [ -n "$n_text" ]; then bash "$REAL_SCRIPT" notify "${n_title:-ASL}" "$n_text"; fi
+                        ;;
+                    *)
+                        read -r -p "Toast message text: " n_text
+                        if [ -n "$n_text" ]; then bash "$REAL_SCRIPT" toast "$n_text"; fi
+                        ;;
+                esac
                 pause_dashboard ;;
             20|p|P) process_manager ;;
             21|t|T) bash "$REAL_SCRIPT" thermal; pause_dashboard ;;
@@ -720,6 +823,8 @@ case "${1:-}" in
                 echo "[✓] Termux:X11 display resolution set to native."
                 ;;
             status|"")
+                cur_res=$(ps aux | grep -i termux-x11 | grep -v grep | grep -oE '\-geometry [0-9]+x[0-9]+' || echo "native / default")
+                echo "Current Termux:X11 Resolution: ${cur_res#-geometry }"
                 echo "Usage: asl resolution [720p|1080p|native] [scale]"
                 ;;
             *)

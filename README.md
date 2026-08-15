@@ -43,6 +43,12 @@ Install or update **ASL** with a single command inside Termux:
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash
 ```
 
+> ⚠️ **Trust note:** Piping a remote script into `bash` executes it with your current
+> privileges. Review [`install.sh`](install.sh) before running — it installs Termux
+> packages, requires root (`su`), and downloads a prebuilt rootfs (checksum-verified
+> for the modded edition; see the `SHA256SUMS` sidecar). For an auditable install,
+> clone the repo first: `git clone https://github.com/Ruusian5/AndroidLinux-SuperKit && cd AndroidLinux-SuperKit && bash install.sh`.
+
 ### 🐧 Distro & Image Options
 Select your preferred Debian rootfs edition interactively during setup, or pass non-interactive flags:
 
@@ -68,7 +74,7 @@ asl
 - **Strict Mount Isolation**: Enforces private bind mounts (`--make-rprivate` and `--make-rslave`) without mounting host Android system partitions (`/system`, `/vendor`, `/apex`, `/linkerconfig`). Eliminates SELinux panics, mount deadlocks, and host OS kernel crashes.
 
 ### 🎮 2. Direct3D 11/12 Hardware Acceleration & Gaming Engine
-- **Turnip Mesa Vulkan Drivers**: Native Turnip driver profile support for Qualcomm Adreno 6xx/7xx GPUs with DXVK 2.x async pipeline compilation, VKD3D Direct3D 12 translation, and Zink OpenGL-over-Vulkan.
+- **Turnip Mesa Vulkan Drivers**: Native Turnip driver profile support for Qualcomm Adreno 6xx/7xx GPUs and Zink OpenGL-over-Vulkan. DXVK can be installed per Wine prefix with Winetricks; VKD3D is not installed or configured automatically.
 - **VirGL Fallback Support**: Automatic fallback driver selection for Mali, PowerVR, and generic GPU hardware.
 - **Tuned Box64 + Wine64 Pipeline**: Pre-configured Box64 dynarec stability flags (`/etc/box64.box64rc`), automated Wine process lifecycle management (`wineserver -k`), and working directory auto-resolution.
 - **VFS Cache & Memory Optimization**: Tuned VM swappiness, dirty ratio, VFS cache pressure, and `/dev/shm` tmpfs Mesa shader caching to eliminate micro-stuttering.
@@ -113,7 +119,7 @@ ASL/
 │   ├── android-aid.sh    # Android AID GID group mapper
 │   └── snapshot.sh       # Point-in-time chroot snapshot & backup manager
 ├── gaming/
-│   └── wine-box64.sh     # Wine64, Box64, DXVK & Windows app execution manager
+│   └── wine-box64.sh     # Wine64, Box64 & Windows app execution manager (DXVK via Winetricks)
 ├── desktop/
 │   ├── start-desktop.sh  # Termux:X11 desktop session & PulseAudio launcher
 │   ├── theme.sh          # GTK theme & icon set switcher
@@ -158,7 +164,7 @@ ASL/
 | :--- | :--- |
 | `asl gpu` | Display active Turnip/Mesa GPU hardware runtime profile |
 | `asl mode [gaming\|performance\|balanced]` | Apply memory compaction & Turnip GPU tuning |
-| `asl setup-gaming` | Auto-install Wine64, Box64, DXVK, and VKD3D |
+| `asl setup-gaming` | Auto-install Wine64, Box64, and gaming tooling; install DXVK per Wine prefix via Winetricks (VKD3D is not auto-installed) |
 | `asl game` | Open interactive gaming menu |
 | `asl game run <exe>` | Execute Windows application via Box64 + Wine64 |
 
@@ -192,9 +198,11 @@ ASL/
 Standard chroot scripts often execute `mount --bind / /chroot` or bind Android system folders (`/system`, `/vendor`, `/apex`). On Android 10 through 15+, this causes SELinux violations, mounting deadlocks, broken camera/audio daemons, and kernel panics.
 
 **Android Subsystem for Linux (ASL)** enforces strict mount isolation:
-- Shared access is provided strictly for user storage (`/sdcard`) and IPC sockets (`/tmp`).
+- Shared access is provided strictly for user storage (`/sdcard`), device nodes (`/dev`, restricted to 0660/input-group), and IPC sockets (`/tmp`).
 - Mount points use `--make-rprivate` and `--make-rslave` flags to prevent mount events from leaking into the host Android OS.
-- Host system integrity remains 100% protected.
+- No host system partitions (`/system`, `/vendor`, `/apex`) are mounted into the chroot, so host OS stability is not threatened by chroot activity.
+
+> ⚠️ **Note:** ASL runs with root privileges and tunes a few *host-wide* kernel parameters (`vm.swappiness`, `vm.vfs_cache_pressure`, `vm.dirty_ratio`, `vm.dirty_background_ratio`, `vm.max_map_count`) for performance. These are backed up and restored on `asl stop`, but they are host-level changes, not chroot-scoped — treat ASL as a powerful tool with root access, not as a sandbox.
 
 ---
 

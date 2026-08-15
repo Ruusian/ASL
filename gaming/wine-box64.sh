@@ -72,9 +72,9 @@ EOF
 ensure_wine_desktop_launchers() {
     local env_exports launcher_b64
     env_exports=$(build_gaming_env_exports)
-    launcher_b64=$(printf '%s\n%s\nif [ "$1" = "winetricks" ]; then\n    exec "$@"\nfi\nif [[ "$1" != "box64" && -x /usr/bin/box64 ]]; then\n    exec box64 "$@"\nelse\n    exec "$@"\nfi\n' "#!/bin/bash" "$env_exports" | base64 | tr -d '\n')
+    launcher_b64=$(printf '%s\n%s\nif [ "$1" = "winetricks" ]; then\n    exec "$@"\nfi\nif [[ "$1" != "box64" ]] && command -v box64 >/dev/null 2>&1; then\n    exec box64 "$@"\nelse\n    exec "$@"\nfi\n' "#!/bin/bash" "$env_exports" | base64 | tr -d '\n')
 
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
         mkdir -p /usr/share/applications /root/Desktop /usr/local/bin
 
@@ -116,18 +116,16 @@ exec /usr/local/bin/asl-wine-launch /opt/wine-x64/bin/wineserver \"\$@\"
 EOF_WINESERVER_BIN
         chmod 755 /usr/local/bin/wineserver
 
-        cat << \"EOF_BOTTLER\" > /usr/local/bin/launch-bottles
-#!/bin/bash
-export DISPLAY=:0
-export PYTHONPATH=/usr/share/bottles
-exec asl-wine-launch bottles \"\$@\"
-EOF_BOTTLER
-        chmod 755 /usr/local/bin/launch-bottles
-
         if ! command -v winetricks >/dev/null 2>&1; then
             echo \"[*] Installing winetricks script in /usr/local/bin...\"
-            wget -q https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks -O /usr/local/bin/winetricks 2>/dev/null || curl -sSL https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks -o /usr/local/bin/winetricks 2>/dev/null || true
-            chmod +x /usr/local/bin/winetricks 2>/dev/null || true
+            wget -q https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || curl -sSL https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -o /tmp/winetricks.tmp 2>/dev/null || true
+            if [ -f /tmp/winetricks.tmp ] && [ \"\$(sha256sum /tmp/winetricks.tmp 2>/dev/null | awk '{print \$1}')\" = \"f35c29737ca08a583569e6a3752d52fbe23333c5acfad5f16c4177d25eaf3f4b\" ]; then
+                chmod +x /tmp/winetricks.tmp
+                mv -f /tmp/winetricks.tmp /usr/local/bin/winetricks
+            else
+                rm -f /tmp/winetricks.tmp 2>/dev/null
+                echo \"[!] winetricks download failed SHA-256 verification; not installing\"
+            fi
         fi
 
         cat << \"EOF_WINEFILE\" > /usr/share/applications/winefile.desktop
@@ -192,7 +190,10 @@ EOF_ASLGAME
         cp -f /usr/share/applications/asl-gaming.desktop /root/Desktop/ 2>/dev/null || true
         chmod +x /root/Desktop/*.desktop /usr/share/applications/*.desktop 2>/dev/null || true
         gio trust /root/Desktop/*.desktop 2>/dev/null || true
-    '" >/dev/null 2>&1 || true
+    '"; then
+        echo "[!] Failed to create Wine desktop launchers."
+        return 1
+    fi
 }
 
 setup_gaming() {
@@ -235,12 +236,15 @@ EOF_DXVK
         echo "[✗] Gaming environment setup FAILED. See the errors above."
         return 1
     fi
-    ensure_wine_desktop_launchers
+    ensure_wine_desktop_launchers || return 1
     echo "[*] Setting up Wine win64 prefix..."
     ENV_EXPORTS=$(build_gaming_env_exports)
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
-        wineboot -u 2>/dev/null || true
-    '"
+    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
+        wineboot -u
+    '"; then
+        echo "[!] Wine win64 prefix initialization failed."
+        return 1
+    fi
     echo "[✓] Gaming Environment setup completed."
 }
 
@@ -468,6 +472,17 @@ case "${1:-}" in
     run)
         shift
         run_wine_exe "$@"
+        ;;
+    status|info)
+        if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
+            echo "Gaming Layer: Chroot unmounted"
+        else
+            wine_ver=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/bin:/usr/bin:\$PATH; wine --version 2>/dev/null'" 2>/dev/null || echo "Not installed")
+            box64_ver=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'box64 --version 2>/dev/null | head -n1'" 2>/dev/null || echo "Not installed")
+            echo "Gaming Layer Status:"
+            echo "  Wine Version:  ${wine_ver:-Not installed}"
+            echo "  Box64 Version: ${box64_ver:-Not installed}"
+        fi
         ;;
     menu)
         show_gaming_menu

@@ -106,19 +106,16 @@ asl_gpu_install_drivers() {
     fi
 
     if su -c "chroot '$DEBIANPATH' /usr/bin/test -f /etc/debian_version" 2>/dev/null; then
-        su -c "chroot '$DEBIANPATH' /bin/bash -c '
+        if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            apt-get update && apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri vulkan-tools libvulkan1 2>/dev/null || true
-        '"
+            apt-get update && apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri vulkan-tools libvulkan1
+        '"; then
+            echo "[!] GPU driver package installation failed."
+            return 1
+        fi
         echo "[✓] Prebuilt GPU hardware acceleration drivers installed."
     else
         echo "[*] Non-Debian rootfs detected; skipping Debian apt driver package auto-installation."
     fi
 }
-
-# Alias functions for backward compatibility
-superkit_gpu_detect() { asl_gpu_detect "$@"; }
-superkit_gpu_apply() { asl_gpu_apply "$@"; }
-superkit_gpu_report() { asl_gpu_report "$@"; }
-superkit_gpu_install_drivers() { asl_gpu_install_drivers "$@"; }
 
