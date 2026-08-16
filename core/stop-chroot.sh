@@ -21,11 +21,11 @@ if su -c "test -s '$SYSCTL_BACKUP'" 2>/dev/null; then
 fi
 
 if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
-    echo "[*] Debian chroot is already unmounted."
+    echo "[✓] Debian chroot is already unmounted."
     exit 0
 fi
 
-echo "[*] Stopping Linux chroot environment..."
+echo "[*] Stopping Linux chroot environment at $DEBIANPATH..."
 
 su -c "
     mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
@@ -78,11 +78,13 @@ su -c "
     \"
 
     failed=0
+    failed_mounts=""
     for mp in \$MOUNTS; do
         if grep -q -w \"\$mp\" /proc/mounts 2>/dev/null; then
             if ! umount \"\$mp\" 2>/dev/null; then
                 if ! umount -l -f \"\$mp\" 2>/dev/null; then
                     echo \"[!] Could not unmount: \$mp\" >&2
+                    failed_mounts=\"\$failed_mounts\\n  - \$mp\"
                     failed=1
                 fi
             fi
@@ -90,7 +92,11 @@ su -c "
     done
     exit \$failed
 " || {
-    echo "[!] Chroot stop was incomplete; check active processes and mounts."
+    echo "[!] Chroot stop was incomplete. Troubleshooting:"
+    echo "    1. Check for running processes in chroot: lsof $DEBIANPATH"
+    echo "    2. Kill remaining processes: killall -9 -u root 2>/dev/null"
+    echo "    3. Force unmount: umount -l $DEBIANPATH"
+    echo "    4. View mounts: grep $DEBIANPATH /proc/mounts"
     exit 1
 }
 

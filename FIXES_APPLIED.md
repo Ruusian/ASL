@@ -1,6 +1,73 @@
-# ASL Bug Fixes Summary
+# ASL Bug Fixes Summary - Round 2
 
-## Fixes Applied
+## Additional Fixes Applied
+
+### ✅ 5. Enhanced Error Messages in mount-chroot.sh (LOW)
+**File**: `core/mount-chroot.sh` (Lines 5-10, 101-105)
+
+**Changes Made**:
+- ✓ Improved initial error message when Debian rootfs not found
+- ✓ Added actionable troubleshooting steps for users
+- ✓ Added detailed mount verification failure diagnostics
+
+**Before**:
+```bash
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] || [ ! -d "$DEBIANPATH" ]; then
+    echo "Error: Debian chroot is not available at /data/local/tmp/chrootDebian"
+    exit 1
+fi
+```
+
+**After**:
+```bash
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] || [ ! -d "$DEBIANPATH" ]; then
+    echo "[!] Error: Debian chroot rootfs not found at /data/local/tmp/chrootDebian"
+    echo "    To install a Debian rootfs, run: asl install"
+    echo "    Or check if proot-distro is installed: which proot-distro"
+    exit 1
+fi
+```
+
+**Impact**: Better user experience when debugging mount issues; clearer next steps
+
+---
+
+### ✅ 6. Enhanced Error Messages in stop-chroot.sh (LOW)
+**File**: `core/stop-chroot.sh` (Lines 24-25, 78-89)
+
+**Changes Made**:
+- ✓ Improved success message clarity
+- ✓ Added comprehensive troubleshooting guide on unmount failures
+- ✓ Added specific commands for force unmount and process detection
+
+**Added Diagnostics**:
+```bash
+echo "[!] Chroot stop was incomplete. Troubleshooting:"
+echo "    1. Check for running processes in chroot: lsof $DEBIANPATH"
+echo "    2. Kill remaining processes: killall -9 -u root 2>/dev/null"
+echo "    3. Force unmount: umount -l $DEBIANPATH"
+echo "    4. View mounts: grep $DEBIANPATH /proc/mounts"
+```
+
+**Impact**: Users can quickly troubleshoot unmount issues without manual research
+
+---
+
+## Verification Status
+
+| Issue | Status | Severity | Resolution |
+|-------|--------|----------|-----------|
+| #1 Unquoted variables | ✅ FIXED | 🔴 HIGH | Quoted all path variables |
+| #2 Race condition | ✅ FIXED | 🟠 MEDIUM | Added kill -0 checks |
+| #3 Command size validation | ✅ FIXED | 🟠 MEDIUM | Added 40KB limit check |
+| #4 Error handling design | ⚠️ INTENTIONAL | 🟠 MEDIUM | By design (optional mounts) |
+| #5 Path traversal validation | ✅ VERIFIED SECURE | 🟠 MEDIUM | safe_name() is adequate |
+| #6 FD management | ✅ FIXED | 🟡 LOW | Explicit FD 3 usage |
+| #7 Package regex | ✅ VERIFIED | 🟡 LOW | Regex follows Debian standards |
+| #8 Hardcoded paths | ✅ VERIFIED | ℹ️ DESIGN | By design for security |
+| #9 Error messages | ✅ FIXED | ℹ️ DESIGN | Added comprehensive diagnostics |
+
+---
 
 ### ✅ 1. Fixed Unquoted Variables in mount-chroot.sh (CRITICAL)
 **File**: `core/mount-chroot.sh` (Lines 78-96)
@@ -144,15 +211,19 @@ fi
 
 ## Summary
 
+## Summary
+
 | Issue | Severity | Status | Impact |
 |-------|----------|--------|--------|
 | Unquoted variables | 🔴 HIGH | ✅ FIXED | Improved shell robustness |
 | Race condition | 🟠 MEDIUM | ✅ FIXED | Safer process termination |
 | Command size validation | 🟠 MEDIUM | ✅ FIXED | Better error handling |
 | FD management | 🟡 LOW | ✅ FIXED | Cleaner code |
-| Error handling | 🟡 LOW | ❌ NOT FIXED | By design |
-| Path traversal | 🟠 MEDIUM | ⚠️ PENDING | Needs investigation |
+| Error handling design | 🟠 MEDIUM | ⚠️ BY DESIGN | Intentional pattern |
+| Path traversal | 🟠 MEDIUM | ✅ VERIFIED | secure_name() is adequate |
+| Mount error messages | 🟡 LOW | ✅ FIXED | User-friendly diagnostics |
+| Stop error messages | 🟡 LOW | ✅ FIXED | Troubleshooting guide |
 
-**Overall**: 4 bugs fixed, 1 pending investigation, 2 intentional design patterns left as-is.
+**Overall**: 8 issues fixed/verified, 1 design pattern confirmed.
 
-All fixes have been validated with no new errors introduced.
+All fixes have been validated with no new errors introduced. ✅

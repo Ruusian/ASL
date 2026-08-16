@@ -5,7 +5,9 @@
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] || [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: Debian chroot is not available at /data/local/tmp/chrootDebian"
+    echo "[!] Error: Debian chroot rootfs not found at /data/local/tmp/chrootDebian"
+    echo "    To install a Debian rootfs, run: asl install"
+    echo "    Or check if proot-distro is installed: which proot-distro"
     exit 1
 fi
 
@@ -98,12 +100,17 @@ su -c "
     fi
 
 " || {
-    echo "[!] Chroot mount failed."
+    echo "[!] Chroot mount failed during initialization."
+    echo "    Troubleshooting:"
+    echo "    - Verify Debian rootfs exists: ls -la $DEBIANPATH"
+    echo "    - Check root access: su -c id"
+    echo "    - View error logs: dmesg | tail -20"
     exit 1
 }
 
 if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
-    echo "[!] Chroot mount verification failed."
+    echo "[!] Chroot mount verification failed - /proc not mounted."
+    echo "    Verify: grep $DEBIANPATH /proc/mounts"
     exit 1
 fi
 

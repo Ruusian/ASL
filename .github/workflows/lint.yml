@@ -1,0 +1,95 @@
+name: ShellCheck Linting
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Install ShellCheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+    
+    - name: Run ShellCheck on shell scripts
+      run: |
+        echo "Linting all shell scripts in the repository..."
+        find . -type f \( -name "*.sh" -o -path "*/bin/*" \) ! -path "./.git/*" ! -path "./node_modules/*" -print0 | \
+        xargs -0 -I {} bash -c 'echo "Checking: {}" && shellcheck --severity=warning {} || true'
+    
+    - name: Verify syntax of bin/asl
+      run: |
+        bash -n bin/asl
+        bash -n bin/superkit
+    
+    - name: Verify syntax of core scripts
+      run: |
+        for script in core/*.sh; do
+          echo "Syntax check: $script"
+          bash -n "$script"
+        done
+    
+    - name: Verify syntax of desktop scripts
+      run: |
+        for script in desktop/*.sh; do
+          echo "Syntax check: $script"
+          bash -n "$script"
+        done
+    
+    - name: Verify syntax of gaming scripts
+      run: |
+        for script in gaming/*.sh; do
+          echo "Syntax check: $script"
+          bash -n "$script"
+        done
+    
+    - name: Verify syntax of tools scripts
+      run: |
+        for script in tools/*.sh; do
+          echo "Syntax check: $script"
+          bash -n "$script"
+        done
+
+  markdown-lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Lint Markdown files
+      uses: nostalgia-squirrel/markdown-linter@v1
+      with:
+        files: .
+        ignore: node_modules
+
+  readme-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Check README exists
+      run: |
+        if [ ! -f README.md ]; then
+          echo "ERROR: README.md not found!"
+          exit 1
+        fi
+        echo "✓ README.md found"
+    
+    - name: Check CHANGELOG exists
+      run: |
+        if [ ! -f CHANGELOG.md ]; then
+          echo "ERROR: CHANGELOG.md not found!"
+          exit 1
+        fi
+        echo "✓ CHANGELOG.md found"

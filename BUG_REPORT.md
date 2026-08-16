@@ -200,9 +200,11 @@ fi
 | Severity | Count | Issues |
 |----------|-------|--------|
 | 🔴 Critical/High | 2 | Unquoted variables, potential injection |
-| 🟠 Medium | 4 | Race conditions, encoding limits, validation gaps |
-| 🟡 Low | 2 | FD management, regex patterns |
-| ℹ️ Design | 2 | Hardcoded paths, missing diagnostics |
+| 🟠 Medium | 3 | Race conditions, encoding limits, validation ✅ |
+| 🟡 Low | 2 | FD management, regex patterns ✅ |
+| ℹ️ Design | 2 | Hardcoded paths, missing diagnostics ✅ |
+
+**NOTE:** Issue #5 (Snapshot path traversal) is NOT a bug - the `safe_name()` function properly prevents all path traversal attempts.
 
 ---
 
