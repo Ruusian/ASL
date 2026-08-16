@@ -75,25 +75,25 @@ su -c "
         mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
         mount --make-rslave \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" 2>/dev/null || true
     fi
-    domount_tmpfs $DEBIANPATH/run rw,nosuid,nodev,mode=0755,noatime
-    domount_tmpfs $DEBIANPATH/dev/shm rw,nosuid,nodev,noatime
+    domount_tmpfs "$DEBIANPATH/run" rw,nosuid,nodev,mode=0755,noatime
+    domount_tmpfs "$DEBIANPATH/dev/shm" rw,nosuid,nodev,noatime
 
-    if [ -d $DEBIANPATH/var ] && [ ! -L $DEBIANPATH/var/lock ]; then
-        domount_tmpfs $DEBIANPATH/var/lock rw,nosuid,nodev,mode=1777,noatime
+    if [ -d "$DEBIANPATH/var" ] && [ ! -L "$DEBIANPATH/var/lock" ]; then
+        domount_tmpfs "$DEBIANPATH/var/lock" rw,nosuid,nodev,mode=1777,noatime
     fi
 
-    if [ ! -s $DEBIANPATH/etc/resolv.conf ]; then
-        mkdir -p $DEBIANPATH/etc
+    if [ ! -s "$DEBIANPATH/etc/resolv.conf" ]; then
+        mkdir -p "$DEBIANPATH/etc"
         dns1=\$(getprop net.dns1 2>/dev/null)
         dns2=\$(getprop net.dns2 2>/dev/null)
         if [ -n \"\$dns1\" ]; then
-            printf 'nameserver %s\n' \"\$dns1\" > $DEBIANPATH/etc/resolv.conf
-            [ -n \"\$dns2\" ] && printf 'nameserver %s\n' \"\$dns2\" >> $DEBIANPATH/etc/resolv.conf
+            printf 'nameserver %s\n' \"\$dns1\" > "$DEBIANPATH/etc/resolv.conf"
+            [ -n \"\$dns2\" ] && printf 'nameserver %s\n' \"\$dns2\" >> "$DEBIANPATH/etc/resolv.conf"
         elif [ -f /data/data/com.termux/files/usr/etc/resolv.conf ]; then
-            cp /data/data/com.termux/files/usr/etc/resolv.conf $DEBIANPATH/etc/resolv.conf 2>/dev/null || true
+            cp /data/data/com.termux/files/usr/etc/resolv.conf "$DEBIANPATH/etc/resolv.conf" 2>/dev/null || true
         fi
-        if [ ! -s $DEBIANPATH/etc/resolv.conf ]; then
-            printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > $DEBIANPATH/etc/resolv.conf
+        if [ ! -s "$DEBIANPATH/etc/resolv.conf" ]; then
+            printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "$DEBIANPATH/etc/resolv.conf"
         fi
     fi
 

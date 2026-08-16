@@ -91,14 +91,14 @@ read_state() {
     [ "$(stat -c %U "$STATE_FILE" 2>/dev/null)" = "$(id -un)" ] || return 1
     unset DISPLAY_ID X11_PID X11_START SESSION_PID SESSION_START PULSE_PID PULSE_START PULSE_OWNED SOCAT_PID SOCAT_START
     local key value
-    while IFS='=' read -r key value; do
+    while IFS='=' read -r -u 3 key value; do
         case "$key" in
             DISPLAY_ID|X11_PID|X11_START|SESSION_PID|SESSION_START|PULSE_PID|PULSE_START|PULSE_OWNED|SOCAT_PID|SOCAT_START)
                 printf -v "$key" '%s' "$value"
                 ;;
             *) return 1 ;;
         esac
-    done < "$STATE_FILE"
+    done 3< "$STATE_FILE"
     [[ "${DISPLAY_ID:-}" =~ ^:[0-9]+$ ]] || return 1
     [[ "${X11_PID:-}" =~ ^[0-9]+$ && "${X11_START:-}" =~ ^[0-9]+$ ]] || return 1
     [[ "${SESSION_PID:-}" =~ ^[0-9]+$ && "${SESSION_START:-}" =~ ^[0-9]+$ ]] || return 1

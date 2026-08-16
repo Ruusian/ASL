@@ -54,10 +54,24 @@ is_mounted() {
 
 run_in_chroot() {
     local command_text="$*"
-    local command_b64
+    local command_b64 max_encoded_size
+
+    # Validate command size to prevent truncation or argument limit issues
+    # ARG_MAX on Linux is typically 128KB; allow commands up to 50KB encoded
+    if [ ${#command_text} -gt 40000 ]; then
+        echo "[!] Error: Command is too large (${#command_text} chars; max ~40000 recommended)."
+        return 1
+    fi
 
     command_b64=$(printf '%s' "$command_text" | base64 | tr -d '\n')
-    su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'"
+    
+    # Verify base64 encoding succeeded and isn't truncated
+    if [ -z "$command_b64" ]; then
+        echo "[!] Error: Failed to encode command."
+        return 1
+    fi
+
+    su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" || return $?
 }
 
 show_help() {
@@ -366,10 +380,14 @@ process_manager() {
                 read -r -p "Enter PID to terminate: " target_pid
                 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
                     if is_safe_target_pid "$target_pid"; then
-                        if kill "$target_pid" 2>/dev/null || su -c "kill '$target_pid'" 2>/dev/null; then
-                            echo "[✓] Sent SIGTERM to PID $target_pid"
+                        if kill -0 "$target_pid" 2>/dev/null || su -c "kill -0 '$target_pid'" 2>/dev/null; then
+                            if kill "$target_pid" 2>/dev/null || su -c "kill '$target_pid'" 2>/dev/null; then
+                                echo "[✓] Sent SIGTERM to PID $target_pid"
+                            else
+                                echo "[!] Failed to terminate PID $target_pid"
+                            fi
                         else
-                            echo "[!] Failed to terminate PID $target_pid"
+                            echo "[!] Process PID $target_pid no longer exists."
                         fi
                     else
                         echo "[!] Refused: PID $target_pid is a system process outside ASL/Termux."
@@ -383,10 +401,14 @@ process_manager() {
                 read -r -p "Enter PID to force kill: " target_pid
                 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
                     if is_safe_target_pid "$target_pid"; then
-                        if kill -9 "$target_pid" 2>/dev/null || su -c "kill -9 '$target_pid'" 2>/dev/null; then
-                            echo "[✓] Sent SIGKILL to PID $target_pid"
+                        if kill -0 "$target_pid" 2>/dev/null || su -c "kill -0 '$target_pid'" 2>/dev/null; then
+                            if kill -9 "$target_pid" 2>/dev/null || su -c "kill -9 '$target_pid'" 2>/dev/null; then
+                                echo "[✓] Sent SIGKILL to PID $target_pid"
+                            else
+                                echo "[!] Failed to kill PID $target_pid"
+                            fi
                         else
-                            echo "[!] Failed to kill PID $target_pid"
+                            echo "[!] Process PID $target_pid no longer exists."
                         fi
                     else
                         echo "[!] Refused: PID $target_pid is a system process outside ASL/Termux."
