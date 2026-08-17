@@ -32,10 +32,11 @@ which proot-distro  # Check if proot-distro is installed
 Open **Termux** and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash
+# Recommended CDN Mirror (bypasses raw GitHub HTTP 429 rate limits):
+curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian5/ASL@master/install.sh | bash
 ```
 
-Or install manually:
+Or install via Git clone:
 
 ```bash
 git clone https://github.com/Ruusian5/ASL.git

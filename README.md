@@ -40,6 +40,10 @@ Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** transforms yo
 Install or update **ASL** with a single command inside Termux:
 
 ```bash
+# Recommended (Fast CDN Mirror - bypasses GitHub raw 429 rate limits):
+curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian5/ASL@master/install.sh | bash
+
+# Alternative direct GitHub link:
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash
 ```
 

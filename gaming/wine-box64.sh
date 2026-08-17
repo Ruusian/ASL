@@ -151,7 +151,10 @@ chmod 755 /usr/local/bin/wineserver
 
 if ! command -v winetricks >/dev/null 2>&1; then
     echo "[*] Installing winetricks script in /usr/local/bin..."
-    wget -q https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || curl -sSL https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -o /tmp/winetricks.tmp 2>/dev/null || true
+    wget -q https://cdn.jsdelivr.net/gh/Winetricks/winetricks@5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || \
+    wget -q https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || \
+    curl -fsSL https://cdn.jsdelivr.net/gh/Winetricks/winetricks@5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -o /tmp/winetricks.tmp 2>/dev/null || \
+    curl -fsSL https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -o /tmp/winetricks.tmp 2>/dev/null || true
     if [ -f /tmp/winetricks.tmp ] && [ "\$(sha256sum /tmp/winetricks.tmp 2>/dev/null | cut -d' ' -f1)" = "f35c29737ca08a583569e6a3752d52fbe23333c5acfad5f16c4177d25eaf3f4b" ]; then
         chmod +x /tmp/winetricks.tmp
         mv -f /tmp/winetricks.tmp /usr/local/bin/winetricks
