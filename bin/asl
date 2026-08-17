@@ -212,7 +212,7 @@ show_help() {
     echo "  desktop sync-apps Create ASL-owned Termux launchers"
     echo "  theme [preset]   Set XFCE look & feel (dark|light|nord|dracula)"
     echo "  resolution [preset] Set Termux:X11 display resolution (720p|1080p|native)"
-    echo "  remote [ssh|vnc|public]      Manage SSH/VNC remote servers & Public Internet tunnel"
+    echo "  remote [lan|ssh|vnc|public]  Manage LAN SSH (one-line connect), chroot SSH/VNC & Public tunnel"
     echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
     echo ""
     echo "Termux & Android Bridge Commands:"
@@ -335,6 +335,7 @@ asl_gpu_cached() {
 
 asl_remote_summary() {
     local active=()
+    if pgrep -x sshd >/dev/null 2>&1; then active+=("LAN:8022"); fi
     if asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then active+=("SSH:2222"); fi
     if asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then active+=("VNC:5900"); fi
     if pgrep -f "pinggy.io" >/dev/null 2>&1; then active+=("Tunnel"); fi
@@ -636,19 +637,22 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             10|v|V)
-                echo "Remote actions: 1) SSH start  2) SSH stop  3) VNC start  4) VNC stop  5) VNC clean"
-                echo "                6) VNC reset password  7) Public SSH start  8) Public SSH stop"
-                echo "                9) status"
-                read -r -p "Select action [1-9]: " r_act
+                echo "Remote actions: 1) LAN SSH start (one-line connect)  2) LAN SSH stop"
+                echo "                3) Chroot SSH start  4) Chroot SSH stop  5) VNC start"
+                echo "                6) VNC stop  7) VNC clean  8) VNC reset password"
+                echo "                9) Public SSH start  10) Public SSH stop  11) status"
+                read -r -p "Select action [1-11]: " r_act
                 case "$r_act" in
-                    1) bash "$REAL_SCRIPT" remote ssh start ;;
-                    2) bash "$REAL_SCRIPT" remote ssh stop ;;
-                    3) bash "$REAL_SCRIPT" remote vnc start ;;
-                    4) bash "$REAL_SCRIPT" remote vnc stop ;;
-                    5) bash "$REAL_SCRIPT" remote vnc clean ;;
-                    6) bash "$REAL_SCRIPT" remote vnc clean reset-auth ;;
-                    7) bash "$REAL_SCRIPT" remote public start ;;
-                    8) bash "$REAL_SCRIPT" remote public stop ;;
+                    1) bash "$REAL_SCRIPT" remote lan start ;;
+                    2) bash "$REAL_SCRIPT" remote lan stop ;;
+                    3) bash "$REAL_SCRIPT" remote ssh start ;;
+                    4) bash "$REAL_SCRIPT" remote ssh stop ;;
+                    5) bash "$REAL_SCRIPT" remote vnc start ;;
+                    6) bash "$REAL_SCRIPT" remote vnc stop ;;
+                    7) bash "$REAL_SCRIPT" remote vnc clean ;;
+                    8) bash "$REAL_SCRIPT" remote vnc clean reset-auth ;;
+                    9) bash "$REAL_SCRIPT" remote public start ;;
+                    10) bash "$REAL_SCRIPT" remote public stop ;;
                     *) bash "$REAL_SCRIPT" remote status ;;
                 esac
                 pause_dashboard ;;

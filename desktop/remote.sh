@@ -173,8 +173,125 @@ vnc_control() {
     esac
 }
 
-# --- Public Internet Remote Access (Pinggy tunnel) -------------------------
+# --- LAN SSH (fixed access code, one-line connect) -------------------------
 SSH_PORT=8022
+LAN_DEFAULT_CODE="1234"
+LAN_STATE="$PREFIX/tmp/asl-lan-ssh.state"
+
+lan_host_ip() {
+    local ip
+    ip=$(ip -o -4 addr show 2>/dev/null | awk '$2 != "lo" {sub(/\/.*/, "", $4); print $4; exit}')
+    [ -n "$ip" ] || ip=$(ifconfig 2>/dev/null | awk '/inet / && !/127.0.0.1/ {sub(/addr:/, ""); print $2; exit}')
+    printf '%s' "${ip:-127.0.0.1}"
+}
+
+lan_code() {
+    local code="${1:-$LAN_DEFAULT_CODE}"
+    if [ -f "$HOME/.asl/lan_code" ]; then
+        code=$(cat "$HOME/.asl/lan_code" 2>/dev/null)
+    fi
+    printf '%s' "${code:-$LAN_DEFAULT_CODE}"
+}
+
+lan_set_password() {
+    local code="$1"
+    printf '%s\n%s\n' "$code" "$code" | passwd >/dev/null 2>&1 || return 1
+    mkdir -p "$HOME/.asl"
+    printf '%s' "$code" > "$HOME/.asl/lan_code"
+    chmod 600 "$HOME/.asl/lan_code"
+}
+
+lan_sshd_running() {
+    pgrep -x sshd >/dev/null 2>&1
+}
+
+lan_start() {
+    local code user host
+    code=$(lan_code)
+    user=$(whoami)
+    host=$(lan_host_ip)
+
+    echo "[*] Provisioning LAN SSH access (fixed code: $code)..."
+    if ! lan_set_password "$code"; then
+        echo "Error: Failed to set the Termux access password."
+        return 1
+    fi
+
+    mkdir -p "$PREFIX/etc/ssh"
+    if [ ! -f "$PREFIX/etc/ssh/ssh_host_ed25519_key" ]; then
+        ssh-keygen -A >/dev/null 2>&1 || true
+    fi
+
+    if lan_sshd_running; then
+        echo "[*] Termux sshd is already running on port $SSH_PORT."
+    else
+        sshd || { echo "Error: sshd failed to start on port $SSH_PORT."; return 1; }
+    fi
+
+    printf '%s %s\n' "$user" "$host" > "$LAN_STATE" 2>/dev/null || true
+
+    echo "[✓] LAN SSH active. Any device on the same network can connect:"
+    echo ""
+    echo "        ssh -p $SSH_PORT ${user}@${host}"
+    echo ""
+    echo "    Access code (password): $code"
+    echo "    Change it later with:   asl remote lan code <new-code>"
+}
+
+lan_stop() {
+    if lan_sshd_running; then
+        kill_host TERM '^sshd$'
+        sleep 1
+        if lan_sshd_running; then
+            kill_host 9 '^sshd$'
+        fi
+        rm -f "$LAN_STATE"
+        echo "[✓] LAN SSH daemon stopped."
+    else
+        rm -f "$LAN_STATE"
+        echo "[*] LAN SSH is not running."
+    fi
+}
+
+lan_status() {
+    local user host code
+    user=$(whoami)
+    host=$(lan_host_ip)
+    code=$(lan_code)
+    if lan_sshd_running; then
+        echo "LAN SSH:      RUNNING (port $SSH_PORT)"
+        echo "    Command:  ssh -p $SSH_PORT ${user}@${host}"
+        echo "    Code:     $code"
+    else
+        echo "LAN SSH:      STOPPED"
+        echo "    Start it: asl remote lan start"
+    fi
+}
+
+lan_control() {
+    local action="${1:-status}"
+    case "$action" in
+        start)  lan_start ;;
+        stop)   lan_stop ;;
+        code)
+            local new_code="${2:-}"
+            if [ -z "$new_code" ]; then
+                echo "Usage: asl remote lan code <new-code>"
+                return 1
+            fi
+            if lan_set_password "$new_code"; then
+                echo "[✓] LAN access code updated to: $new_code"
+            else
+                echo "Error: Failed to update the access code."
+                return 1
+            fi
+            ;;
+        status|"") lan_status ;;
+        *) echo "Usage: asl remote lan [start|stop|status|code <new-code>]"; return 1 ;;
+    esac
+}
+
+# --- Public Internet Remote Access (Pinggy tunnel) -------------------------
 
 host_sshd_running() {
     asl_exec "
@@ -313,14 +430,16 @@ shift || true
 case "$TARGET" in
     ssh) ssh_control "$@" ;;
     vnc) vnc_control "$@" ;;
+    lan) lan_control "$@" ;;
     public) public_control "$@" ;;
     status|"")
+        lan_status
         ssh_control status
         vnc_control status
         public_control status
         ;;
     *)
-        echo "Usage: asl remote [ssh|vnc|public] [start|stop|status]"
+        echo "Usage: asl remote [lan|ssh|vnc|public] [start|stop|status]"
         exit 1
         ;;
 esac
