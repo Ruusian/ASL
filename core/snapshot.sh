@@ -95,9 +95,14 @@ restore_snapshot() {
         return 1
     fi
 
-    if [ "$was_mounted" -eq 1 ]; then
+    if [ "$was_mounted" -eq 1 ] || is_mounted; then
         echo "[!] Stopping chroot before restoring snapshot..."
         bash "$SCRIPT_DIR/stop-chroot.sh" || return 1
+    fi
+
+    if is_mounted; then
+        echo "[!] Cannot restore snapshot: active mounts remain below $DEBIANPATH."
+        return 1
     fi
 
     echo "[*] Restoring snapshot '$name'..."

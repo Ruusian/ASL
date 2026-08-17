@@ -213,13 +213,26 @@ asl_cpu_temp_c() {
 }
 
 asl_gpu_cached() {
-    local now
+    local now cache_file cache_time cache_prof
     now=$(date +%s 2>/dev/null || echo 0)
-    if [ "$((now - ${ASL_GPU_CACHE_T:-0}))" -lt 30 ] && [ -n "${ASL_GPU_PROFILE:-}" ]; then
+    cache_file="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.asl_gpu_cache"
+
+    if [ -n "${ASL_GPU_CACHE_T:-}" ] && [ "$((now - ASL_GPU_CACHE_T))" -lt 30 ] && [ -n "${ASL_GPU_PROFILE:-}" ]; then
         return 0
     fi
+
+    if [ -f "$cache_file" ]; then
+        read -r cache_time cache_prof < "$cache_file" 2>/dev/null || true
+        if [ -n "$cache_time" ] && [[ "$cache_time" =~ ^[0-9]+$ ]] && [ "$((now - cache_time))" -lt 30 ] && [ -n "$cache_prof" ]; then
+            ASL_GPU_CACHE_T=$cache_time
+            ASL_GPU_PROFILE=$cache_prof
+            return 0
+        fi
+    fi
+
     asl_gpu_detect
     ASL_GPU_CACHE_T=$now
+    printf '%s %s\n' "$now" "${ASL_GPU_PROFILE:-generic-virgl}" > "$cache_file" 2>/dev/null || true
 }
 
 asl_remote_summary() {

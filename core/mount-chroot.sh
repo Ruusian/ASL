@@ -117,16 +117,24 @@ fi
 # Sysctl tuning is host-kernel; always apply if root.
 # Save previous values first so `asl stop` can restore them.
 SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"
+SYSCTL_TMP="/data/local/tmp/asl_sysctl_orig.tmp"
 # A repeated `asl start` must retain the values from before ASL's first tune.
 # Create the backup once; stop-chroot removes it after restoration.
 if ! su -c "test -e '$SYSCTL_BACKUP'" 2>/dev/null; then
+    su -c "rm -f '$SYSCTL_TMP'" 2>/dev/null || true
     for kv in vm.swappiness=60 vm.vfs_cache_pressure=50 vm.dirty_ratio=15 vm.dirty_background_ratio=5; do
         key="${kv%%=*}"
         cur="$(su -c "sysctl -n '$key'" 2>/dev/null | tr -d '[:space:]')"
         if [ -n "$cur" ] && [ "$cur" != "${kv#*=}" ]; then
-            su -c "printf '%s\\n' '$key=$cur' >> '$SYSCTL_BACKUP'" 2>/dev/null || true
+            su -c "printf '%s\\n' '$key=$cur' >> '$SYSCTL_TMP'" 2>/dev/null || true
         fi
     done
+    if su -c "test -s '$SYSCTL_TMP'" 2>/dev/null; then
+        su -c "mv -f '$SYSCTL_TMP' '$SYSCTL_BACKUP'" 2>/dev/null || true
+    else
+        su -c "touch '$SYSCTL_BACKUP'" 2>/dev/null || true
+        su -c "rm -f '$SYSCTL_TMP'" 2>/dev/null || true
+    fi
 fi
 for kv in vm.swappiness=60 vm.vfs_cache_pressure=50 vm.dirty_ratio=15 vm.dirty_background_ratio=5; do
     su -c "sysctl -w '$kv'" 2>/dev/null || true
