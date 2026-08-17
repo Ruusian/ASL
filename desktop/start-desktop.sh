@@ -354,8 +354,10 @@ exec dbus-run-session -- bash -c '
     xfdesktop >> /tmp/xfce-desktop.log 2>&1 &
     xfsettingsd >> /tmp/xfce-settings.log 2>&1 &
     thunar --daemon >> /tmp/xfce-thunar.log 2>&1 &
-    exec 3<>/tmp/xfce-keepalive
-    read <&3
+    while true; do
+        sleep 3600 &
+        wait $!
+    done
 '
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
