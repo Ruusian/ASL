@@ -450,7 +450,7 @@ launch_app() {
 }
 
 sync_apps() {
-    if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then echo "[!] Mount the Debian chroot before synchronizing apps."; return 1; fi
+    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then echo "[!] Mount the Debian chroot before synchronizing apps."; return 1; fi
     mkdir -p "$LAUNCHER_DIR" || return 1
     local file root id name target tmp count=0
     for target in "$LAUNCHER_DIR"/asl-*.desktop; do
@@ -470,7 +470,7 @@ sync_apps() {
         umask 077
         {
             printf '[Desktop Entry]\nType=Application\nName=%s\n' "${name//$'\n'/ }"
-            printf 'Exec=%s desktop launch %s\n' "${0%/*}/../bin/asl" "$id"
+            printf 'Exec="%s" desktop launch %s\n' "${0%/*}/../bin/asl" "$id"
             printf 'Terminal=false\nX-ASL-Managed=true\nX-ASL-Desktop-Id=%s\n' "$id"
         } > "$tmp" && mv -f "$tmp" "$target" && count=$((count + 1))
     done < <(su -c "chroot '$DEBIANPATH' /usr/bin/find /usr/share/applications /usr/local/share/applications /root/.local/share/applications -type f -name '*.desktop' -print0 2>/dev/null" 2>/dev/null)

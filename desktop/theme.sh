@@ -16,14 +16,16 @@ get_dbus_env() {
 }
 
 update_xml_property() {
-    local xml_file="$1" prop="$2" val="$3"
+    local xml_file="$1" prop="$2" val="$3" esc_val file_q
     su -c "test -f '$xml_file'" 2>/dev/null || return 0
-    su -c "sed -i -E 's|(<property name=\"'$prop'\" type=\"string\" value=\")[^\"]*(\"/>)|\1'$val'\2|' '$xml_file'" 2>/dev/null || true
+    esc_val=$(printf '%s\n' "$val" | sed -e 's/[\/&|]/\\&/g')
+    file_q=$(printf '%q' "$xml_file")
+    su -c "sed -i -E 's|(<property name=\"$prop\" type=\"string\" value=\")[^\"]*(\"/>)|\1$esc_val\2|' $file_q" 2>/dev/null || true
 }
 
 set_xfce_theme() {
     local gtk_theme="$1" icon_theme="$2" cursor_theme="${3:-Breeze_Snow}"
-    if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
+    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
         echo "[!] Mount the Debian chroot before applying desktop themes."
         return 1
     fi

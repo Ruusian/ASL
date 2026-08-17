@@ -341,7 +341,7 @@ run_desktop_shortcuts() {
                         EXEC_LINE=\$(grep -E '^Exec=' \"\$TARGET\" | head -n1 | cut -d'=' -f2-)
                         EXEC_CMD=\$(echo \"\$EXEC_LINE\" | sed -E 's/%[fFuUiIck]//g')
                         if [ -n \"\$EXEC_CMD\" ]; then
-                            eval \"nohup \$EXEC_CMD >/tmp/app_launch.log 2>&1 &\"
+                            nohup /bin/bash -c \"\$EXEC_CMD\" >/tmp/app_launch.log 2>&1 &
                         fi
                     fi
                 else
@@ -555,7 +555,7 @@ case "${1:-}" in
         run_wine_exe "$@"
         ;;
     status|info)
-        if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
+        if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
             echo "Gaming Layer: Chroot unmounted"
         else
             wine_ver=$(su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/bin:/usr/bin:\$PATH; wine --version 2>/dev/null'" 2>/dev/null || echo "Not installed")

@@ -9,7 +9,7 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
 fi
 
 is_mounted() {
-    su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null
+    su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null
 }
 
 ensure_mounted() {

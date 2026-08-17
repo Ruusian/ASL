@@ -11,7 +11,7 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
 fi
 
 is_mounted() {
-    su -c "grep -E -q -w '$DEBIANPATH(/.*)?' /proc/mounts" 2>/dev/null
+    su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts || grep -q -F ' $DEBIANPATH/' /proc/mounts" 2>/dev/null
 }
 
 safe_name() { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }
@@ -153,7 +153,10 @@ export_snapshot() {
     fi
     out_file="${out_file:-/sdcard/Download/${name}.tar.xz}"
     echo "[*] Exporting snapshot '$name' to '$out_file'..."
-    if su -c "tar -cJf '$out_file' -C '$target' ."; then
+    local out_q target_q
+    out_q=$(printf '%q' "$out_file")
+    target_q=$(printf '%q' "$target")
+    if su -c "tar -cJf $out_q -C $target_q ."; then
         echo "[✓] Snapshot successfully exported to '$out_file'."
     else
         echo "[!] Export failed."
@@ -174,7 +177,10 @@ import_snapshot() {
     fi
     su -c "mkdir -p '$target'"
     echo "[*] Importing snapshot from '$file' as '$name'..."
-    if su -c "tar -xJf '$file' -C '$target'"; then
+    local file_q target_q
+    file_q=$(printf '%q' "$file")
+    target_q=$(printf '%q' "$target")
+    if su -c "tar -xJf $file_q -C $target_q"; then
         echo "[✓] Snapshot '$name' imported successfully."
     else
         echo "[!] Import failed."

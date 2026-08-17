@@ -18,13 +18,19 @@ echo "[*] Mounting Linux chroot environment at $DEBIANPATH..."
 su -c "
     set -e
 
-    if ! grep -q -w \"$DEBIANPATH\" /proc/mounts 2>/dev/null; then
+    is_mounted() {
+        local target
+        target=\$(readlink -f "\$1" 2>/dev/null || echo "\$1")
+        grep -q -F " \$target " /proc/mounts 2>/dev/null
+    }
+
+    if ! is_mounted \"$DEBIANPATH\"; then
         mount --bind \"$DEBIANPATH\" \"$DEBIANPATH\"
     fi
     mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
 
     domount_bind() {
-        if ! grep -q -w \"\$2\" /proc/mounts 2>/dev/null; then
+        if ! is_mounted \"\$2\"; then
             mkdir -p \"\$2\"
             mount --bind \"\$1\" \"\$2\"
             mount --make-rslave \"\$2\" 2>/dev/null || true
@@ -32,14 +38,14 @@ su -c "
     }
 
     domount_fs() {
-        if ! grep -q -w \"\$2\" /proc/mounts 2>/dev/null; then
+        if ! is_mounted \"\$2\"; then
             mkdir -p \"\$2\"
             mount -t \"\$1\" \"\$1\" \"\$2\"
         fi
     }
 
     domount_tmpfs() {
-        if ! grep -q -w \"\$1\" /proc/mounts 2>/dev/null; then
+        if ! is_mounted \"\$1\"; then
             mkdir -p \"\$1\"
             mount -t tmpfs -o \"\$2\" tmpfs \"\$1\"
         fi
@@ -68,12 +74,12 @@ su -c "
 
     mkdir -p \"$TERMUX_TMP\"
     chmod 1777 \"$TERMUX_TMP\"
-    if ! grep -q -w \"$DEBIANPATH/tmp\" /proc/mounts 2>/dev/null; then
+    if ! is_mounted \"$DEBIANPATH/tmp\"; then
         mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/tmp\"
         mount --make-rslave \"$DEBIANPATH/tmp\" 2>/dev/null || true
     fi
     mkdir -p \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
-    if ! grep -q -w \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" /proc/mounts 2>/dev/null; then
+    if ! is_mounted \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"; then
         mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
         mount --make-rslave \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" 2>/dev/null || true
     fi
@@ -108,7 +114,7 @@ su -c "
     exit 1
 }
 
-if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
+if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
     echo "[!] Chroot mount verification failed - /proc not mounted."
     echo "    Verify: grep $DEBIANPATH /proc/mounts"
     exit 1

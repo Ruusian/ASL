@@ -12,7 +12,7 @@ fi
 
 setup_android_aids() {
     echo "[*] Setting up Android AID GID mappings inside Debian chroot..."
-    if ! grep -q -w "$DEBIANPATH/proc" /proc/mounts 2>/dev/null; then
+    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
         if ! bash "$SCRIPT_DIR/core/mount-chroot.sh"; then
             echo "[!] Unable to mount the Debian chroot for Android AID setup."
             return 1
@@ -65,7 +65,7 @@ case "${1:-status}" in
         setup_android_aids
         ;;
     status)
-        if ! grep -q -w "$DEBIANPATH/proc" /proc/mounts 2>/dev/null; then
+        if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
             echo "Android AID GID Mapping: Chroot unmounted"
         else
             aid_count=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; getent group'" 2>/dev/null | grep -c '^aid_' || echo 0)

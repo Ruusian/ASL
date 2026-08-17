@@ -20,7 +20,7 @@ if su -c "test -s '$SYSCTL_BACKUP'" 2>/dev/null; then
     " || true
 fi
 
-if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
+if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
     echo "[✓] Debian chroot is already unmounted."
     exit 0
 fi
@@ -62,25 +62,28 @@ su -c "
         done
     fi
 
-    MOUNTS=\"
-        $DEBIANPATH/sdcard
-        $DEBIANPATH/var/lock
-        $DEBIANPATH/dev/shm
-        $DEBIANPATH/dev/pts
-        $DEBIANPATH/dev
-        $DEBIANPATH/proc/sys/fs/binfmt_misc
-        $DEBIANPATH/proc
-        $DEBIANPATH/sys
-        $DEBIANPATH/run
-        $DEBIANPATH/data/data/com.termux/files/usr/tmp
-        $DEBIANPATH/tmp
-        $DEBIANPATH
-    \"
+    MOUNTS=\"\$(
+        (
+            echo \"$DEBIANPATH/proc/sys/fs/binfmt_misc\"
+            echo \"$DEBIANPATH/dev/pts\"
+            echo \"$DEBIANPATH/dev/shm\"
+            echo \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
+            echo \"$DEBIANPATH/var/lock\"
+            echo \"$DEBIANPATH/sdcard\"
+            echo \"$DEBIANPATH/tmp\"
+            echo \"$DEBIANPATH/run\"
+            echo \"$DEBIANPATH/sys\"
+            echo \"$DEBIANPATH/proc\"
+            echo \"$DEBIANPATH/dev\"
+            echo \"$DEBIANPATH\"
+            awk '{print \$2}' /proc/mounts 2>/dev/null | grep -E \"^$DEBIANPATH(/|\$)\" || true
+        ) | awk '{ print length, \$0 }' | sort -rn | cut -d' ' -f2- | uniq
+    )\"
 
     failed=0
     failed_mounts=""
     for mp in \$MOUNTS; do
-        if grep -q -w \"\$mp\" /proc/mounts 2>/dev/null; then
+        if grep -q -F " \$mp " /proc/mounts 2>/dev/null; then
             if ! umount \"\$mp\" 2>/dev/null; then
                 if ! umount -l -f \"\$mp\" 2>/dev/null; then
                     echo \"[!] Could not unmount: \$mp\" >&2

@@ -10,7 +10,7 @@ DEBIANPATH="/data/local/tmp/chrootDebian"
 export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:/sbin:/system/bin:/system/xbin:$PATH"
 
 is_chroot_active() {
-    grep -q -w "$DEBIANPATH/proc" /proc/mounts 2>/dev/null
+    grep -q -F " $DEBIANPATH/proc " /proc/mounts 2>/dev/null
 }
 
 update_prop_status() {
