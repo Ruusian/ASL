@@ -48,24 +48,36 @@ asl_exec() {
     case "$ASL_EXEC_MODE" in
         root)
             if [[ "$cmd" == *$'\n'* ]]; then
-                local b64
-                b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-                su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; printf '%s' '$b64' | base64 -d | bash"
+                local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+                mkdir -p "$tmp_dir" 2>/dev/null || true
+                local tmpf="$tmp_dir/.asl_cmd_$$.sh"
+                printf '%s\n' "$cmd" > "$tmpf"
+                chmod 755 "$tmpf" 2>/dev/null || true
+                su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
+                local res=$?
+                rm -f "$tmpf" 2>/dev/null || true
+                return $res
             else
                 su -c "$cmd"
             fi
             ;;
         shizuku)
             if [[ "$cmd" == *$'\n'* ]]; then
-                local b64
-                b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
+                local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+                mkdir -p "$tmp_dir" 2>/dev/null || true
+                local tmpf="$tmp_dir/.asl_cmd_$$.sh"
+                printf '%s\n' "$cmd" > "$tmpf"
+                chmod 755 "$tmpf" 2>/dev/null || true
                 if command -v rish >/dev/null 2>&1; then
-                    rish -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; printf '%s' '$b64' | base64 -d | bash"
+                    rish -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
                 elif command -v shizuku-exec >/dev/null 2>&1; then
-                    shizuku-exec "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; printf '%s' '$b64' | base64 -d | bash"
+                    shizuku-exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
                 else
-                    bash -c "$cmd"
+                    bash "$tmpf"
                 fi
+                local res=$?
+                rm -f "$tmpf" 2>/dev/null || true
+                return $res
             else
                 if command -v rish >/dev/null 2>&1; then
                     rish -c "$cmd"
@@ -87,19 +99,29 @@ asl_chroot_exec() {
     case "$ASL_EXEC_MODE" in
         root)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                local b64
-                b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c \"\$(printf '%s' '$b64' | /usr/bin/base64 -d 2>/dev/null || printf '%s' '$b64' | /bin/base64 -d)\""
+                local tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$.sh"
+                printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || asl_exec "cat << 'ASLEOF' > '$tmpf'
+$cmd
+ASLEOF"
+                chmod 755 "$tmpf" 2>/dev/null || asl_exec "chmod 755 '$tmpf'"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash /tmp/.asl_chroot_cmd_$$.sh"
+                local res=$?
+                rm -f "$tmpf" 2>/dev/null || asl_exec "rm -f '$tmpf'"
+                return $res
             else
                 su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c '$cmd'"
             fi
             ;;
         shizuku)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                local b64
-                b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-                rish -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c \"\$(printf '%s' '$b64' | /usr/bin/base64 -d 2>/dev/null || printf '%s' '$b64' | /bin/base64 -d)\"" 2>/dev/null || \
-                proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$b64' | base64 -d | bash"
+                local tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$.sh"
+                printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || true
+                chmod 755 "$tmpf" 2>/dev/null || true
+                rish -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash /tmp/.asl_chroot_cmd_$$.sh" 2>/dev/null || \
+                proot-distro login asl-debian -- /bin/bash /tmp/.asl_chroot_cmd_$$.sh
+                local res=$?
+                rm -f "$tmpf" 2>/dev/null || true
+                return $res
             else
                 rish -c "chroot '$DEBIANPATH' /bin/bash -c '$cmd'" 2>/dev/null || \
                 proot-distro login asl-debian -- /bin/bash -c "$cmd"
@@ -107,10 +129,14 @@ asl_chroot_exec() {
             ;;
         proot|*)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                local b64
-                b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-                proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$b64' | base64 -d | bash" 2>/dev/null || \
-                proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash -c "printf '%s' '$b64' | base64 -d | bash"
+                local tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$.sh"
+                printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || true
+                chmod 755 "$tmpf" 2>/dev/null || true
+                proot-distro login asl-debian -- /bin/bash /tmp/.asl_chroot_cmd_$$.sh 2>/dev/null || \
+                proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash /tmp/.asl_chroot_cmd_$$.sh
+                local res=$?
+                rm -f "$tmpf" 2>/dev/null || true
+                return $res
             else
                 proot-distro login asl-debian -- /bin/bash -c "$cmd" 2>/dev/null || \
                 proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash -c "$cmd"

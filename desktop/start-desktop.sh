@@ -58,24 +58,17 @@ process_matches() {
 chroot_pkill() {
     local sig="$1" pat="$2"
     asl_exec "
-        pids=\$(grep -lE \"$pat\" /proc/[0-9]*/comm /proc/[0-9]*/cmdline 2>/dev/null | cut -d/ -f3 | sort -u)
-        for pid in \$pids; do
-            [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
-            kill $sig \"\$pid\" 2>/dev/null || true
+        for pid in \$(pgrep -f '$pat' 2>/dev/null); do
+            [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] && kill $sig \"\$pid\" 2>/dev/null || true
         done
     " 2>/dev/null || true
 }
 
-# Kill host processes (root "/") whose comm/cmdline matches an ERE pattern.
-# The reverse guard to chroot_pkill: a host-side pattern must never reach a
-# chroot-jailed process — those are reaped via chroot_pkill instead.
 host_pkill() {
     local sig="$1" pat="$2"
     asl_exec "
-        pids=\$(grep -lE \"$pat\" /proc/[0-9]*/comm /proc/[0-9]*/cmdline 2>/dev/null | cut -d/ -f3 | sort -u)
-        for pid in \$pids; do
-            [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"/\" ] || continue
-            kill $sig \"\$pid\" 2>/dev/null || true
+        for pid in \$(pgrep -f '$pat' 2>/dev/null); do
+            [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"/\" ] && kill $sig \"\$pid\" 2>/dev/null || true
         done
     " 2>/dev/null || true
 }
@@ -159,7 +152,7 @@ start_gpu() {
 }
 
 cleanup_started() {
-    if [ -n "${SESSION_PID:-}" ] && process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || true; fi
+    if [ -n "${SESSION_PID:-}" ] && (process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"); then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || true; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ -n "${X11_PID:-}" ] && process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || true; fi
     if [ "${PULSE_OWNED:-0}" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || true; fi
@@ -169,7 +162,7 @@ cleanup_started() {
 start_desktop() {
     ensure_state_dir || { echo "[!] Cannot create ASL state directory."; return 1; }
     if read_state; then
-        if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then
+        if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then
             echo "[*] Desktop is already running on $DISPLAY_ID."
             return 0
         fi
@@ -296,57 +289,45 @@ if ! pgrep -f "dbus-daemon --system" >/dev/null 2>&1; then
     /usr/bin/dbus-daemon --system >/tmp/dbus-system.log 2>&1 &
 fi
 
-rm -f /tmp/xfce-keepalive
-mkfifo /tmp/xfce-keepalive
-exec dbus-run-session -- bash -c '
-    (
-        sleep 2
-        export DISPLAY=:0
-        xrandr --newmode "1280x720" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
-        xrandr --addmode builtin "1280x720" 2>/dev/null || true
-        xrandr --newmode "1600x900" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true
-        xrandr --addmode builtin "1600x900" 2>/dev/null || true
-        xrandr --newmode "1366x768" 85.50 1366 1436 1579 1792 768 771 774 798 -hsync +vsync 2>/dev/null || true
-        xrandr --addmode builtin "1366x768" 2>/dev/null || true
-        xrandr --newmode "1024x768" 65.00 1024 1048 1184 1344 768 771 777 806 -hsync +vsync 2>/dev/null || true
-        xrandr --addmode builtin "1024x768" 2>/dev/null || true
-        xrandr --newmode "800x600" 40.00 800 840 920 1056 600 601 605 628 +hsync +vsync 2>/dev/null || true
-        xrandr --addmode builtin "800x600" 2>/dev/null || true
-    ) &
+rm -f /tmp/xfce-keepalive 2>/dev/null
+(
+    sleep 3
+    export DISPLAY=:0
+    xrandr --newmode "1280x720" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
+    xrandr --addmode builtin "1280x720" 2>/dev/null || true
+    xrandr --newmode "1600x900" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true
+    xrandr --addmode builtin "1600x900" 2>/dev/null || true
+    xrandr --newmode "1366x768" 85.50 1366 1436 1579 1792 768 771 774 798 -hsync +vsync 2>/dev/null || true
+    xrandr --addmode builtin "1366x768" 2>/dev/null || true
+    xrandr --newmode "1024x768" 65.00 1024 1048 1184 1344 768 771 777 806 -hsync +vsync 2>/dev/null || true
+    xrandr --addmode builtin "1024x768" 2>/dev/null || true
+    xrandr --newmode "800x600" 40.00 800 840 920 1056 600 601 605 628 +hsync +vsync 2>/dev/null || true
+    xrandr --addmode builtin "800x600" 2>/dev/null || true
 
-    xfwm4 --replace --compositor=off >> /tmp/xfce-xfwm4.log 2>&1 &
-    xfsettingsd >> /tmp/xfce-settings.log 2>&1 &
-    xfce4-panel >> /tmp/xfce-panel.log 2>&1 &
-    xfdesktop >> /tmp/xfce-desktop.log 2>&1 &
-    thunar --daemon >> /tmp/xfce-thunar.log 2>&1 &
-    if command -v picom >/dev/null 2>&1; then
-        picom --backend xrender --no-fading-openclose -b >> /tmp/xfce-picom.log 2>&1 &
-    fi
+    xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xsettings -p /Net/IconThemeName -s Papirus-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s Papirus-Dark 2>/dev/null || true
+    xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Arc-Dark 2>/dev/null || true
+    xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Breeze_Light 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Breeze_Light 2>/dev/null || true
+    xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 28 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeSize -n -t int -s 28 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/HintStyle -s hintslight 2>/dev/null || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/RGBA -s rgb 2>/dev/null || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -n -t int -s 5 2>/dev/null || true
+) &
 
-    (
-        sleep 3
-        xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
-        xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-        xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
-        xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
-        xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
-        xfconf-query -c xsettings -p /Net/IconThemeName -s Papirus-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s Papirus-Dark 2>/dev/null || true
-        xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Arc-Dark 2>/dev/null || true
-        xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Breeze_Light 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Breeze_Light 2>/dev/null || true
-        xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 28 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeSize -n -t int -s 28 2>/dev/null || true
-        xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
-        xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
-        xfconf-query -c xsettings -p /Xft/HintStyle -s hintslight 2>/dev/null || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
-        xfconf-query -c xsettings -p /Xft/RGBA -s rgb 2>/dev/null || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
-        xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true
-        xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -n -t int -s 5 2>/dev/null || true
-    ) &
-
-    while true; do
-        sleep 3600 &
-        wait $!
-    done
-'
+if command -v startxfce4 >/dev/null 2>&1; then
+    exec dbus-run-session startxfce4
+elif command -v xfce4-session >/dev/null 2>&1; then
+    exec dbus-run-session xfce4-session
+else
+    exec dbus-run-session xfwm4
+fi
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
     cp -f "$launcher_script" "$termux_tmp/asl-start-xfce.sh" 2>/dev/null || true
@@ -356,18 +337,26 @@ LAUNCHER_EOF
             ;;
         root|*)
             if [ "$asl_target_user" = "root" ]; then
-                asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                if asl_chroot_exec "test -x /usr/bin/setpriv" 2>/dev/null; then
+                    asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                else
+                    asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                fi
             else
-                asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid='$asl_target_user' --regid='$asl_target_user' --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                if asl_chroot_exec "test -x /usr/bin/setpriv" 2>/dev/null; then
+                    asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid='$asl_target_user' --regid='$asl_target_user' --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                else
+                    asl_chroot_exec "su - '$asl_target_user' -s /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                fi
             fi
             ;;
     esac
     SESSION_PID=
     SESSION_START=
     for _i in 1 2 3 4 5 6 7 8 9 10; do
-        for pid in $(asl_chroot_exec "pgrep -x xfwm4" 2>/dev/null); do
+        for pid in $(asl_chroot_exec "pgrep -x xfwm4 || pgrep -x xfce4-session" 2>/dev/null); do
             st=$(pid_start_time "$pid")
-            if [ -n "$st" ] && process_matches "$pid" "xfwm4" "$st"; then
+            if [ -n "$st" ] && (process_matches "$pid" "xfwm4" "$st" || process_matches "$pid" "xfce4-session" "$st"); then
                 SESSION_PID="$pid"
                 SESSION_START="$st"
                 break 2
@@ -376,12 +365,12 @@ LAUNCHER_EOF
         sleep 1
     done
     if [ -z "$SESSION_PID" ] || [ -z "$SESSION_START" ]; then
-        echo "[!] XFCE desktop failed to start (xfwm4 not running)."
+        echo "[!] XFCE desktop failed to start (session process not running)."
         cleanup_started
         return 1
     fi
-    if ! process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then
-        echo "[!] XFCE window manager exited during startup."
+    if ! (process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"); then
+        echo "[!] XFCE desktop process exited during startup."
         cleanup_started
         return 1
     fi
@@ -402,10 +391,9 @@ stop_desktop() {
     sleep 1
     chroot_pkill 9 '\b(wine|wine64|wineserver|box64)\b'
     chroot_pkill TERM '\b(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query|picom)\b'
-    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
+    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
-    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then asl_exec "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
-    asl_chroot_exec "echo x > /tmp/xfce-keepalive 2>/dev/null || true" 2>/dev/null || true
+    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then asl_exec "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
     chroot_pkill TERM '\b(asl-start-xfce|dbus-run-session|dbus-daemon)\b'
     chroot_pkill 9 '\b(asl-start-xfce|dbus-run-session|sleep)\b'
@@ -438,7 +426,7 @@ force_stop_desktop() {
 
 status_desktop() {
     if ! read_state; then echo "Desktop: STOPPED"; return 0; fi
-    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then
+    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then
         echo "Desktop: RUNNING ($DISPLAY_ID)"
         process_matches "$X11_PID" "termux-x11" "$X11_START" || echo "Warning: Termux:X11 process is not running."
         return 0
