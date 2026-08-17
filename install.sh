@@ -151,6 +151,15 @@ if ! command -v proot-distro >/dev/null 2>&1; then
     apt-get install -y --allow-downgrades --fix-broken ncurses ncurses-utils proot-distro git pulseaudio tsu socat wget unzip xz-utils 2>/dev/null || true
 fi
 
+# Re-verify Repository Clone now that git is installed
+if [ ! -d "$TARGET_DIR/.git" ]; then
+    echo -e "${GREEN}[*] Provisioning ASL repository to $TARGET_DIR...${RESET}"
+    git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null || true
+    if [ -d "$TARGET_DIR" ]; then
+        cd "$TARGET_DIR"
+    fi
+fi
+
 # 3. Interactive Distro Edition Selection
 if ([ -t 0 ] || [ -c /dev/tty ]) && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "\n${CYAN}====================================================${RESET}"
@@ -243,18 +252,17 @@ ensure_chroot_unmounted_for_replace() {
 }
 
 # 4. Rootfs Download & Chroot Provisioning
-DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 if [ "$DISTRO_TYPE" != "skip" ]; then
     echo -e "${GREEN}[*] Provisioning Debian Snapdragon rootfs (Edition: ${DISTRO_TYPE})...${RESET}"
     if [ -d "$DEBIANPATH/etc" ] || asl_exec "test -d '$DEBIANPATH/etc'" 2>/dev/null; then
         echo -e "${YELLOW}[!] Existing chroot detected at $DEBIANPATH.${RESET}"
-        if [ -t 0 ]; then
-            read -r -p "Overwrite existing chroot with fresh Debian rootfs? [y/N]: " overwrite_confirm
-            if [[ ! "$overwrite_confirm" =~ ^[Yy]$ ]]; then
-                echo -e "${GREEN}[*] Keeping existing chroot environment.${RESET}"
-                DISTRO_TYPE="skip"
-            fi
-        else
+        overwrite_confirm=""
+        if [ -c /dev/tty ]; then
+            read -r -p "Overwrite existing chroot with fresh Debian rootfs? [y/N]: " overwrite_confirm < /dev/tty 2>/dev/null || true
+        elif [ -t 0 ]; then
+            read -r -p "Overwrite existing chroot with fresh Debian rootfs? [y/N]: " overwrite_confirm || true
+        fi
+        if [[ ! "$overwrite_confirm" =~ ^[Yy]$ ]]; then
             echo -e "${GREEN}[*] Keeping existing chroot environment.${RESET}"
             DISTRO_TYPE="skip"
         fi
@@ -302,6 +310,13 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                             IS_MODDED=false
                         else
                             rm -f "$TEMP_TAR"
+                            # Register proot-distro alias override for ASL
+                            mkdir -p "$PREFIX/etc/proot-distro"
+                            cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
+# ASL Subsystem proot-distro container override
+DISTRO_NAME="ASL Debian Subsystem"
+ROOTFS_DIR="$DEBIANPATH"
+EOF
                             # Configure DNS & hosts & APT performance
                             asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
                             asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
@@ -333,6 +348,14 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                     exit 1
                 fi
                 proot-distro remove asl-temp >/dev/null 2>&1 || true
+
+                # Register proot-distro alias override for ASL
+                mkdir -p "$PREFIX/etc/proot-distro"
+                cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
+# ASL Subsystem proot-distro container override
+DISTRO_NAME="ASL Debian Subsystem"
+ROOTFS_DIR="$DEBIANPATH"
+EOF
 
                 # Configure DNS & hosts & APT performance
                 asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true

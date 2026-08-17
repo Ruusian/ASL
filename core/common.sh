@@ -2,9 +2,6 @@
 # Android Subsystem for Linux (ASL): Shared Environment & Common Utilities
 # Consolidates path checks, mount verification, color definitions, and logging.
 
-DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-export DEBIANPATH
-
 MODE_CONFIG="$PREFIX/etc/asl_exec_mode"
 
 asl_detect_mode() {
@@ -35,6 +32,16 @@ asl_detect_mode() {
 
 ASL_EXEC_MODE=$(asl_detect_mode)
 export ASL_EXEC_MODE
+
+# Default DEBIANPATH fallback based on execution mode
+if [ -z "${DEBIANPATH:-}" ] || [ "$DEBIANPATH" = "/data/local/tmp/chrootDebian" ]; then
+    if [ "$ASL_EXEC_MODE" = "proot" ]; then
+        DEBIANPATH="$HOME/.asl/chrootDebian"
+    else
+        DEBIANPATH="/data/local/tmp/chrootDebian"
+    fi
+fi
+export DEBIANPATH
 
 asl_exec() {
     local cmd="$1"
@@ -79,17 +86,35 @@ asl_chroot_exec() {
     local cmd="$1"
     case "$ASL_EXEC_MODE" in
         root)
-            su -c "chroot '$DEBIANPATH' /bin/bash -c '$cmd'"
+            if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
+                local b64
+                b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
+                su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; chroot '$DEBIANPATH' /bin/bash -c \"printf '%s' '$b64' | /data/data/com.termux/files/usr/bin/base64 -d | bash\""
+            else
+                su -c "chroot '$DEBIANPATH' /bin/bash -c '$cmd'"
+            fi
             ;;
         shizuku)
-            if rish -c "chroot '$DEBIANPATH' /bin/bash -c '$cmd'" 2>/dev/null; then
-                return 0
+            if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
+                local b64
+                b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
+                rish -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; chroot '$DEBIANPATH' /bin/bash -c \"printf '%s' '$b64' | /data/data/com.termux/files/usr/bin/base64 -d | bash\"" 2>/dev/null || \
+                proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$b64' | base64 -d | bash"
             else
+                rish -c "chroot '$DEBIANPATH' /bin/bash -c '$cmd'" 2>/dev/null || \
                 proot-distro login asl-debian -- /bin/bash -c "$cmd"
             fi
             ;;
         proot|*)
-            proot-distro login asl-debian -- /bin/bash -c "$cmd"
+            if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
+                local b64
+                b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
+                proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$b64' | base64 -d | bash" 2>/dev/null || \
+                proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash -c "printf '%s' '$b64' | base64 -d | bash"
+            else
+                proot-distro login asl-debian -- /bin/bash -c "$cmd" 2>/dev/null || \
+                proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash -c "$cmd"
+            fi
             ;;
     esac
 }

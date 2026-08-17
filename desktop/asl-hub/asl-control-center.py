@@ -14,6 +14,8 @@ import fcntl
 import glob
 import gi
 
+APP_VERSION = "1.4"
+
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Pango
 
@@ -22,6 +24,7 @@ MAX_LOG_LINES = 500
 KILL_ESCALATION_MS = 5000
 STATUS_REFRESH_SEC = 30
 CONFIG_PATH = os.path.expanduser("~/.config/asl-hub.conf")
+MAX_HISTORY = 20
 
 EXIT_CODE_HINTS = {
     126: "permission denied or not executable",
@@ -30,6 +33,11 @@ EXIT_CODE_HINTS = {
     137: "killed (SIGKILL)",
     143: "terminated (SIGTERM)",
 }
+
+GAMEPAD_KEYWORDS = (
+    "gamepad", "joystick", "controller", "xbox", "playstation",
+    "dualshock", "dualsense", "joycon", "pro controller", "game controller",
+)
 
 
 class ASLHubWindow(Gtk.Window):
@@ -51,7 +59,7 @@ class ASLHubWindow(Gtk.Window):
         header = Gtk.HeaderBar()
         header.set_show_close_button(True)
         header.set_title("ASL Hub Control Center")
-        header.set_subtitle("Debian 13 Trixie ARM64 System Dashboard")
+        header.set_subtitle(f"Debian 13 Trixie ARM64 — v{APP_VERSION}")
         btn_about = Gtk.Button(label="About")
         btn_about.connect("clicked", self.show_about)
         header.pack_end(btn_about)
@@ -65,6 +73,8 @@ class ASLHubWindow(Gtk.Window):
                       lambda *a: self.clear_log(None))
         accel.connect(Gdk.KEY_s, Gdk.ModifierType.CONTROL_MASK, 0,
                       lambda *a: self.save_log(None))
+        accel.connect(Gdk.KEY_f, Gdk.ModifierType.CONTROL_MASK, 0,
+                      lambda *a: self.toggle_search())
         self.add_accel_group(accel)
 
         # Live status panel
@@ -82,7 +92,7 @@ class ASLHubWindow(Gtk.Window):
         status_frame.add(self.status_grid)
         main_box.pack_start(status_frame, False, False, 0)
 
-        # Stack & Switcher for tabs
+        # Stack & Switcher for tabs (with icons)
         stack = Gtk.Stack()
         stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         stack.set_transition_duration(200)
@@ -92,12 +102,17 @@ class ASLHubWindow(Gtk.Window):
         main_box.pack_start(switcher, False, False, 0)
         main_box.pack_start(stack, True, True, 0)
 
-        stack.add_titled(self.create_system_tab(), "system", "System & GPU")
-        stack.add_titled(self.create_gaming_tab(), "gaming", "Gaming & Wine")
-        stack.add_titled(self.create_gamepad_tab(), "gamepad", "Gamepad")
-        stack.add_titled(self.create_dev_tab(), "dev", "Dev Suite")
-        stack.add_titled(self.create_sec_tab(), "sec", "Security Audit")
-        stack.add_titled(self.create_maint_tab(), "maint", "Maintenance & Repair")
+        tabs = [
+            (self.create_system_tab(), "system", "System & GPU", "video-display"),
+            (self.create_gaming_tab(), "gaming", "Gaming & Wine", "applications-games"),
+            (self.create_gamepad_tab(), "gamepad", "Gamepad", "input-gaming"),
+            (self.create_dev_tab(), "dev", "Dev Suite", "applications-development"),
+            (self.create_sec_tab(), "sec", "Security Audit", "changes-prevent"),
+            (self.create_maint_tab(), "maint", "Maintenance", "system-run"),
+        ]
+        for widget, name, title, icon in tabs:
+            stack.add_titled(widget, name, title)
+            stack.child_set_property(widget, "icon-name", icon)
 
         # Command history row
         hist_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -115,6 +130,14 @@ class ASLHubWindow(Gtk.Window):
         # Log Output Box
         log_frame = Gtk.Frame(label="Command Execution Log")
         log_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+
+        # Search bar (hidden until Ctrl+F)
+        self.search_entry = Gtk.SearchEntry()
+        self.search_entry.set_placeholder_text("Search log...")
+        self.search_entry.connect("search-changed", self.on_search_changed)
+        self.search_entry.set_no_show_all(True)
+        log_box.pack_start(self.search_entry, False, False, 0)
+
         log_scroll = Gtk.ScrolledWindow()
         log_scroll.set_min_content_height(140)
         self.log_view = Gtk.TextView()
@@ -123,6 +146,18 @@ class ASLHubWindow(Gtk.Window):
         self.log_view.modify_font(Pango.FontDescription("Monospace 9"))
         log_scroll.add(self.log_view)
         log_box.pack_start(log_scroll, True, True, 0)
+
+        # Text tags for themed log output
+        buf = self.log_view.get_buffer()
+        self.tag_cmd = buf.create_tag("cmd", weight=Pango.Weight.BOLD)
+        self.tag_ok = buf.create_tag("ok", foreground="#2e7d32",
+                                     weight=Pango.Weight.BOLD)
+        self.tag_fail = buf.create_tag("fail", foreground="#c62828",
+                                       weight=Pango.Weight.BOLD)
+        self.tag_warn = buf.create_tag("warn", foreground="#e65100")
+        self.tag_info = buf.create_tag("info", foreground="#1565c0")
+        self.tag_search = buf.create_tag("search", background="#ffee58",
+                                         foreground="#000000")
 
         # Control row: stop, save, clear, spinner, status
         ctrl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -157,48 +192,59 @@ class ASLHubWindow(Gtk.Window):
         log_frame.add(log_box)
         main_box.pack_start(log_frame, False, False, 0)
 
-        self.log("ASL Hub GTK3 Control Center initialized.")
-        self.log("Shortcuts: Ctrl+Q quit, Ctrl+L clear log, Ctrl+S save log.")
+        self.log("ASL Hub GTK3 Control Center initialized.", "info")
+        self.log("Shortcuts: Ctrl+Q quit, Ctrl+F search, Ctrl+L clear, Ctrl+S save.", "info")
         if not shutil.which("asl"):
-            self.log("WARNING: 'asl' not found in PATH. Buttons may fail.")
+            self.log("WARNING: 'asl' not found in PATH. Buttons may fail.", "warn")
 
-        self.load_window_state()
+        self.load_state()
+        self.rebuild_history_combo()
         self.refresh_status()
         self.refresh_gamepads()
-        # Periodic status refresh
         GLib.timeout_add_seconds(STATUS_REFRESH_SEC, self.auto_refresh)
 
     def auto_refresh(self):
         self.refresh_status()
-        return True  # keep repeating
+        return True
 
-    # ── Window state persistence ─────────────────────────────────────────
+    # ── State persistence (window size + history) ────────────────────────
 
-    def load_window_state(self):
+    def load_state(self):
         try:
             with open(CONFIG_PATH) as f:
                 for line in f:
+                    line = line.strip()
                     if line.startswith("size="):
-                        w, h = line.strip().split("=", 1)[1].split("x")
+                        w, h = line.split("=", 1)[1].split("x")
                         self.resize(int(w), int(h))
+                    elif line.startswith("history="):
+                        entry = line.split("=", 1)[1]
+                        if entry and entry not in self.cmd_history:
+                            self.cmd_history.append(entry)
         except (OSError, ValueError):
             pass
+        self.cmd_history = self.cmd_history[:MAX_HISTORY]
 
-    def save_window_state(self):
+    def save_state(self):
         try:
             os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
             w, h = self.get_size()
             with open(CONFIG_PATH, 'w') as f:
                 f.write(f"size={w}x{h}\n")
+                for entry in self.cmd_history:
+                    f.write(f"history={entry}\n")
         except OSError:
             pass
 
-    # ── Logging ──────────────────────────────────────────────────────────
+    # ── Logging (themed) ─────────────────────────────────────────────────
 
-    def log(self, text):
+    def log(self, text, tag=None):
         buf = self.log_view.get_buffer()
         end_iter = buf.get_end_iter()
-        buf.insert(end_iter, text + "\n")
+        if tag:
+            buf.insert_with_tags_by_name(end_iter, text + "\n", tag)
+        else:
+            buf.insert(end_iter, text + "\n")
         line_count = buf.get_line_count()
         if line_count > MAX_LOG_LINES:
             start = buf.get_start_iter()
@@ -210,7 +256,7 @@ class ASLHubWindow(Gtk.Window):
     def clear_log(self, widget):
         buf = self.log_view.get_buffer()
         buf.set_text("")
-        self.log("Log cleared.")
+        self.log("Log cleared.", "info")
 
     def save_log(self, widget):
         dialog = Gtk.FileChooserDialog(
@@ -227,10 +273,41 @@ class ASLHubWindow(Gtk.Window):
             try:
                 with open(path, 'w') as f:
                     f.write(text)
-                self.log(f"[*] Log saved to {path}")
+                self.log(f"[*] Log saved to {path}", "info")
             except OSError as e:
-                self.log(f"[FAIL] Could not save log: {e}")
+                self.log(f"[FAIL] Could not save log: {e}", "fail")
         dialog.destroy()
+
+    # ── Log search (Ctrl+F) ──────────────────────────────────────────────
+
+    def toggle_search(self):
+        if self.search_entry.get_visible():
+            self.search_entry.hide()
+            buf = self.log_view.get_buffer()
+            start, end = buf.get_bounds()
+            buf.remove_tag(self.tag_search, start, end)
+        else:
+            self.search_entry.show()
+            self.search_entry.grab_focus()
+
+    def on_search_changed(self, entry):
+        buf = self.log_view.get_buffer()
+        start, end = buf.get_bounds()
+        buf.remove_tag(self.tag_search, start, end)
+        needle = entry.get_text().lower()
+        if not needle:
+            return
+        full = buf.get_text(start, end, True).lower()
+        idx = full.find(needle)
+        first = True
+        while idx != -1:
+            m_start = buf.get_iter_at_offset(idx)
+            m_end = buf.get_iter_at_offset(idx + len(needle))
+            buf.apply_tag(self.tag_search, m_start, m_end)
+            if first:
+                self.log_view.scroll_to_iter(m_start, 0.0, False, 0.0, 0.0)
+                first = False
+            idx = full.find(needle, idx + 1)
 
     # ── Command history ──────────────────────────────────────────────────
 
@@ -239,7 +316,7 @@ class ASLHubWindow(Gtk.Window):
         if entry in self.cmd_history:
             self.cmd_history.remove(entry)
         self.cmd_history.insert(0, entry)
-        self.cmd_history = self.cmd_history[:20]
+        self.cmd_history = self.cmd_history[:MAX_HISTORY]
         self.rebuild_history_combo()
 
     def rebuild_history_combo(self):
@@ -252,9 +329,8 @@ class ASLHubWindow(Gtk.Window):
     def rerun_history(self, widget):
         text = self.history_combo.get_active_text()
         if not text:
-            self.log("[!] No command selected in history.")
+            self.log("[!] No command selected in history.", "warn")
             return
-        # Re-parse: entries are stored as the joined cmd_args
         if text.startswith("/bin/bash -c "):
             inner = text[len("/bin/bash -c "):]
             self.run_cmd(["/bin/bash", "-c", inner])
@@ -266,11 +342,11 @@ class ASLHubWindow(Gtk.Window):
     def run_cmd(self, cmd_args):
         """Spawn a command with output captured into the log."""
         if self.active_pid is not None:
-            self.log(f"[!] Busy: '{self.active_cmd}' is still running. Stop it first.")
+            self.log(f"[!] Busy: '{self.active_cmd}' is still running. Stop it first.", "warn")
             return
 
         try:
-            self.log(f"$ {' '.join(cmd_args)}")
+            self.log(f"$ {' '.join(cmd_args)}", "cmd")
             exec_path = shutil.which(cmd_args[0]) or cmd_args[0]
 
             r_fd, w_fd = os.pipe()
@@ -297,7 +373,7 @@ class ASLHubWindow(Gtk.Window):
                               GLib.IO_IN | GLib.IO_HUP, self.on_output)
             GLib.child_watch_add(pid, self.on_cmd_done, cmd_args[0])
         except Exception as e:
-            self.log(f"Error launching process: {e}")
+            self.log(f"Error launching process: {e}", "fail")
             self.set_busy(False)
 
     def on_output(self, fd, condition):
@@ -332,13 +408,15 @@ class ASLHubWindow(Gtk.Window):
         except ValueError:
             exit_code = -1
         if exit_code == 0:
-            self.log(f"[OK] {cmd_name} finished successfully.")
+            self.log(f"[OK] {cmd_name} finished successfully.", "ok")
+            self.notify("ASL Hub", f"{cmd_name} finished successfully.")
         else:
             hint = EXIT_CODE_HINTS.get(exit_code)
             if exit_code < 0:
                 hint = f"killed by signal {-exit_code}"
             suffix = f" ({hint})" if hint else ""
-            self.log(f"[FAIL] {cmd_name} exited with code {exit_code}{suffix}.")
+            self.log(f"[FAIL] {cmd_name} exited with code {exit_code}{suffix}.", "fail")
+            self.notify("ASL Hub", f"{cmd_name} FAILED (exit {exit_code}).")
         self.active_pid = None
         self.active_cmd = None
         if self.kill_timer is not None:
@@ -347,14 +425,26 @@ class ASLHubWindow(Gtk.Window):
         self.set_busy(False)
         self.refresh_status()
 
+    def notify(self, summary, body):
+        """Desktop notification via posix_spawn (fire-and-forget)."""
+        if self.is_active():
+            return  # window is focused, log is visible
+        notify_send = shutil.which("notify-send")
+        if not notify_send:
+            return
+        try:
+            os.posix_spawn(notify_send, [notify_send, summary, body], ASL_ENV)
+        except OSError:
+            pass
+
     def stop_active(self, widget):
         if self.active_pid is None:
             return
         try:
             os.kill(self.active_pid, signal.SIGTERM)
-            self.log(f"[*] Sent SIGTERM to PID {self.active_pid}.")
+            self.log(f"[*] Sent SIGTERM to PID {self.active_pid}.", "info")
         except ProcessLookupError:
-            self.log("[*] Process already exited.")
+            self.log("[*] Process already exited.", "info")
             return
         if self.kill_timer is None:
             self.kill_timer = GLib.timeout_add(KILL_ESCALATION_MS, self.escalate_kill)
@@ -364,7 +454,7 @@ class ASLHubWindow(Gtk.Window):
         if self.active_pid is not None:
             try:
                 os.kill(self.active_pid, signal.SIGKILL)
-                self.log(f"[!] Escalated to SIGKILL for PID {self.active_pid}.")
+                self.log(f"[!] Escalated to SIGKILL for PID {self.active_pid}.", "warn")
             except ProcessLookupError:
                 pass
         return False
@@ -413,7 +503,7 @@ class ASLHubWindow(Gtk.Window):
     def show_about(self, widget):
         about = Gtk.AboutDialog(transient_for=self, modal=True)
         about.set_program_name("ASL Hub")
-        about.set_version("1.3")
+        about.set_version(APP_VERSION)
         about.set_comments("Android Subsystem for Linux Control Center\n"
                            "Debian 13 Trixie ARM64 System Dashboard")
         about.set_license_type(Gtk.License.MIT_X11)
@@ -499,21 +589,36 @@ class ASLHubWindow(Gtk.Window):
     def refresh_gamepads(self):
         devices = []
         for ev_path in sorted(glob.glob('/dev/input/event*')):
-            name = os.path.basename(ev_path)
-            # Find matching sysfs name
-            sys_name = f"/sys/class/input/{name}/device/name"
-            dev_name = name
+            ev_name = os.path.basename(ev_path)
             try:
-                with open(sys_name) as f:
+                with open(f"/sys/class/input/{ev_name}/device/name") as f:
                     dev_name = f.read().strip()
             except OSError:
-                pass
-            devices.append(f"{name}: {dev_name}")
+                continue
+            if self._is_gamepad(ev_name, dev_name):
+                devices.append(f"{ev_path}: {dev_name}")
         buf = self.gamepad_view.get_buffer()
         if devices:
             buf.set_text("\n".join(devices))
         else:
-            buf.set_text("No input devices detected in /dev/input/.")
+            buf.set_text("No gamepads/joysticks detected in /dev/input/.")
+
+    def _is_gamepad(self, ev_name, dev_name):
+        lower = dev_name.lower()
+        if any(k in lower for k in GAMEPAD_KEYWORDS):
+            return True
+        # Heuristic: ABS capabilities with X+Y axes plus hat or extra axes
+        try:
+            with open(f"/sys/class/input/{ev_name}/device/capabilities/abs") as f:
+                val = int(f.read().strip(), 16)
+            has_xy = (val & 0x3) == 0x3
+            has_hat = (val >> 16) & 0xF
+            extra_axes = bin((val >> 2) & 0x3F).count('1')
+            if has_xy and (has_hat or extra_axes >= 2):
+                return True
+        except (OSError, ValueError):
+            pass
+        return False
 
     # ── Tabs ─────────────────────────────────────────────────────────────
 
@@ -570,8 +675,7 @@ class ASLHubWindow(Gtk.Window):
 
         box.pack_start(grid, False, False, 10)
 
-        # Detected devices list
-        dev_frame = Gtk.Frame(label="Detected Input Devices")
+        dev_frame = Gtk.Frame(label="Detected Gamepads / Joysticks")
         dev_scroll = Gtk.ScrolledWindow()
         dev_scroll.set_min_content_height(100)
         self.gamepad_view = Gtk.TextView()
@@ -635,7 +739,7 @@ class ASLHubWindow(Gtk.Window):
         return box
 
     def on_destroy(self, widget):
-        self.save_window_state()
+        self.save_state()
         Gtk.main_quit()
 
 
