@@ -134,10 +134,17 @@ echo "$ACTIVE_MODE" > "$PREFIX/etc/asl_exec_mode"
 
 # 2. Package Installation
 echo -e "${GREEN}[*] Installing required Termux packages...${RESET}"
+export DEBIAN_FRONTEND=noninteractive
 pkg install -y x11-repo 2>/dev/null || true
-pkg update -y || true
-pkg install -y git pulseaudio termux-x11-nightly virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || \
-pkg install -y git pulseaudio termux-x11 virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || true
+pkg update -y 2>/dev/null || true
+pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git pulseaudio termux-x11-nightly virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || \
+pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git pulseaudio termux-x11 virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || true
+
+# Automated repair for broken Termux package dependencies (e.g. ncurses mismatches)
+if ! command -v proot-distro >/dev/null 2>&1; then
+    echo -e "${YELLOW}[!] Termux package manager encountered held/broken dependencies. Running automated repair...${RESET}"
+    apt-get install -y --allow-downgrades --fix-broken ncurses ncurses-utils proot-distro git pulseaudio tsu socat wget unzip xz-utils 2>/dev/null || true
+fi
 
 # 3. Interactive Distro Edition Selection
 if ([ -t 0 ] || [ -c /dev/tty ]) && [ "$DISTRO_TYPE" = "auto" ]; then
