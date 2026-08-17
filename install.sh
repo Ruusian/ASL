@@ -5,7 +5,24 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+TARGET_DIR="$HOME/ASL"
+
+# 1. Repository Setup & Common Functions Loading
+if [ -d "$TARGET_DIR/.git" ]; then
+    echo -e "\033[0;32m[*] Updating ASL repository at $TARGET_DIR...\033[0m"
+    cd "$TARGET_DIR"
+    git pull origin master 2>/dev/null || true
+else
+    echo -e "\033[0;32m[*] Cloning ASL repository to $TARGET_DIR...\033[0m"
+    git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null || true
+    if [ -d "$TARGET_DIR" ]; then
+        cd "$TARGET_DIR"
+    fi
+fi
+
+if [ -f "$TARGET_DIR/core/common.sh" ]; then
+    source "$TARGET_DIR/core/common.sh"
+elif [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
@@ -123,7 +140,7 @@ pkg install -y git pulseaudio termux-x11-nightly virglrenderer-android tsu socat
 pkg install -y git pulseaudio termux-x11 virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || true
 
 # 3. Interactive Distro Edition Selection
-if [ -t 0 ] && [ "$DISTRO_TYPE" = "auto" ]; then
+if ([ -t 0 ] || [ -c /dev/tty ]) && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "\n${CYAN}====================================================${RESET}"
     echo -e "${CYAN} 🐧 Select Linux Subsystem Distribution / Edition:   ${RESET}"
     echo -e "${CYAN}====================================================${RESET}"
@@ -135,7 +152,12 @@ if [ -t 0 ] && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "  6) ${CYAN}Kali Linux Base${RESET} (Official Kali via proot-distro)"
     echo -e "  7) ${YELLOW}Skip rootfs setup${RESET} (Use existing rootfs at /data/local/tmp/chrootDebian)"
     echo -e ""
-    read -r -p "Select choice [1-7, default: 1]: " distro_choice
+    distro_choice=""
+    if [ -c /dev/tty ]; then
+        read -r -p "Select choice [1-7, default: 1]: " distro_choice < /dev/tty 2>/dev/null || true
+    else
+        read -r -p "Select choice [1-7, default: 1]: " distro_choice || true
+    fi
     case "$distro_choice" in
         1|"") DISTRO_TYPE="modded" ;;
         2) DISTRO_TYPE="debian" ;;
@@ -195,7 +217,9 @@ trap cleanup_installer EXIT
 ensure_chroot_unmounted_for_replace() {
     if is_mounted "$DEBIANPATH"; then
         echo -e "${YELLOW}[*] Stopping active chroot before overwrite...${RESET}"
-        if ! bash "$SCRIPT_DIR/core/stop-chroot.sh"; then
+        local stop_script="$TARGET_DIR/core/stop-chroot.sh"
+        [ -f "$stop_script" ] || stop_script="$SCRIPT_DIR/core/stop-chroot.sh"
+        if ! bash "$stop_script"; then
             echo -e "${RED}[!] Failed to stop the active chroot; refusing to replace its rootfs.${RESET}"
             return 1
         fi
@@ -309,20 +333,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
     fi
 fi
 
-# 5. Repository Setup
-TARGET_DIR="$HOME/ASL"
-
-if [ -d "$TARGET_DIR/.git" ]; then
-    echo -e "${GREEN}[*] Updating existing ASL repository at $TARGET_DIR...${RESET}"
-    cd "$TARGET_DIR"
-    git pull origin master || true
-else
-    echo -e "${GREEN}[*] Cloning ASL repository to $TARGET_DIR...${RESET}"
-    git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR"
-    cd "$TARGET_DIR"
-fi
-
-# 6. Global Binary Linking & Android AID setup
+# 5. Global Binary Linking & Android AID setup
 echo -e "${GREEN}[*] Registering 'asl' CLI executable...${RESET}"
 chmod +x "$TARGET_DIR/bin/asl"
 chmod +x "$TARGET_DIR/core/"*.sh
