@@ -50,6 +50,7 @@ asl_exec() {
             if [[ "$cmd" == *$'\n'* ]]; then
                 local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
                 mkdir -p "$tmp_dir" 2>/dev/null || true
+                find "$tmp_dir" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
                 local tmpf="$tmp_dir/.asl_cmd_$$.sh"
                 printf '%s\n' "$cmd" > "$tmpf"
                 chmod 755 "$tmpf" 2>/dev/null || true
@@ -65,6 +66,7 @@ asl_exec() {
             if [[ "$cmd" == *$'\n'* ]]; then
                 local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
                 mkdir -p "$tmp_dir" 2>/dev/null || true
+                find "$tmp_dir" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
                 local tmpf="$tmp_dir/.asl_cmd_$$.sh"
                 printf '%s\n' "$cmd" > "$tmpf"
                 chmod 755 "$tmpf" 2>/dev/null || true
@@ -99,6 +101,7 @@ asl_chroot_exec() {
     case "$ASL_EXEC_MODE" in
         root)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
+                find "$DEBIANPATH/tmp" -maxdepth 1 -name '.asl_chroot_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
                 local tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$.sh"
                 printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || asl_exec "cat << 'ASLEOF' > '$tmpf'
 $cmd
