@@ -20,8 +20,8 @@ if [ "${ASL_EXEC_MODE:-root}" = "proot" ]; then
     fi
 fi
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "[!] Error: Debian chroot rootfs not found at /data/local/tmp/chrootDebian"
+if [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
+    echo "[!] Error: Debian chroot rootfs not found at $DEBIANPATH"
     echo "    To install a Debian rootfs, run: asl install"
     echo "    Or check if proot-distro is installed: which proot-distro"
     exit 1

@@ -89,11 +89,59 @@ DESKEOF
     echo "[✓] ASL Hub GTK3 Control Center deployed onto Linux desktop."
 }
 
+uninstall_asl_hub_deb() {
+    echo "[*] Removing ASL Hub GTK3 Control Center from Linux rootfs..."
+    ensure_chroot_mounted || return 1
+
+    local target_app="$DEBIANPATH/usr/local/bin/asl-control-center"
+    local link_names=("asl-gui" "asl-hub")
+    local desktop_paths=(
+        "$DEBIANPATH/usr/share/applications/asl-hub.desktop"
+        "$DEBIANPATH/root/Desktop/asl-hub.desktop"
+    )
+
+    # Remove main app binary
+    if [ -f "$target_app" ]; then
+        rm -f "$target_app" 2>/dev/null || asl_exec "rm -f '$target_app'" && echo "[✓] Removed $target_app" || echo "[!] Failed to remove $target_app"
+    else
+        echo "[ ] App binary not found at $target_app (already removed?)"
+    fi
+
+    # Remove symlinks
+    for link in "${link_names[@]}"; do
+        local link_path="$DEBIANPATH/usr/local/bin/$link"
+        if [ -e "$link_path" ] || [ -L "$link_path" ]; then
+            rm -f "$link_path" 2>/dev/null || asl_exec "rm -f '$link_path'" && echo "[✓] Removed symlink $link_path" || echo "[!] Failed to remove $link_path"
+        fi
+    done
+
+    # Remove desktop files
+    for desk in "${desktop_paths[@]}"; do
+        if [ -f "$desk" ]; then
+            rm -f "$desk" 2>/dev/null || asl_exec "rm -f '$desk'" && echo "[✓] Removed $desk" || echo "[!] Failed to remove $desk"
+        fi
+    done
+
+    # Remove config state (Termux-side, no root needed)
+    local conf_dir="${HOME}/.config"
+    if [ -d "$conf_dir" ]; then
+        local conf_file="$conf_dir/asl-hub.conf"
+        if [ -f "$conf_file" ]; then
+            rm -f "$conf_file" && echo "[✓] Removed config $conf_file" || echo "[!] Failed to remove $conf_file"
+        fi
+    fi
+
+    echo "[✓] ASL Hub GTK3 Control Center uninstalled."
+}
+
 case "${1:-install}" in
     install|setup)
         install_asl_hub_deb
         ;;
+    uninstall|remove)
+        uninstall_asl_hub_deb
+        ;;
     *)
-        echo "Usage: asl-hub-installer.sh [install]"
+        echo "Usage: asl-hub-installer.sh [install|uninstall]"
         ;;
 esac

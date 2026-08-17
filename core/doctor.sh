@@ -16,10 +16,7 @@ check() {
     return 0
 }
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "FAIL fixed-path DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+# Allow custom or dynamic DEBIANPATH across execution modes
 
 case "${ASL_EXEC_MODE:-root}" in
     root)

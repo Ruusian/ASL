@@ -159,7 +159,7 @@ asl_gpu_install_drivers() {
     fi
 
     if asl_chroot_exec "/usr/bin/test -f /etc/debian_version" 2>/dev/null; then
-        if ! asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/bin; apt-get update && apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri vulkan-tools libvulkan1"; then
+        if ! asl_chroot_exec "export DEBIAN_FRONTEND=noninteractive PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; apt-get update -y 2>/dev/null && apt-get install -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' mesa-vulkan-drivers libgl1-mesa-dri vulkan-tools libvulkan1"; then
             echo "[!] GPU driver package installation failed."
             return 1
         fi

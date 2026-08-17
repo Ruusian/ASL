@@ -119,9 +119,8 @@ asl_chroot_exec() {
     esac
 }
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "$ASL_EXEC_MODE" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian or a valid directory" >&2
-    exit 2
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "$DEBIANPATH" != "$HOME/.asl/chrootDebian" ] && [ "$ASL_EXEC_MODE" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
+    echo "Warning: Custom DEBIANPATH $DEBIANPATH does not exist yet" >&2
 fi
 
 if [ "${NO_COLOR:-}" = "" ]; then

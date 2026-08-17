@@ -108,7 +108,7 @@ if [ -z "$PREFIX" ] || [[ "$PREFIX" != *"/com.termux/"* ]]; then
     exit 1
 fi
 
-mkdir -p "$PREFIX/etc"
+mkdir -p "$PREFIX/etc" "$PREFIX/tmp"
 
 echo -e "${GREEN}[*] Detecting execution mode (Root / Shizuku / PRoot)...${RESET}"
 DETECTED_MODE="$(asl_detect_mode 2>/dev/null || echo proot)"
@@ -310,8 +310,14 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                             IS_MODDED=false
                         else
                             rm -f "$TEMP_TAR"
-                            # Register proot-distro alias override for ASL
+                            # Register proot-distro container definition & override for ASL
                             mkdir -p "$PREFIX/etc/proot-distro"
+                            cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.sh"
+# ASL Subsystem proot-distro container definition
+DISTRO_NAME="ASL Debian Subsystem"
+TARBALL_URL=""
+ROOTFS_DIR="$DEBIANPATH"
+EOF
                             cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
 # ASL Subsystem proot-distro container override
 DISTRO_NAME="ASL Debian Subsystem"
@@ -349,8 +355,14 @@ EOF
                 fi
                 proot-distro remove asl-temp >/dev/null 2>&1 || true
 
-                # Register proot-distro alias override for ASL
+                # Register proot-distro container definition & override for ASL
                 mkdir -p "$PREFIX/etc/proot-distro"
+                cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.sh"
+# ASL Subsystem proot-distro container definition
+DISTRO_NAME="ASL Debian Subsystem"
+TARBALL_URL=""
+ROOTFS_DIR="$DEBIANPATH"
+EOF
                 cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
 # ASL Subsystem proot-distro container override
 DISTRO_NAME="ASL Debian Subsystem"
@@ -370,10 +382,8 @@ fi
 
 # 5. Global Binary Linking & Android AID setup
 echo -e "${GREEN}[*] Registering 'asl' CLI executable...${RESET}"
-chmod +x "$TARGET_DIR/bin/asl"
-chmod +x "$TARGET_DIR/core/"*.sh
-chmod +x "$TARGET_DIR/desktop/"*.sh
-chmod +x "$TARGET_DIR/gaming/"*.sh
+chmod +x "$TARGET_DIR/bin/asl" 2>/dev/null || true
+find "$TARGET_DIR" -maxdepth 3 -name "*.sh" -exec chmod +x {} + 2>/dev/null || true
 
 mkdir -p "$PREFIX/bin"
 ln -sf "$TARGET_DIR/bin/asl" "$PREFIX/bin/asl"
