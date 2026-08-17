@@ -27,6 +27,9 @@
 - [x] **Steam & x86_64 Game Launcher Environment (`asl steam`)**
 - [x] **One-Click Game Save & Wine Prefix Backup/Restore (`asl backup`)**
 - [x] **Comprehensive `docs/` Directory Structure**
+- [x] **Host Kernel OS Stability Protection** (Zero host kernel `sysctl` overrides to prevent kernel panics on custom Android kernels)
+- [x] **Hang-Free Subshell Execution Routing** (Temporary script file routing in `core/common.sh` eliminating base64 subshell limits)
+- [x] **D-Bus Managed XFCE Session Lifecycle** (`dbus-run-session startxfce4` with setpriv fallbacks & robust `xfce4-session` / `xfwm4` process tracking)
 
 ## Planned Enhancements & Roadmap
 - [ ] **Wayland Native compositor backend (When Termux:X11 Wayland DRI3 stabilizes)**
