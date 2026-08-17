@@ -98,6 +98,11 @@ echo -e "${CYAN} 🚀 ASL Debian Snapdragon Subsystem Installer       ${RESET}"
 echo -e "${CYAN}====================================================${RESET}"
 
 # 1. Environment & Platform Checks
+export DEBIAN_FRONTEND=noninteractive
+export PIP_NO_INPUT=1
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+export PIP_DEFAULT_TIMEOUT=15
+
 if [ -z "$PREFIX" ] || [[ "$PREFIX" != *"/com.termux/"* ]]; then
     echo -e "${RED}[!] Error: ASL must be run inside Termux on Android.${RESET}"
     exit 1
@@ -262,12 +267,12 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
             echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
             echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
 
-            if (wget -q --show-progress -O "$TEMP_TAR" "$RELEASE_URL" 2>/dev/null || curl -fsSL -o "$TEMP_TAR" "$RELEASE_URL") && [ -s "$TEMP_TAR" ]; then
+            if (curl -fsSL --connect-timeout 15 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=15 -O "$TEMP_TAR" "$RELEASE_URL") && [ -s "$TEMP_TAR" ]; then
                 echo -e "${GREEN}[*] Verifying downloaded archive checksum...${RESET}"
                 SHA256SUMS_URL="https://github.com/Ruusian5/ASL/releases/latest/download/SHA256SUMS"
                 TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
                 EXPECTED=""
-                if ! (wget -q -O "$TEMP_SUMS" "$SHA256SUMS_URL" 2>/dev/null || curl -fsSL -o "$TEMP_SUMS" "$SHA256SUMS_URL"); then
+                if ! (curl -fsSL --connect-timeout 15 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 -O "$TEMP_SUMS" "$SHA256SUMS_URL"); then
                     echo -e "${YELLOW}[!] Could not download SHA256SUMS (HTTP rate limit or release asset unavailable). Falling back to Debian base...${RESET}"
                     rm -f "$TEMP_TAR" "$TEMP_SUMS"
                     IS_MODDED=false
