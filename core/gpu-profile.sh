@@ -107,6 +107,16 @@ asl_gpu_install_drivers() {
         return 1
     fi
 
+    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+        local script_dir
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        if [ -f "$script_dir/mount-chroot.sh" ]; then
+            bash "$script_dir/mount-chroot.sh" || return 1
+        elif [ -f "$script_dir/../core/mount-chroot.sh" ]; then
+            bash "$script_dir/../core/mount-chroot.sh" || return 1
+        fi
+    fi
+
     if su -c "chroot '$DEBIANPATH' /usr/bin/test -f /etc/debian_version" 2>/dev/null; then
         if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

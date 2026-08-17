@@ -94,14 +94,14 @@ trap cleanup_installer EXIT
 # Rootfs replacement is destructive. Stop ASL first and independently verify
 # that no mount remains at or below the chroot before removing any files.
 ensure_chroot_unmounted_for_replace() {
-    if su -c "awk -v root='$DEBIANPATH' '\$2 == root || index(\$2, root \"/\") == 1 { found=1 } END { exit !found }' /proc/mounts" 2>/dev/null; then
+    if su -c "grep -q -F ' $DEBIANPATH ' /proc/mounts || grep -q -F ' $DEBIANPATH/' /proc/mounts" 2>/dev/null; then
         echo -e "${YELLOW}[*] Stopping active chroot before overwrite...${RESET}"
         if ! bash "$SCRIPT_DIR/core/stop-chroot.sh"; then
             echo -e "${RED}[!] Failed to stop the active chroot; refusing to replace its rootfs.${RESET}"
             return 1
         fi
     fi
-    if su -c "awk -v root='$DEBIANPATH' '\$2 == root || index(\$2, root \"/\") == 1 { found=1 } END { exit !found }' /proc/mounts" 2>/dev/null; then
+    if su -c "grep -q -F ' $DEBIANPATH ' /proc/mounts || grep -q -F ' $DEBIANPATH/' /proc/mounts" 2>/dev/null; then
         echo -e "${RED}[!] ASL mounts remain below $DEBIANPATH; refusing to replace its rootfs.${RESET}"
         return 1
     fi
