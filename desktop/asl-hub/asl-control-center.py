@@ -9,12 +9,14 @@ PRoot/chroot on the 4.14 Myth kernel deadlocks in glibc atfork.
 import os
 import sys
 import shutil
+import shlex
 import signal
 import fcntl
 import glob
+import time
 import gi
 
-APP_VERSION = "1.4"
+APP_VERSION = "1.5"
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Pango
@@ -51,6 +53,9 @@ class ASLHubWindow(Gtk.Window):
         self.kill_timer = None
         self.action_buttons = []
         self.cmd_history = []
+        self.fd_state = {}
+        self.search_matches = []
+        self.search_idx = 0
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.add(main_box)
@@ -63,11 +68,17 @@ class ASLHubWindow(Gtk.Window):
         btn_about = Gtk.Button(label="About")
         btn_about.connect("clicked", self.show_about)
         header.pack_end(btn_about)
+        btn_shell = Gtk.Button(label="Shell")
+        btn_shell.set_tooltip_text("Open a terminal shell inside the ASL environment")
+        btn_shell.connect("clicked", self.open_shell)
+        header.pack_end(btn_shell)
         self.set_titlebar(header)
 
         # Keyboard shortcuts
         accel = Gtk.AccelGroup()
         accel.connect(Gdk.KEY_q, Gdk.ModifierType.CONTROL_MASK, 0,
+                      lambda *a: self.destroy())
+        accel.connect(Gdk.KEY_w, Gdk.ModifierType.CONTROL_MASK, 0,
                       lambda *a: self.destroy())
         accel.connect(Gdk.KEY_l, Gdk.ModifierType.CONTROL_MASK, 0,
                       lambda *a: self.clear_log(None))
@@ -114,16 +125,25 @@ class ASLHubWindow(Gtk.Window):
             stack.add_titled(widget, name, title)
             stack.child_set_property(widget, "icon-name", icon)
 
-        # Command history row
+        # Command history / custom command row
         hist_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        hist_lbl = Gtk.Label(label="History:")
+        hist_lbl = Gtk.Label(label="Command:")
         hist_row.pack_start(hist_lbl, False, False, 0)
-        self.history_combo = Gtk.ComboBoxText()
-        self.history_combo.set_hexpand(True)
-        hist_row.pack_start(self.history_combo, True, True, 0)
-        btn_rerun = Gtk.Button(label="Re-run")
-        btn_rerun.set_tooltip_text("Re-run the selected command from history")
-        btn_rerun.connect("clicked", self.rerun_history)
+        self.history_entry = Gtk.Entry()
+        self.history_entry.set_hexpand(True)
+        self.history_entry.set_placeholder_text(
+            "Type a command or pick from history, then press Enter")
+        self.history_entry.connect("activate", self.run_entry_command)
+        self.history_completion = Gtk.EntryCompletion()
+        self.history_store = Gtk.ListStore(str)
+        self.history_completion.set_model(self.history_store)
+        self.history_completion.set_text_column(0)
+        self.history_completion.set_minimum_key_length(1)
+        self.history_entry.set_completion(self.history_completion)
+        hist_row.pack_start(self.history_entry, True, True, 0)
+        btn_rerun = Gtk.Button(label="Run")
+        btn_rerun.set_tooltip_text("Run the command in the entry (or selected history item)")
+        btn_rerun.connect("clicked", self.run_entry_command)
         hist_row.pack_start(btn_rerun, False, False, 0)
         main_box.pack_start(hist_row, False, False, 0)
 
@@ -133,9 +153,13 @@ class ASLHubWindow(Gtk.Window):
 
         # Search bar (hidden until Ctrl+F)
         self.search_entry = Gtk.SearchEntry()
-        self.search_entry.set_placeholder_text("Search log...")
+        self.search_entry.set_placeholder_text(
+            "Search log... (Enter = next match, Shift+Enter = previous)")
         self.search_entry.connect("search-changed", self.on_search_changed)
+        self.search_entry.connect("activate", self.on_search_activate)
+        self.search_entry.connect("key-press-event", self.on_search_key_press)
         self.search_entry.set_no_show_all(True)
+        self._shift_held = False
         log_box.pack_start(self.search_entry, False, False, 0)
 
         log_scroll = Gtk.ScrolledWindow()
@@ -147,17 +171,23 @@ class ASLHubWindow(Gtk.Window):
         log_scroll.add(self.log_view)
         log_box.pack_start(log_scroll, True, True, 0)
 
-        # Text tags for themed log output
+        # Text tags for themed log output (palette adapts to dark themes)
         buf = self.log_view.get_buffer()
+        dark = self._is_dark_theme()
+        c_ok = "#81c784" if dark else "#2e7d32"
+        c_fail = "#e57373" if dark else "#c62828"
+        c_warn = "#ffb74d" if dark else "#e65100"
+        c_info = "#64b5f6" if dark else "#1565c0"
         self.tag_cmd = buf.create_tag("cmd", weight=Pango.Weight.BOLD)
-        self.tag_ok = buf.create_tag("ok", foreground="#2e7d32",
+        self.tag_ok = buf.create_tag("ok", foreground=c_ok,
                                      weight=Pango.Weight.BOLD)
-        self.tag_fail = buf.create_tag("fail", foreground="#c62828",
+        self.tag_fail = buf.create_tag("fail", foreground=c_fail,
                                        weight=Pango.Weight.BOLD)
-        self.tag_warn = buf.create_tag("warn", foreground="#e65100")
-        self.tag_info = buf.create_tag("info", foreground="#1565c0")
+        self.tag_warn = buf.create_tag("warn", foreground=c_warn)
+        self.tag_info = buf.create_tag("info", foreground=c_info)
         self.tag_search = buf.create_tag("search", background="#ffee58",
                                          foreground="#000000")
+        self.tag_time = buf.create_tag("time", style=Pango.Style.ITALIC)
 
         # Control row: stop, save, clear, spinner, status
         ctrl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -193,7 +223,7 @@ class ASLHubWindow(Gtk.Window):
         main_box.pack_start(log_frame, False, False, 0)
 
         self.log("ASL Hub GTK3 Control Center initialized.", "info")
-        self.log("Shortcuts: Ctrl+Q quit, Ctrl+F search, Ctrl+L clear, Ctrl+S save.", "info")
+        self.log("Shortcuts: Ctrl+Q/Ctrl+W quit, Ctrl+F search, Ctrl+L clear, Ctrl+S save.", "info")
         if not shutil.which("asl"):
             self.log("WARNING: 'asl' not found in PATH. Buttons may fail.", "warn")
 
@@ -202,9 +232,18 @@ class ASLHubWindow(Gtk.Window):
         self.refresh_status()
         self.refresh_gamepads()
         GLib.timeout_add_seconds(STATUS_REFRESH_SEC, self.auto_refresh)
+        GLib.timeout_add_seconds(60, self.periodic_save)
+
+    def _is_dark_theme(self):
+        settings = Gtk.Settings.get_default()
+        if settings.get_property("gtk-application-prefer-dark-theme"):
+            return True
+        theme = (settings.get_property("gtk-theme-name") or "").lower()
+        return "dark" in theme or "black" in theme
 
     def auto_refresh(self):
         self.refresh_status()
+        self.refresh_gamepads()
         return True
 
     # ── State persistence (window size + history) ────────────────────────
@@ -217,6 +256,9 @@ class ASLHubWindow(Gtk.Window):
                     if line.startswith("size="):
                         w, h = line.split("=", 1)[1].split("x")
                         self.resize(int(w), int(h))
+                    elif line.startswith("pos="):
+                        x, y = line.split("=", 1)[1].split("x")
+                        self.move(int(x), int(y))
                     elif line.startswith("history="):
                         entry = line.split("=", 1)[1]
                         if entry and entry not in self.cmd_history:
@@ -229,18 +271,26 @@ class ASLHubWindow(Gtk.Window):
         try:
             os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
             w, h = self.get_size()
+            x, y = self.get_position()
             with open(CONFIG_PATH, 'w') as f:
                 f.write(f"size={w}x{h}\n")
+                f.write(f"pos={x}x{y}\n")
                 for entry in self.cmd_history:
                     f.write(f"history={entry}\n")
         except OSError:
             pass
+
+    def periodic_save(self):
+        self.save_state()
+        return True
 
     # ── Logging (themed) ─────────────────────────────────────────────────
 
     def log(self, text, tag=None):
         buf = self.log_view.get_buffer()
         end_iter = buf.get_end_iter()
+        stamp = time.strftime("[%H:%M:%S] ")
+        buf.insert_with_tags_by_name(end_iter, stamp, "time")
         if tag:
             buf.insert_with_tags_by_name(end_iter, text + "\n", tag)
         else:
@@ -294,25 +344,48 @@ class ASLHubWindow(Gtk.Window):
         buf = self.log_view.get_buffer()
         start, end = buf.get_bounds()
         buf.remove_tag(self.tag_search, start, end)
+        self.search_matches = []
+        self.search_idx = 0
         needle = entry.get_text().lower()
         if not needle:
             return
         full = buf.get_text(start, end, True).lower()
         idx = full.find(needle)
-        first = True
         while idx != -1:
+            self.search_matches.append((idx, idx + len(needle)))
             m_start = buf.get_iter_at_offset(idx)
             m_end = buf.get_iter_at_offset(idx + len(needle))
             buf.apply_tag(self.tag_search, m_start, m_end)
-            if first:
-                self.log_view.scroll_to_iter(m_start, 0.0, False, 0.0, 0.0)
-                first = False
             idx = full.find(needle, idx + 1)
+        if self.search_matches:
+            self.jump_to_match(0)
+
+    def on_search_key_press(self, entry, event):
+        self._shift_held = bool(event.state & Gdk.ModifierType.SHIFT_MASK)
+        return False
+
+    def on_search_activate(self, entry):
+        """Enter = next match, Shift+Enter = previous match."""
+        if not self.search_matches:
+            return
+        self.jump_to_match(self.search_idx + (1 if not self._shift_held else -1))
+
+    def jump_to_match(self, idx):
+        if not self.search_matches:
+            return
+        idx %= len(self.search_matches)
+        self.search_idx = idx
+        start_off, end_off = self.search_matches[idx]
+        buf = self.log_view.get_buffer()
+        m_start = buf.get_iter_at_offset(start_off)
+        self.log_view.scroll_to_iter(m_start, 0.0, False, 0.0, 0.0)
+        self.status_label.set_text(
+            f"Match {idx + 1}/{len(self.search_matches)}")
 
     # ── Command history ──────────────────────────────────────────────────
 
     def add_to_history(self, cmd_args):
-        entry = ' '.join(cmd_args)
+        entry = shlex.join(cmd_args)
         if entry in self.cmd_history:
             self.cmd_history.remove(entry)
         self.cmd_history.insert(0, entry)
@@ -320,22 +393,24 @@ class ASLHubWindow(Gtk.Window):
         self.rebuild_history_combo()
 
     def rebuild_history_combo(self):
-        self.history_combo.remove_all()
+        self.history_store.clear()
         for entry in self.cmd_history:
-            self.history_combo.append_text(entry)
-        if self.cmd_history:
-            self.history_combo.set_active(0)
+            self.history_store.append([entry])
 
-    def rerun_history(self, widget):
-        text = self.history_combo.get_active_text()
+    def run_entry_command(self, widget):
+        """Run whatever is in the command entry (typed or from completion)."""
+        text = self.history_entry.get_text().strip()
         if not text:
-            self.log("[!] No command selected in history.", "warn")
+            self.log("[!] No command entered.", "warn")
             return
-        if text.startswith("/bin/bash -c "):
-            inner = text[len("/bin/bash -c "):]
-            self.run_cmd(["/bin/bash", "-c", inner])
-        else:
-            self.run_cmd(text.split())
+        try:
+            args = shlex.split(text)
+        except ValueError as e:
+            self.log(f"[FAIL] Could not parse command: {e}", "fail")
+            return
+        if not args:
+            return
+        self.run_cmd(args)
 
     # ── Process management (posix_spawn invariant) ───────────────────────
 
@@ -376,13 +451,28 @@ class ASLHubWindow(Gtk.Window):
             self.log(f"Error launching process: {e}", "fail")
             self.set_busy(False)
 
+    def _decode_chunk(self, fd, data):
+        """Decode bytes carrying over incomplete UTF-8 sequences between reads."""
+        carry = self.fd_state.get(fd, b"")
+        raw = carry + data
+        # Keep up to 3 trailing bytes that may be an incomplete UTF-8 char
+        for trim in range(0, 4):
+            try:
+                text = raw[:len(raw) - trim].decode('utf-8') if trim else raw.decode('utf-8')
+                self.fd_state[fd] = raw[len(raw) - trim:] if trim else b""
+                return text
+            except UnicodeDecodeError:
+                continue
+        self.fd_state[fd] = b""
+        return raw.decode('utf-8', errors='replace')
+
     def on_output(self, fd, condition):
         """GLib IO watch callback — reads captured stdout/stderr."""
         try:
             if condition & GLib.IO_IN:
                 data = os.read(fd, 8192)
                 if data:
-                    for line in data.decode('utf-8', errors='replace').splitlines():
+                    for line in self._decode_chunk(fd, data).splitlines():
                         self.log(f"  {line}")
                     return True
             if condition & GLib.IO_HUP:
@@ -391,13 +481,18 @@ class ASLHubWindow(Gtk.Window):
                         data = os.read(fd, 8192)
                         if not data:
                             break
-                        for line in data.decode('utf-8', errors='replace').splitlines():
+                        for line in self._decode_chunk(fd, data).splitlines():
                             self.log(f"  {line}")
                 except (BlockingIOError, OSError):
                     pass
+                # Flush any remaining carry-over bytes
+                leftover = self.fd_state.pop(fd, b"")
+                if leftover:
+                    self.log(f"  {leftover.decode('utf-8', errors='replace')}")
                 os.close(fd)
                 return False
         except OSError:
+            self.fd_state.pop(fd, None)
             os.close(fd)
             return False
         return True
@@ -416,7 +511,7 @@ class ASLHubWindow(Gtk.Window):
                 hint = f"killed by signal {-exit_code}"
             suffix = f" ({hint})" if hint else ""
             self.log(f"[FAIL] {cmd_name} exited with code {exit_code}{suffix}.", "fail")
-            self.notify("ASL Hub", f"{cmd_name} FAILED (exit {exit_code}).")
+            self.notify("ASL Hub", f"{cmd_name} FAILED (exit {exit_code}){suffix}.")
         self.active_pid = None
         self.active_cmd = None
         if self.kill_timer is not None:
@@ -424,6 +519,25 @@ class ASLHubWindow(Gtk.Window):
             self.kill_timer = None
         self.set_busy(False)
         self.refresh_status()
+
+    def open_shell(self, widget):
+        """Open a terminal emulator running a shell in the ASL environment."""
+        terminals = (
+            ("xfce4-terminal", ["--command=/bin/bash"]),
+            ("gnome-terminal", ["--", "/bin/bash"]),
+            ("xterm", ["-e", "/bin/bash"]),
+        )
+        for term, args in terminals:
+            path = shutil.which(term)
+            if path:
+                try:
+                    os.posix_spawn(path, [path] + args, ASL_ENV)
+                    self.log(f"[*] Opened shell in {term}.", "info")
+                except OSError as e:
+                    self.log(f"[FAIL] Could not launch {term}: {e}", "fail")
+                return
+        self.log("[!] No terminal emulator found (tried xfce4-terminal, "
+                 "gnome-terminal, xterm).", "warn")
 
     def notify(self, summary, body):
         """Desktop notification via posix_spawn (fire-and-forget)."""

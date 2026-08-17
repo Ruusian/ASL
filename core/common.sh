@@ -89,16 +89,16 @@ asl_chroot_exec() {
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
                 local b64
                 b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-                su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; chroot '$DEBIANPATH' /bin/bash -c \"printf '%s' '$b64' | /data/data/com.termux/files/usr/bin/base64 -d | bash\""
+                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c \"\$(printf '%s' '$b64' | /usr/bin/base64 -d 2>/dev/null || printf '%s' '$b64' | /bin/base64 -d)\""
             else
-                su -c "chroot '$DEBIANPATH' /bin/bash -c '$cmd'"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c '$cmd'"
             fi
             ;;
         shizuku)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
                 local b64
                 b64=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-                rish -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; chroot '$DEBIANPATH' /bin/bash -c \"printf '%s' '$b64' | /data/data/com.termux/files/usr/bin/base64 -d | bash\"" 2>/dev/null || \
+                rish -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c \"\$(printf '%s' '$b64' | /usr/bin/base64 -d 2>/dev/null || printf '%s' '$b64' | /bin/base64 -d)\"" 2>/dev/null || \
                 proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$b64' | base64 -d | bash"
             else
                 rish -c "chroot '$DEBIANPATH' /bin/bash -c '$cmd'" 2>/dev/null || \

@@ -958,17 +958,15 @@ case "${1:-}" in
         case "$TARGET_MODE" in
             gaming|game)
                 echo "[*] Applying Gaming Performance Profile & CPU Governor..."
-                asl_exec "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
                 asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
                 asl_exec "echo noconform > '$MODE_STATE'" 2>/dev/null || true
-                echo "[✓] Gaming mode active: RAM compacted, CPU governor set to performance, Turnip flags enabled."
+                echo "[✓] Gaming mode active: CPU governor set to performance, Turnip flags enabled."
                 ;;
             performance|perf)
                 echo "[*] Applying Maximum Performance Mode..."
-                asl_exec "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
                 asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
                 asl_exec "echo noconform > '$MODE_STATE'" 2>/dev/null || true
-                echo "[✓] Performance mode active: RAM freed, CPU governor set to performance."
+                echo "[✓] Performance mode active: CPU governor set to performance."
                 ;;
             balanced|normal)
                 asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > \"\$g\" 2>/dev/null || echo powersave > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true

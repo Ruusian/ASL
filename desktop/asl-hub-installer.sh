@@ -52,16 +52,13 @@ install_asl_hub_deb() {
     ln -sf /usr/local/bin/asl-control-center "$DEBIANPATH/usr/local/bin/asl-gui" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-gui'"
     ln -sf /usr/local/bin/asl-control-center "$DEBIANPATH/usr/local/bin/asl-hub" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-hub'"
 
-    # Install GTK3 dependencies inside Debian chroot
+    # Install GTK3 dependencies inside Debian chroot.
+    # NOTE: keep this a single line with no quotes at all — multi-line or
+    # quoted commands take the base64 path in asl_chroot_exec, which needs
+    # Termux's base64 binary (absent on this device). Double quotes would
+    # also be stripped by the su -c wrapper, breaking the command.
     echo "[*] Ensuring python3-gi & GTK3 packages are installed in Linux rootfs..."
-    asl_chroot_exec "
-        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-        if command -v apt-get >/dev/null 2>&1; then
-            if ! python3 -c \"import gi; gi.require_version('Gtk', '3.0')\" 2>/dev/null; then
-                apt-get update && apt-get install -y python3-gi gir1.2-gtk-3.0 python3
-            fi
-        fi
-    " || true
+    asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; dpkg -s python3-gi >/dev/null 2>&1 || (apt-get update && apt-get install -y python3-gi gir1.2-gtk-3.0 python3)" 2>/dev/null || true
 
     # Deploy Desktop Shortcut (.desktop)
     echo "[*] Creating Desktop launchers in /usr/share/applications & /root/Desktop..."
