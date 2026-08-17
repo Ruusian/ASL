@@ -85,6 +85,20 @@ asl_gpu_env_exports() {
     [ -n "${TU_DEBUG:-}" ] && res="${res}export TU_DEBUG=\"${TU_DEBUG}\"\n"
     res="${res}export MESA_SHADER_CACHE_DIR=\"${MESA_SHADER_CACHE_DIR:-/dev/shm/mesa_shader_cache}\"\n"
     [ -n "${MESA_GL_VERSION_OVERRIDE:-}" ] && res="${res}export MESA_GL_VERSION_OVERRIDE=\"${MESA_GL_VERSION_OVERRIDE}\"\n"
+
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$script_dir/hud.sh" ]; then
+        local hud_exp
+        hud_exp=$("$script_dir/hud.sh" env 2>/dev/null || true)
+        [ -n "$hud_exp" ] && res="${res}${hud_exp}\n"
+    fi
+    if [ -f "$script_dir/wayland.sh" ]; then
+        local wayland_exp
+        wayland_exp=$("$script_dir/wayland.sh" env 2>/dev/null || true)
+        [ -n "$wayland_exp" ] && res="${res}${wayland_exp}\n"
+    fi
+
     printf '%b' "$res"
 }
 

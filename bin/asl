@@ -134,6 +134,8 @@ show_help() {
     echo "  dashboard, menu  Open the interactive terminal dashboard"
     echo "  overview         Show concise chroot, desktop, audio, X11, and GPU state"
     echo "  mode [gaming|performance|balanced] Configure performance profile"
+    echo "  hud [on|off|toggle|status] Toggle MangoHud / DXVK performance overlay"
+    echo "  wayland [status|set <x11|wayland>] Manage Wayland / Xwayland display backend"
     echo "  thermal          Display battery and CPU/GPU thermal temperatures"
     echo ""
     echo "Core Chroot Commands:"
@@ -962,6 +964,14 @@ case "${1:-}" in
     audio)
         shift
         bash "$ASL_DIR/desktop/start-desktop.sh" audio "$@"
+        ;;
+    hud)
+        shift
+        bash "$ASL_DIR/core/hud.sh" "$@"
+        ;;
+    wayland)
+        shift
+        bash "$ASL_DIR/core/wayland.sh" "$@"
         ;;
     backup)
         BACKUP_DIR="/sdcard/Debian_Backups"

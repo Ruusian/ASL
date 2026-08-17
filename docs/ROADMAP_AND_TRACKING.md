@@ -5,6 +5,8 @@
 - [x] **GTK3 Dashboard (`asl-gui`) with `posix_spawn` multithreading deadlock fix**
 - [x] **Box64 ARM64 -> x86_64 Dynarec + Wine 64-bit Execution Stack**
 - [x] **Mesa Turnip Vulkan + Zink D3D Driver Integration**
+- [x] **MangoHud & DXVK_HUD Performance Overlay Manager (`asl hud`)**
+- [x] **Wayland / Native Xwayland Display Backend Manager (`asl wayland`)**
 - [x] **Per-Game Wine Prefix Isolation System**
 - [x] **Direct `.exe` / `.msi` MIME Desktop File Associations in Debian File Managers**
 - [x] **DXVK & VKD3D-Proton Runtime Auto-Installer (`asl dxvk`)**
@@ -14,8 +16,6 @@
 - [x] **Comprehensive `docs/` Directory Structure**
 
 ## Planned Enhancements & Roadmap
-- [ ] **Wayland / Native Xwayland Support:** Explore Xwayland integration alongside Termux:X11.
-- [ ] **MangaHud / DXVK_HUD Performance Overlay:** Add a single toggle in `asl-gui` to display real-time FPS and VRAM usage.
 - [ ] **Wine Mono / Gecko Offline Bundle Installer:** Package offline `.msi` installers for games requiring .NET framework or MSHTML.
 - [ ] **Containerized Security Testing Tools:** Optional chroot security toolsuite (nmap, wireshark, mettle/kali tools) for defensive security auditing inside ASL.
 
