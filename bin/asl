@@ -107,6 +107,11 @@ show_help() {
     echo "  benchmark        Run GPU hardware acceleration & Vulkan rendering benchmark"
     echo "  gpu              Detect SoC & configure Turnip/Zink/VirGL"
     echo ""
+    echo "Modded Debian & Host Application Commands:"
+    echo "  host [app]       Launch Modded Debian applications & launchers"
+    echo "                   Options: wine, explorer, winefile, winecfg, winetricks, openbox, xfce, picker, list, launch <id>"
+    echo "  apps             Alias for 'asl host' launcher menu"
+    echo ""
     echo "Termux Desktop & Remote Commands:"
     echo "  desktop start    Start ASL-managed XFCE4 desktop"
     echo "  desktop stop     Stop only the ASL-managed desktop"
@@ -453,6 +458,58 @@ watch_dashboard() {
     trap - INT
 }
 
+show_host_apps_menu() {
+    while true; do
+        clear 2>/dev/null || true
+        printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s   ASL Host & Modded Debian Applications Launcher%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf '%s============================================================%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        echo "1) Virtual Windows Desktop Container (Wine Explorer)"
+        echo "2) Wine File Manager (winefile)"
+        echo "3) Wine Configuration (winecfg)"
+        echo "4) Winetricks Helper"
+        echo "5) Graphical Executable Picker (.exe)"
+        echo "6) Openbox Virtual Desktop (Tint2 + Taskbar)"
+        echo "7) Full XFCE4 Virtual Desktop Session"
+        echo "8) List & Launch Modded Debian Desktop Shortcuts (.desktop)"
+        echo "9) Return to Main Menu"
+        echo ""
+        read -r -p "Select option [1-9]: " ha_choice
+        case "$ha_choice" in
+            1) bash "$REAL_SCRIPT" game desktop ;;
+            2) bash "$REAL_SCRIPT" game winefile ;;
+            3) bash "$REAL_SCRIPT" game winecfg ;;
+            4) bash "$REAL_SCRIPT" game winetricks ;;
+            5) bash "$REAL_SCRIPT" game picker ;;
+            6) bash "$REAL_SCRIPT" game openbox ;;
+            7) bash "$REAL_SCRIPT" desktop start ;;
+            8)
+                if ! is_mounted; then
+                    bash "$REAL_SCRIPT" start || break
+                fi
+                echo ""
+                echo "=== Modded Debian Desktop Shortcuts ==="
+                apps=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'ls /usr/share/applications/*.desktop /root/Desktop/*.desktop 2>/dev/null | sort -u'" 2>/dev/null)
+                if [ -z "$apps" ]; then
+                    echo "  [!] No .desktop launchers found in chroot."
+                else
+                    echo "$apps" | sed 's|^.*/||' | awk '{print "  - " $0}'
+                    echo ""
+                    read -r -p "Enter launcher file name (e.g. winecfg.desktop) or press Enter to cancel: " app_name
+                    if [ -n "$app_name" ]; then
+                        echo "[*] Launching $app_name..."
+                        run_in_chroot "export DISPLAY=:0; export PATH=/usr/local/bin:\$PATH; gtk-launch \"${app_name%.desktop}\" 2>/dev/null || asl-wine-launch \"$app_name\" 2>/dev/null || nohup \"$app_name\" >/dev/null 2>&1 &"
+                    fi
+                fi
+                ;;
+            9|q|exit) break ;;
+            *) echo "[!] Invalid selection." ;;
+        esac
+        echo ""
+        read -r -p "Press Enter to continue..." _tmp
+    done
+}
+
 dashboard() {
     local C_SHADOW=$'\033[90m'
     while true; do
@@ -476,6 +533,7 @@ dashboard() {
         printf '  %s[ 📊 Diagnostics & Tools ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '  20. %s[p]%s Resource & Process Manager     22. Read-Only Environment Check\n' "$C_YELLOW" "$C_RESET"
         printf '  21. %s[t]%s Thermal & Battery Monitor      23. GPU Hardware Profile\n' "$C_YELLOW" "$C_RESET"
+        printf '  24. Host & Modded Apps Launcher\n'
         echo ""
         printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
         printf '  %s[h]%s Help   %s[r]%s Refresh   %s[w]%s Watch Live   %s[q]%s Exit\n\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET"
@@ -631,6 +689,7 @@ dashboard() {
             21|t|T) bash "$REAL_SCRIPT" thermal; pause_dashboard ;;
             22) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
             23) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
+            24|apps|host) show_host_apps_menu ;;
             h|H) show_help; pause_dashboard ;;
             r|R|"") ;;
             w|W) watch_dashboard ;;
@@ -969,6 +1028,41 @@ case "${1:-}" in
     aid|gids)
         shift
         bash "$ASL_DIR/core/android-aid.sh" "$@"
+        ;;
+    host|apps|custom)
+        shift
+        SUB_CMD="${1:-menu}"
+        shift || true
+        case "$SUB_CMD" in
+            wine|explorer) bash "$ASL_DIR/gaming/wine-box64.sh" desktop "$@" ;;
+            winefile) bash "$ASL_DIR/gaming/wine-box64.sh" winefile "$@" ;;
+            winecfg) bash "$ASL_DIR/gaming/wine-box64.sh" winecfg "$@" ;;
+            winetricks) bash "$ASL_DIR/gaming/wine-box64.sh" winetricks "$@" ;;
+            openbox) bash "$ASL_DIR/gaming/wine-box64.sh" openbox "$@" ;;
+            xfce|desktop) bash "$ASL_DIR/desktop/start-desktop.sh" start "$@" ;;
+            picker|gui) bash "$ASL_DIR/gaming/wine-box64.sh" picker "$@" ;;
+            list)
+                if ! is_mounted; then
+                    bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
+                fi
+                echo "=== Modded Debian Application Launchers ==="
+                su -c "chroot '$DEBIANPATH' /bin/bash -c 'ls /usr/share/applications/*.desktop /root/Desktop/*.desktop 2>/dev/null | sort -u'" 2>/dev/null | sed 's|^.*/||' | awk '{print " - " $0}'
+                ;;
+            launch|run)
+                APP="$1"
+                if [ -z "$APP" ]; then
+                    echo "Usage: asl host launch <desktop_file_or_binary>"
+                    exit 1
+                fi
+                if ! is_mounted; then
+                    bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
+                fi
+                run_in_chroot "export DISPLAY=:0; export PATH=/usr/local/bin:\$PATH; gtk-launch \"${APP%.desktop}\" 2>/dev/null || asl-wine-launch \"$APP\" 2>/dev/null || nohup \"$APP\" >/dev/null 2>&1 &"
+                ;;
+            menu|*)
+                show_host_apps_menu
+                ;;
+        esac
         ;;
     help|-h|--help)
         show_help

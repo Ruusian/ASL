@@ -70,30 +70,30 @@ EOF
 }
 
 ensure_wine_desktop_launchers() {
-    local env_exports launcher_b64
+    local env_exports launcher_b64 setup_script script_b64
     env_exports=$(build_gaming_env_exports)
     launcher_b64=$(printf '%s\n%s\nif [ "$1" = "winetricks" ]; then\n    exec "$@"\nfi\nif [[ "$1" != "box64" ]] && command -v box64 >/dev/null 2>&1; then\n    exec box64 "$@"\nelse\n    exec "$@"\nfi\n' "#!/bin/bash" "$env_exports" | base64 | tr -d '\n')
 
-    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '
-        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
-        mkdir -p /usr/share/applications /root/Desktop /usr/local/bin
+    setup_script=$(cat << EOF_SETUP
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+mkdir -p /usr/share/applications /root/Desktop /usr/local/bin
 
-        echo \"$launcher_b64\" | base64 -d > /usr/local/bin/asl-wine-launch
-        chmod 755 /usr/local/bin/asl-wine-launch
+echo "$launcher_b64" | base64 -d > /usr/local/bin/asl-wine-launch
+chmod 755 /usr/local/bin/asl-wine-launch
 
-        cat << \"EOF_ASLBIN\" > /usr/local/bin/asl
+cat << 'EOF_ASLBIN' > /usr/local/bin/asl
 #!/bin/bash
-if [ \"\$1\" = \"game\" ] || [ \"\$1\" = \"gaming\" ] || [ -z \"\$1\" ]; then
+if [ "\$1" = "game" ] || [ "\$1" = "gaming" ] || [ -z "\$1" ]; then
     exec asl-wine-launch wine64 explorer
 else
-    exec asl-wine-launch \"\$@\"
+    exec asl-wine-launch "\$@"
 fi
 EOF_ASLBIN
-        chmod 755 /usr/local/bin/asl
+chmod 755 /usr/local/bin/asl
 
-        cat << \"EOF_WINE64\" > /usr/local/bin/wine64
+cat << 'EOF_WINE64' > /usr/local/bin/wine64
 #!/bin/bash
-WINE_EXEC=\"\"
+WINE_EXEC=""
 if [ -x /opt/wine-x64/bin/wine64 ]; then
     WINE_EXEC=/opt/wine-x64/bin/wine64
 elif [ -x /usr/lib/wine/wine64 ]; then
@@ -103,14 +103,14 @@ elif [ -x /usr/bin/wine64 ]; then
 else
     WINE_EXEC=/usr/bin/wine
 fi
-exec /usr/local/bin/asl-wine-launch \"\$WINE_EXEC\" \"\$@\"
+exec /usr/local/bin/asl-wine-launch "\$WINE_EXEC" "\$@"
 EOF_WINE64
-        chmod 755 /usr/local/bin/wine64
+chmod 755 /usr/local/bin/wine64
 
-        cat << \"EOF_WINE\" > /usr/local/bin/wine
+cat << 'EOF_WINE' > /usr/local/bin/wine
 #!/bin/bash
-# Win64-only project: route plain \"wine\" to wine64 (ELF32 \"wine\" can't run under box64).
-WINE_EXEC=\"\"
+# Win64-only project: route plain "wine" to wine64 (ELF32 "wine" can't run under box64).
+WINE_EXEC=""
 if [ -x /opt/wine-x64/bin/wine64 ]; then
     WINE_EXEC=/opt/wine-x64/bin/wine64
 elif [ -x /usr/lib/wine/wine64 ]; then
@@ -120,19 +120,19 @@ elif [ -x /usr/bin/wine64 ]; then
 else
     WINE_EXEC=/usr/bin/wine
 fi
-exec /usr/local/bin/asl-wine-launch \"\$WINE_EXEC\" \"\$@\"
+exec /usr/local/bin/asl-wine-launch "\$WINE_EXEC" "\$@"
 EOF_WINE
-        chmod 755 /usr/local/bin/wine
+chmod 755 /usr/local/bin/wine
 
-        cat << \"EOF_WINECFG_BIN\" > /usr/local/bin/winecfg
+cat << 'EOF_WINECFG_BIN' > /usr/local/bin/winecfg
 #!/bin/bash
-exec /usr/local/bin/asl-wine-launch winecfg \"\$@\"
+exec /usr/local/bin/asl-wine-launch winecfg "\$@"
 EOF_WINECFG_BIN
-        chmod 755 /usr/local/bin/winecfg
+chmod 755 /usr/local/bin/winecfg
 
-        cat << \"EOF_WINESERVER_BIN\" > /usr/local/bin/wineserver
+cat << 'EOF_WINESERVER_BIN' > /usr/local/bin/wineserver
 #!/bin/bash
-WINESERVER_EXEC=\"\"
+WINESERVER_EXEC=""
 if [ -x /opt/wine-x64/bin/wineserver ]; then
     WINESERVER_EXEC=/opt/wine-x64/bin/wineserver
 elif [ -x /usr/lib/wine/wineserver64 ]; then
@@ -142,23 +142,23 @@ elif [ -x /usr/lib/wine/wineserver ]; then
 else
     WINESERVER_EXEC=/usr/bin/wineserver
 fi
-exec /usr/local/bin/asl-wine-launch \"\$WINESERVER_EXEC\" \"\$@\"
+exec /usr/local/bin/asl-wine-launch "\$WINESERVER_EXEC" "\$@"
 EOF_WINESERVER_BIN
-        chmod 755 /usr/local/bin/wineserver
+chmod 755 /usr/local/bin/wineserver
 
-        if ! command -v winetricks >/dev/null 2>&1; then
-            echo \"[*] Installing winetricks script in /usr/local/bin...\"
-            wget -q https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || curl -sSL https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -o /tmp/winetricks.tmp 2>/dev/null || true
-            if [ -f /tmp/winetricks.tmp ] && [ \"\$(sha256sum /tmp/winetricks.tmp 2>/dev/null | awk '{print \$1}')\" = \"f35c29737ca08a583569e6a3752d52fbe23333c5acfad5f16c4177d25eaf3f4b\" ]; then
-                chmod +x /tmp/winetricks.tmp
-                mv -f /tmp/winetricks.tmp /usr/local/bin/winetricks
-            else
-                rm -f /tmp/winetricks.tmp 2>/dev/null
-                echo \"[!] winetricks download failed SHA-256 verification; not installing\"
-            fi
-        fi
+if ! command -v winetricks >/dev/null 2>&1; then
+    echo "[*] Installing winetricks script in /usr/local/bin..."
+    wget -q https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || curl -sSL https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -o /tmp/winetricks.tmp 2>/dev/null || true
+    if [ -f /tmp/winetricks.tmp ] && [ "\$(sha256sum /tmp/winetricks.tmp 2>/dev/null | cut -d' ' -f1)" = "f35c29737ca08a583569e6a3752d52fbe23333c5acfad5f16c4177d25eaf3f4b" ]; then
+        chmod +x /tmp/winetricks.tmp
+        mv -f /tmp/winetricks.tmp /usr/local/bin/winetricks
+    else
+        rm -f /tmp/winetricks.tmp 2>/dev/null
+        echo "[!] winetricks download failed SHA-256 verification; not installing"
+    fi
+fi
 
-        cat << \"EOF_WINEFILE\" > /usr/share/applications/winefile.desktop
+cat << 'EOF_WINEFILE' > /usr/share/applications/winefile.desktop
 [Desktop Entry]
 Name=Wine File Manager
 Comment=Browse and manage Windows files in Wine
@@ -169,7 +169,7 @@ Type=Application
 Categories=System;FileTools;Utility;Wine;
 EOF_WINEFILE
 
-        cat << \"EOF_WINECFG\" > /usr/share/applications/winecfg.desktop
+cat << 'EOF_WINECFG' > /usr/share/applications/winecfg.desktop
 [Desktop Entry]
 Name=Wine Configuration
 Comment=Configure Wine settings and drive mappings
@@ -180,7 +180,7 @@ Type=Application
 Categories=Settings;System;Wine;
 EOF_WINECFG
 
-        cat << \"EOF_EXPLORER\" > /usr/share/applications/wine-explorer.desktop
+cat << 'EOF_EXPLORER' > /usr/share/applications/wine-explorer.desktop
 [Desktop Entry]
 Name=Wine Explorer Desktop
 Comment=Launch Virtual Windows Explorer Desktop Container
@@ -191,7 +191,7 @@ Type=Application
 Categories=System;Wine;
 EOF_EXPLORER
 
-        cat << \"EOF_TRICKS\" > /usr/share/applications/winetricks.desktop
+cat << 'EOF_TRICKS' > /usr/share/applications/winetricks.desktop
 [Desktop Entry]
 Name=Winetricks
 Comment=Install Windows DLLs, runtime libraries, and gaming tools
@@ -202,7 +202,7 @@ Type=Application
 Categories=Settings;System;Wine;
 EOF_TRICKS
 
-        cat << \"EOF_ASLGAME\" > /usr/share/applications/asl-gaming.desktop
+cat << 'EOF_ASLGAME' > /usr/share/applications/asl-gaming.desktop
 [Desktop Entry]
 Name=ASL Gaming Hub
 Comment=Interactive Windows Emulation and Gaming Management Terminal
@@ -213,14 +213,18 @@ Type=Application
 Categories=Game;Utility;System;Wine;
 EOF_ASLGAME
 
-        cp -f /usr/share/applications/winefile.desktop /root/Desktop/ 2>/dev/null || true
-        cp -f /usr/share/applications/winecfg.desktop /root/Desktop/ 2>/dev/null || true
-        cp -f /usr/share/applications/wine-explorer.desktop /root/Desktop/ 2>/dev/null || true
-        cp -f /usr/share/applications/winetricks.desktop /root/Desktop/ 2>/dev/null || true
-        cp -f /usr/share/applications/asl-gaming.desktop /root/Desktop/ 2>/dev/null || true
-        chmod +x /root/Desktop/*.desktop /usr/share/applications/*.desktop 2>/dev/null || true
-        gio trust /root/Desktop/*.desktop 2>/dev/null || true
-    '"; then
+cp -f /usr/share/applications/winefile.desktop /root/Desktop/ 2>/dev/null || true
+cp -f /usr/share/applications/winecfg.desktop /root/Desktop/ 2>/dev/null || true
+cp -f /usr/share/applications/wine-explorer.desktop /root/Desktop/ 2>/dev/null || true
+cp -f /usr/share/applications/winetricks.desktop /root/Desktop/ 2>/dev/null || true
+cp -f /usr/share/applications/asl-gaming.desktop /root/Desktop/ 2>/dev/null || true
+chmod +x /root/Desktop/*.desktop /usr/share/applications/*.desktop 2>/dev/null || true
+gio trust /root/Desktop/*.desktop 2>/dev/null || true
+EOF_SETUP
+)
+
+    script_b64=$(printf '%s' "$setup_script" | base64 | tr -d '\n')
+    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; echo $script_b64 | base64 -d | /bin/bash'"; then
         echo "[!] Failed to create Wine desktop launchers."
         return 1
     fi
