@@ -1,6 +1,13 @@
 # ASL Feature Roadmap & Tracking
 
 ## Completed Features
+- [x] **Universal 3-Tier Execution Engine** (Root `su`, Shizuku `rish`, PRoot `proot-distro`)
+- [x] **Multi-Distro Subsystem Provisioner** (Debian Modded, Debian Trixie Base, Ubuntu 24.04 LTS, Arch Linux, Alpine, Kali)
+- [x] **Execution Mode CLI Manager** (`asl exec-mode [root|shizuku|proot|status]`)
+- [x] **Box64 Dynarec Precision Profile Switcher** (`asl game precision [safe|fast|status]`)
+- [x] **Automated Chroot Mount Error Rollback Trap** (`core/mount-chroot.sh`)
+- [x] **Hardened Loopback Remote Access** (`desktop/remote.sh` 127.0.0.1 default binding)
+- [x] **Shared Execution Abstraction Engine** (`core/common.sh`)
 - [x] **Debian 13 (Trixie) ARM64 RootFS Integration**
 - [x] **GTK3 Dashboard (`asl-gui` / `asl-hub`) with `posix_spawn` multithreading deadlock fix**
 - [x] **Native Debian Desktop GTK3 Control Center ("ASL Hub") App & Launcher**
@@ -25,6 +32,7 @@
 - [ ] **Wayland Native compositor backend (When Termux:X11 Wayland DRI3 stabilizes)**
 
 ## Known Architecture Invariants to Maintain
-1. **Never replace `os.posix_spawn` in `asl-gui`** with `subprocess.Popen` or `os.fork()`.
+1. **Never replace `os.posix_spawn` in `asl-gui` / `asl-hub`** with `subprocess.Popen` or `os.fork()`.
 2. **Always sanitize `.wineprefix` paths** with `tr -d '\r\n'` to prevent Windows CRLF file issues.
 3. **Ensure `export PATH` is explicit** across all utility scripts called inside minimal chroot subshells.
+4. **Use `core/common.sh` abstractions (`asl_exec`, `asl_chroot_exec`)** for all host/chroot execution paths.

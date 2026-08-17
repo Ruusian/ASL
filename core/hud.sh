@@ -8,6 +8,7 @@ DEFAULT_MANGOHUD_CONFIG="fps,cpu_temp,gpu_temp,ram,vram,font_size=16,position=to
 
 ensure_state_dir() {
     mkdir -p "$STATE_DIR" 2>/dev/null || true
+    chmod 755 "$STATE_DIR" 2>/dev/null || true
 }
 
 asl_hud_is_enabled() {
@@ -43,6 +44,7 @@ asl_hud_enable() {
     local dxvk_cfg="${1:-$DEFAULT_DXVK_HUD}"
     local mango_cfg="${2:-$DEFAULT_MANGOHUD_CONFIG}"
     printf 'ENABLED=1\nDXVK_HUD=%s\nMANGOHUD_CONFIG=%s\n' "$dxvk_cfg" "$mango_cfg" > "$HUD_STATE_FILE"
+    chmod 666 "$HUD_STATE_FILE" 2>/dev/null || true
     echo "[✓] Performance Overlay (MangoHud / DXVK HUD) ENABLED."
     echo "    DXVK_HUD: $dxvk_cfg"
     echo "    MANGOHUD_CONFIG: $mango_cfg"
@@ -52,6 +54,7 @@ asl_hud_enable() {
 asl_hud_disable() {
     ensure_state_dir
     printf 'ENABLED=0\n' > "$HUD_STATE_FILE"
+    chmod 666 "$HUD_STATE_FILE" 2>/dev/null || true
     echo "[✓] Performance Overlay DISABLED."
     sync_chroot
 }

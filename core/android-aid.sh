@@ -5,20 +5,24 @@
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
 
 setup_android_aids() {
     echo "[*] Setting up Android AID GID mappings inside Debian chroot..."
-    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+    if ! is_mounted; then
         if ! bash "$SCRIPT_DIR/core/mount-chroot.sh"; then
             echo "[!] Unable to mount the Debian chroot for Android AID setup."
             return 1
         fi
     fi
-    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    if ! asl_chroot_exec "
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         set -e
         ensure_group() {
@@ -53,7 +57,15 @@ setup_android_aids() {
         for g in aid_graphics aid_input aid_audio aid_camera aid_wifi aid_sdcard_rw aid_media_rw aid_sdcard_r aid_sdcard_all aid_gpu_service aid_shell aid_inet; do
             id -nG root | tr \" \" \"\\n\" | grep -qx \"\$g\" || usermod -aG \"\$g\" root
         done
-    '"; then
+
+        # Create symlinks from root user folders to shared Android storage
+        if [ -d /sdcard ]; then
+            [ -d /sdcard/Download ] && [ ! -e /root/Downloads ] && ln -sf /sdcard/Download /root/Downloads || true
+            [ -d /sdcard/Documents ] && [ ! -e /root/Documents ] && ln -sf /sdcard/Documents /root/Documents || true
+            [ -d /sdcard/Pictures ] && [ ! -e /root/Pictures ] && ln -sf /sdcard/Pictures /root/Pictures || true
+            [ -d /sdcard/Music ] && [ ! -e /root/Music ] && ln -sf /sdcard/Music /root/Music || true
+        fi
+    "; then
         echo "[!] Android AID GID mapping failed."
         return 1
     fi
@@ -65,10 +77,10 @@ case "${1:-status}" in
         setup_android_aids
         ;;
     status)
-        if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+        if ! is_mounted; then
             echo "Android AID GID Mapping: Chroot unmounted"
         else
-            aid_count=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; getent group'" 2>/dev/null | grep -c '^aid_' || echo 0)
+            aid_count=$(asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; getent group" 2>/dev/null | grep -c '^aid_' || echo 0)
             aid_count=$(echo "$aid_count" | tr -d '[:space:]')
             echo "Android AID GID Mapping: ACTIVE ($aid_count AID groups mapped)"
         fi

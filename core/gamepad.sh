@@ -5,13 +5,17 @@
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
 
 ensure_chroot_mounted() {
-    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+    if ! is_mounted; then
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
             bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
         fi
@@ -45,7 +49,7 @@ asl_gamepad_status() {
         echo "[✓] Total active input devices: $found"
     fi
 
-    if su -c "grep -q -F ' $DEBIANPATH/dev/input ' /proc/mounts" 2>/dev/null; then
+    if asl_exec "grep -q -F ' $DEBIANPATH/dev/input ' /proc/mounts" 2>/dev/null; then
         echo "Debian Chroot Passthrough State: ACTIVE (/dev/input mounted)"
     else
         echo "Debian Chroot Passthrough State: INACTIVE (/dev/input unmounted)"
@@ -56,15 +60,17 @@ asl_gamepad_sync() {
     echo "[*] Mounting host /dev/input into Debian chroot..."
     ensure_chroot_mounted || return 1
 
-    su -c "
-        mkdir -p '$DEBIANPATH/dev/input'
-        chmod 755 '$DEBIANPATH/dev/input'
-        if ! grep -q -F ' $DEBIANPATH/dev/input ' /proc/mounts; then
-            mount --bind /dev/input '$DEBIANPATH/dev/input' || true
-        fi
-        chmod 666 $DEBIANPATH/dev/input/event* 2>/dev/null || true
-        chmod 666 $DEBIANPATH/dev/input/js* 2>/dev/null || true
-    " 2>/dev/null || true
+    if [ "${ASL_EXEC_MODE:-root}" != "proot" ]; then
+        asl_exec "
+            mkdir -p '$DEBIANPATH/dev/input'
+            chmod 755 '$DEBIANPATH/dev/input'
+            if ! grep -q -F ' $DEBIANPATH/dev/input ' /proc/mounts; then
+                mount --bind /dev/input '$DEBIANPATH/dev/input' || true
+            fi
+            chmod 666 /dev/input/event* /dev/input/js* 2>/dev/null || true
+            chmod 666 '$DEBIANPATH/dev/input/event*' '$DEBIANPATH/dev/input/js*' 2>/dev/null || true
+        " 2>/dev/null || true
+    fi
 
     echo "[✓] Gamepad evdev nodes synchronized into chroot."
 }
@@ -72,7 +78,7 @@ asl_gamepad_sync() {
 asl_gamepad_test() {
     asl_gamepad_sync
     echo "[*] Testing gamepad input detection inside Debian chroot..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    asl_chroot_exec "
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         if command -v jstest >/dev/null 2>&1; then
             echo \"Running jstest on /dev/input/js0 (Press Ctrl+C to exit)...\"
@@ -85,7 +91,7 @@ asl_gamepad_test() {
             apt-get update && apt-get install -y joystick evtest
             echo \"Run 'asl gamepad test' again to test live inputs.\"
         fi
-    '"
+    "
 }
 
 case "${1:-status}" in

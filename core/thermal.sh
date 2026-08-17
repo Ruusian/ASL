@@ -1,6 +1,11 @@
 #!/bin/bash
 # ASL: Thermal & Battery Monitor
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
 asl_thermal_report() {
     local c_reset=$'\033[0m' c_bold=$'\033[1m' c_cyan=$'\033[36m'
     local c_green=$'\033[32m' c_yellow=$'\033[33m' c_red=$'\033[31m'
@@ -21,7 +26,7 @@ asl_thermal_report() {
 
     # Battery Temperature via dumpsys or sysfs
     local batt_temp=""
-    batt_temp=$(su -c "dumpsys battery | awk '/temperature:/ {print int(\$2/10)}'" 2>/dev/null || true)
+    batt_temp=$(asl_exec "dumpsys battery | awk '/temperature:/ {print int(\$2/10)}'" 2>/dev/null || true)
     if [ -z "$batt_temp" ] || [ "$batt_temp" -le 0 ]; then
         for p in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp; do
             if [ -r "$p" ]; then
@@ -80,7 +85,21 @@ asl_thermal_report() {
     fi
 }
 
-if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
-    asl_thermal_report
-fi
+asl_thermal_watch() {
+    echo "[*] Starting thermal watchdog monitor (interval: 5s)... Press Ctrl+C to stop."
+    while true; do
+        clear
+        asl_thermal_report
+        sleep 5
+    done
+}
+
+case "${1:-status}" in
+    watch|monitor)
+        asl_thermal_watch
+        ;;
+    status|report|*)
+        asl_thermal_report
+        ;;
+esac
 

@@ -1,33 +1,48 @@
 #!/bin/bash
 # Android Subsystem for Linux (ASL): Safe Chroot Stop Script
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ "${ASL_EXEC_MODE:-root}" = "proot" ]; then
+    pkill -TERM -f "proot.*(asl-debian|$DEBIANPATH)" 2>/dev/null || true
+    sleep 1
+    pkill -KILL -f "proot.*(asl-debian|$DEBIANPATH)" 2>/dev/null || true
+    echo "[✓] PRoot session processes terminated cleanly."
+    exit 0
+fi
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
 
 # Restore host sysctl tuning that mount-chroot.sh applied (even if unmounted already)
 SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"
-if su -c "test -s '$SYSCTL_BACKUP'" 2>/dev/null; then
-    echo "[*] Restoring host sysctl tuning..."
-    su -c "
-        while IFS='=' read -r key val; do
-            [ -n \"\$key\" ] && [ -n \"\$val\" ] && sysctl -w \"\$key=\$val\" 2>/dev/null || true
-        done < '$SYSCTL_BACKUP'
-        rm -f '$SYSCTL_BACKUP'
-    " || true
+if [ "${ASL_EXEC_MODE:-root}" = "root" ]; then
+    if asl_exec "test -s '$SYSCTL_BACKUP'" 2>/dev/null; then
+        echo "[*] Restoring host sysctl tuning..."
+        asl_exec "
+            while IFS='=' read -r key val; do
+                [ -n \"\$key\" ] && [ -n \"\$val\" ] && sysctl -w \"\$key=\$val\" 2>/dev/null || true
+            done < '$SYSCTL_BACKUP'
+            rm -f '$SYSCTL_BACKUP'
+        " || true
+    fi
 fi
 
-if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+if ! is_mounted "$DEBIANPATH"; then
     echo "[✓] Debian chroot is already unmounted."
     exit 0
 fi
 
 echo "[*] Stopping Linux chroot environment at $DEBIANPATH..."
 
-su -c "
+asl_exec "
     mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
 
     # wineserver -k can block indefinitely under Box64. Signal only processes
@@ -65,6 +80,7 @@ su -c "
     MOUNTS=\"\$(
         (
             echo \"$DEBIANPATH/proc/sys/fs/binfmt_misc\"
+            echo \"$DEBIANPATH/dev/input\"
             echo \"$DEBIANPATH/dev/pts\"
             echo \"$DEBIANPATH/dev/shm\"
             echo \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"

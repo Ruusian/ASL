@@ -50,6 +50,7 @@ umount_chroot() {
         "$DEBIANPATH/var/lock" \
         "$DEBIANPATH/dev/shm" \
         "$DEBIANPATH/dev/pts" \
+        "$DEBIANPATH/dev/input" \
         "$DEBIANPATH/dev" \
         "$DEBIANPATH/proc/sys/fs/binfmt_misc" \
         "$DEBIANPATH/proc" \

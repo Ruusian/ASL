@@ -2,6 +2,34 @@
 
 All notable changes to the ASL (Android Subsystem for Linux) project are documented in this file.
 
+## [1.5] - 2026-08-17
+
+### 🚀 Architecture, Robustness & User Experience Enhancements
+
+- **Guided First-Time Setup Wizard (`asl wizard` / `asl init`)**:
+  - Implemented `core/wizard.sh` providing guided interactive setup for 4 work presets (Gaming Workstation, Software Developer, Security Auditing, Full Workstation) and Termux:X11 display resolution configuration.
+  - Added option 25 `[z]` to terminal dashboard and CLI subcommand dispatching.
+
+- **Shared Environment & Helper Library (`core/common.sh`)**:
+  - Consolidated path validation, mount checks, color codes, and status logging into shared helper module.
+
+- **Automated Mount Cleanup Rollback (`core/mount-chroot.sh`)**:
+  - Implemented `ERR` signal trap inside mount manager to roll back partial chroot mounts if mounting fails midway.
+
+- **Box64 Dynarec Precision Profile Switcher (`asl game precision`)**:
+  - Added `asl game precision [safe|fast|status]` subcommand to toggle between maximum FPS (Fast) and high precision calculation modes (Safe/Accurate).
+
+- **DRM Render Node Hardware Detection (`core/gpu-profile.sh`)**:
+  - Added DRM render node detection (`/dev/dri/renderD128`, `/dev/dri/card0`) to extend Turnip Vulkan auto-profiling for newer Snapdragon SoCs.
+
+- **Loopback Default for Remote VNC (`desktop/remote.sh`)**:
+  - Updated `x11vnc` default binding to `127.0.0.1:5900` to ensure local isolation unless explicit public access is specified.
+
+- **Non-Interactive Scripting & Diagnostic Log Surfacing (`bin/asl`)**:
+  - Supported `--yes` / `-y` flags across CLI commands for automated background execution (Tasker/MacroDroid).
+  - Added automatic diagnostic log surfacing from `/tmp/app_launch.log` on application startup failures.
+
+
 ## [1.4] - 2026-08-17
 
 ### 🚀 New Features & Desktop GTK3 Control Center

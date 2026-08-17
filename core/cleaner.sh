@@ -5,13 +5,17 @@
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
 
 ensure_chroot_mounted() {
-    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+    if ! is_mounted; then
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
             bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
         fi
@@ -23,9 +27,9 @@ asl_clean_status() {
     echo "--- ASL Storage Usage & Cleanable Cache ---"
     local du_root du_apt du_tmp du_wine
     du_root=$(du -sh "$DEBIANPATH" 2>/dev/null | cut -f1)
-    du_apt=$(su -c "du -sh '$DEBIANPATH/var/cache/apt/archives' 2>/dev/null" | cut -f1)
-    du_tmp=$(su -c "du -sh '$DEBIANPATH/tmp' 2>/dev/null" | cut -f1)
-    du_wine=$(su -c "du -sh '$DEBIANPATH/root/.cache' 2>/dev/null" | cut -f1)
+    du_apt=$(asl_exec "du -sh '$DEBIANPATH/var/cache/apt/archives' 2>/dev/null" | cut -f1)
+    du_tmp=$(asl_exec "du -sh '$DEBIANPATH/tmp' 2>/dev/null" | cut -f1)
+    du_wine=$(asl_exec "du -sh '$DEBIANPATH/root/.cache' 2>/dev/null" | cut -f1)
 
     echo "Debian RootFS Total Size: ${du_root:-unknown}"
     echo "  - APT Package Archives Cache: ${du_apt:-0B}"
@@ -38,7 +42,7 @@ asl_clean_run() {
     ensure_chroot_mounted || return 1
     echo "[*] Cleaning ASL storage cache (mode: $mode)..."
 
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    asl_chroot_exec "
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         case \"$mode\" in
             apt)
@@ -52,8 +56,8 @@ asl_clean_run() {
                 rm -rf /var/tmp/* 2>/dev/null || true
                 ;;
             cache)
-                echo \"[*] Cleaning user build & shader cache (~/.cache)...\"
-                rm -rf /root/.cache/* /home/*/.cache/* 2>/dev/null || true
+                echo \"[*] Cleaning user build & shader cache (~/.cache & /tmp/.mesa_cache)...\"
+                rm -rf /root/.cache/* /home/*/.cache/* /tmp/.mesa_cache/* 2>/dev/null || true
                 ;;
             all)
                 echo \"[*] Purging APT package cache...\"
@@ -61,8 +65,8 @@ asl_clean_run() {
                 rm -rf /var/lib/apt/lists/*
                 echo \"[*] Cleaning temporary files...\"
                 rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
-                echo \"[*] Cleaning user cache...\"
-                rm -rf /root/.cache/* /home/*/.cache/* 2>/dev/null || true
+                echo \"[*] Cleaning user cache & shader cache...\"
+                rm -rf /root/.cache/* /home/*/.cache/* /tmp/.mesa_cache/* 2>/dev/null || true
                 ;;
             *)
                 echo \"[!] Unknown clean mode: $mode\"
@@ -70,10 +74,10 @@ asl_clean_run() {
                 exit 1
                 ;;
         esac
-    '"
+    "
 
     # Also clean host side Mesa shader cache if present
-    rm -rf /dev/shm/mesa_shader_cache/* 2>/dev/null || true
+    rm -rf /dev/shm/mesa_shader_cache/* /tmp/.mesa_cache/* 2>/dev/null || true
 
     echo "[✓] Storage cleanup completed successfully."
 }

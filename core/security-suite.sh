@@ -5,13 +5,17 @@
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" != "proot" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
 
 ensure_chroot_mounted() {
-    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+    if ! is_mounted; then
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
             bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
         fi
@@ -24,7 +28,7 @@ asl_security_status() {
 
     check_sec_tool() {
         local name="$1" cmd="$2"
-        if su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; command -v $cmd >/dev/null 2>&1'" 2>/dev/null; then
+        if asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; command -v $cmd >/dev/null 2>&1" 2>/dev/null; then
             printf "  %-14s : INSTALLED\n" "$name"
         else
             printf "  %-14s : NOT INSTALLED\n" "$name"
@@ -45,7 +49,7 @@ asl_security_install() {
     ensure_chroot_mounted || return 1
     echo "[*] Installing defensive security toolsuite preset: $preset..."
 
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    asl_chroot_exec "
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         set -e
         apt-get update
@@ -57,7 +61,8 @@ asl_security_install() {
                 ;;
             audit|full)
                 echo \"[*] Installing full security audit suite...\"
-                DEBIAN_FRONTEND=noninteractive apt-get install -y nmap tshark tcpdump socat hydra aircrack-ng john hashcat tshark
+                echo \"wireshark-common wireshark-common/install-setuid boolean true\" | debconf-set-selections 2>/dev/null || true
+                DEBIAN_FRONTEND=noninteractive apt-get install -y nmap tshark tcpdump socat hydra aircrack-ng john hashcat
                 ;;
             nmap) apt-get install -y nmap ;;
             wireshark|tshark) DEBIAN_FRONTEND=noninteractive apt-get install -y tshark ;;
@@ -66,7 +71,7 @@ asl_security_install() {
                 apt-get install -y \"$preset\"
                 ;;
         esac
-    '" || { echo "[!] Security suite installation failed."; return 1; }
+    " || { echo "[!] Security suite installation failed."; return 1; }
 
     echo "[✓] Defensive security toolsuite preset '$preset' installed successfully."
 }

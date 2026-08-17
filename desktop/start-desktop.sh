@@ -3,13 +3,16 @@
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
 source "$SCRIPT_DIR/core/gpu-profile.sh"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/asl/desktop"
 STATE_FILE="$STATE_DIR/state"
 LAUNCHER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 MAXMAP_BACKUP="/data/local/tmp/asl_desktop_max_map_count"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
@@ -21,24 +24,32 @@ ensure_state_dir() {
 
 sysctl_maxmap_backup() {
     local cur
-    cur=$(su -c "sysctl -n vm.max_map_count" 2>/dev/null | tr -d '[:space:]')
+    cur=$(asl_exec "sysctl -n vm.max_map_count" 2>/dev/null | tr -d '[:space:]')
     if [ -n "$cur" ] && [ "$cur" != "1048576" ]; then
-        su -c "echo '$cur' > '$MAXMAP_BACKUP'" 2>/dev/null || true
+        asl_exec "echo '$cur' > '$MAXMAP_BACKUP'" 2>/dev/null || true
     fi
 }
 
 sysctl_maxmap_restore() {
     local orig
-    orig=$(su -c "cat '$MAXMAP_BACKUP' 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    orig=$(asl_exec "cat '$MAXMAP_BACKUP' 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
     if [ -n "$orig" ]; then
-        su -c "sysctl -w vm.max_map_count='$orig'" 2>/dev/null || true
-        su -c "rm -f '$MAXMAP_BACKUP'" 2>/dev/null || true
+        asl_exec "sysctl -w vm.max_map_count='$orig'" 2>/dev/null || true
+        asl_exec "rm -f '$MAXMAP_BACKUP'" 2>/dev/null || true
+    fi
+}
+
+protect_pid_oom() {
+    local pid="${1:-}"
+    [ -n "$pid" ] || return 0
+    if [ "${ASL_EXEC_MODE:-root}" = "root" ]; then
+        asl_exec "echo -1000 > /proc/$pid/oom_score_adj 2>/dev/null || true" 2>/dev/null || true
     fi
 }
 
 pid_start_time() {
     [ -n "${1:-}" ] || return 1
-    su -c 'export PATH="/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:$PATH"; awk '\''{print $22}'\'' /proc/'"$1"'/stat 2>/dev/null' || awk '{print $22}' "/proc/$1/stat" 2>/dev/null
+    asl_exec 'export PATH="/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:$PATH"; awk '\''{print $22}'\'' /proc/'"$1"'/stat 2>/dev/null' || awk '{print $22}' "/proc/$1/stat" 2>/dev/null
 }
 
 process_matches() {
@@ -46,7 +57,7 @@ process_matches() {
     actual=$(pid_start_time "$pid")
     [ -n "$actual" ] || return 1
     [ "$actual" = "$start" ] || return 1
-    cmd=$(su -c 'export PATH="/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:$PATH"; tr '\''\0'\'' '\'' '\'' < /proc/'"$1"'/cmdline 2>/dev/null')
+    cmd=$(asl_exec 'export PATH="/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:$PATH"; tr '\''\0'\'' '\'' '\'' < /proc/'"$1"'/cmdline 2>/dev/null')
     if [ -z "$cmd" ] && [ -r "/proc/$pid/cmdline" ]; then
         cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline")
     fi
@@ -63,7 +74,7 @@ process_matches() {
 # Note: $pat is expanded by the outer shell; all other vars run under su.
 chroot_pkill() {
     local sig="$1" pat="$2"
-    su -c "
+    asl_exec "
         pids=\$(grep -lE \"$pat\" /proc/[0-9]*/comm /proc/[0-9]*/cmdline 2>/dev/null | cut -d/ -f3 | sort -u)
         for pid in \$pids; do
             [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
@@ -77,7 +88,7 @@ chroot_pkill() {
 # chroot-jailed process — those are reaped via chroot_pkill instead.
 host_pkill() {
     local sig="$1" pat="$2"
-    su -c "
+    asl_exec "
         pids=\$(grep -lE \"$pat\" /proc/[0-9]*/comm /proc/[0-9]*/cmdline 2>/dev/null | cut -d/ -f3 | sort -u)
         for pid in \$pids; do
             [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"/\" ] || continue
@@ -128,13 +139,14 @@ start_audio() {
         return 1
     fi
     echo "[*] Initializing PulseAudio sound server..."
-    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1 2>/dev/null || true
+    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-native-protocol-unix socket=/tmp/pulse-socket auth-anonymous=1 tsched=0" --exit-idle-time=-1 2>/dev/null || true
     sleep 1
     PULSE_PID=$(pgrep -xo pulseaudio || true)
     [ -n "$PULSE_PID" ] || return 1
     PULSE_START=$(pid_start_time "$PULSE_PID")
     [ -n "$PULSE_START" ] || return 1
     PULSE_OWNED=1
+    protect_pid_oom "$PULSE_PID"
     echo "[✓] PulseAudio server active."
 }
 
@@ -156,6 +168,7 @@ start_gpu() {
         VIRGL_PID=$!
         VIRGL_START=$(pid_start_time "$VIRGL_PID")
         VIRGL_OWNED=1
+        protect_pid_oom "$VIRGL_PID"
         sleep 1
         [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
         echo "[✓] VirGL GPU hardware acceleration active."
@@ -163,10 +176,11 @@ start_gpu() {
 }
 
 cleanup_started() {
-    if [ -n "${SESSION_PID:-}" ] && process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -TERM $SESSION_PID" 2>/dev/null || true; fi
+    if [ -n "${SESSION_PID:-}" ] && process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || true; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ -n "${X11_PID:-}" ] && process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || true; fi
     if [ "${PULSE_OWNED:-0}" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || true; fi
+    rm -f /tmp/.X11-unix/X0 /tmp/.X0-lock "$DEBIANPATH/tmp/.X11-unix/X0" "$DEBIANPATH/tmp/.X0-lock" 2>/dev/null || true
 }
 
 start_desktop() {
@@ -178,13 +192,16 @@ start_desktop() {
         fi
         rm -f "$STATE_FILE"
     fi
+    if command -v termux-wake-lock >/dev/null 2>&1; then
+        termux-wake-lock 2>/dev/null || true
+    fi
     command -v termux-x11 >/dev/null || { echo "[!] Termux:X11 client is not installed. Install it with: pkg install termux-x11"; return 1; }
     local missing=""
-    su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/xfwm4" 2>/dev/null || missing="xfwm4"
-    su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/xfdesktop" 2>/dev/null || missing="$missing${missing:+ }xfdesktop4"
-    su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/dbus-launch" 2>/dev/null || missing="$missing${missing:+ }dbus-x11"
-    su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/dbus-daemon" 2>/dev/null || missing="$missing${missing:+ }dbus"
-    su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/xfsettingsd" 2>/dev/null || missing="$missing${missing:+ }xfce4-settings"
+    asl_chroot_exec "/usr/bin/test -x /usr/bin/xfwm4" 2>/dev/null || missing="xfwm4"
+    asl_chroot_exec "/usr/bin/test -x /usr/bin/xfdesktop" 2>/dev/null || missing="$missing${missing:+ }xfdesktop4"
+    asl_chroot_exec "/usr/bin/test -x /usr/bin/dbus-launch" 2>/dev/null || missing="$missing${missing:+ }dbus-x11"
+    asl_chroot_exec "/usr/bin/test -x /usr/bin/dbus-daemon" 2>/dev/null || missing="$missing${missing:+ }dbus"
+    asl_chroot_exec "/usr/bin/test -x /usr/bin/xfsettingsd" 2>/dev/null || missing="$missing${missing:+ }xfce4-settings"
     if [ -n "$missing" ]; then
         echo "[!] Missing Debian packages: $missing"
         echo "    Install inside chroot: apt install $missing"
@@ -194,7 +211,7 @@ start_desktop() {
     start_gpu || true
     echo "[*] Optimizing system memory before desktop startup..."
     sysctl_maxmap_backup
-    su -c "sysctl -w vm.max_map_count=1048576; sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
+    asl_exec "sysctl -w vm.max_map_count=1048576; sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
     DISPLAY_ID=:0
     am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[*] Starting Termux:X11 display server..."
@@ -215,13 +232,15 @@ start_desktop() {
         [ -n "$X11_START" ] && break
         sleep 1
     done
-    [ -n "$X11_START" ] || { echo "[!] Termux:X11 failed to start."; cleanup_started; return 1; }
+    [ -n "$X11_START" ] || { echo "[!] Termux:X11 failed to start."; echo "    💡 Hint: Ensure Termux:X11 companion app is installed and open on your device."; cleanup_started; return 1; }
+    protect_pid_oom "$X11_PID"
     for _i in 1 2 3 4 5 6 7 8 9 10; do
-        if su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:\$PATH\"; grep -q '/data/data/com.termux/files/usr/tmp/.X11-unix/X0' /proc/net/unix" 2>/dev/null; then
+        if asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:\$PATH\"; grep -q '/data/data/com.termux/files/usr/tmp/.X11-unix/X0' /proc/net/unix" 2>/dev/null; then
             break
         fi
         if [ "$_i" -eq 10 ]; then
             echo "[!] Termux:X11 display socket is not accepting connections."
+            echo "    💡 Hint: Open Termux:X11 app manually from Android launcher and retry."
             cleanup_started
             return 1
         fi
@@ -236,11 +255,20 @@ start_desktop() {
         socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=700 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
         SOCAT_PID=$!
         SOCAT_START=$(pid_start_time "$SOCAT_PID")
+        protect_pid_oom "$SOCAT_PID"
     fi
     asl_gpu_apply
     asl_sync_chroot_env 2>/dev/null || true
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
     [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
+    local asl_target_user="${ASL_USER:-root}"
+    local target_home="/root"
+    local target_uid=0
+    if [ "$asl_target_user" != "root" ]; then
+        target_home="/home/$asl_target_user"
+        target_uid=$(asl_chroot_exec "id -u '$asl_target_user' 2>/dev/null" 2>/dev/null || echo 1000)
+        [ -n "$target_uid" ] || target_uid=1000
+    fi
     mkdir -p "$termux_tmp"
     local launcher_script="$termux_tmp/asl-start-xfce.sh"
     umask 022
@@ -254,13 +282,13 @@ for v in \$(env | grep -E -o '^(TERMUX|SHELL_CMD|ANDROID|OPENAI|CLAUDE|OPENCLAUD
 done
 export DISPLAY=:0
 export TMPDIR=/tmp
-export PULSE_SERVER=tcp:127.0.0.1
+export PULSE_SERVER=unix:/tmp/pulse-socket,tcp:127.0.0.1
 export TERM=xterm-256color
 export LANG=C.UTF-8
-export HOME=/root
-export USER=root
+export HOME=$target_home
+export USER=$asl_target_user
 export SHELL=/bin/bash
-export XDG_RUNTIME_DIR=/run/user/0
+export XDG_RUNTIME_DIR=/run/user/$target_uid
 export XDG_MENU_PREFIX=xfce-
 export XDG_DATA_DIRS=/usr/local/share:/usr/share
 export XDG_CONFIG_DIRS=/etc/xdg
@@ -332,11 +360,22 @@ exec dbus-run-session -- bash -c '
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
     cp -f "$launcher_script" "$termux_tmp/asl-start-xfce.sh" 2>/dev/null || true
-    su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+    case "${ASL_EXEC_MODE:-root}" in
+        proot|shizuku)
+            asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+            ;;
+        root|*)
+            if [ "$asl_target_user" = "root" ]; then
+                asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+            else
+                asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid='$asl_target_user' --regid='$asl_target_user' --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+            fi
+            ;;
+    esac
     SESSION_PID=
     SESSION_START=
     for _i in 1 2 3 4 5 6 7 8 9 10; do
-        for pid in $(su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x xfwm4" 2>/dev/null); do
+        for pid in $(asl_chroot_exec "pgrep -x xfwm4" 2>/dev/null); do
             st=$(pid_start_time "$pid")
             if [ -n "$st" ] && process_matches "$pid" "xfwm4" "$st"; then
                 SESSION_PID="$pid"
@@ -373,10 +412,10 @@ stop_desktop() {
     sleep 1
     chroot_pkill 9 '\b(wine|wine64|wineserver|box64)\b'
     chroot_pkill TERM '\b(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query|picom)\b'
-    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
+    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
-    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then su -c "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
-    su -c "chroot '$DEBIANPATH' /bin/bash -c 'echo x > /tmp/xfce-keepalive 2>/dev/null || true'" 2>/dev/null || true
+    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START"; then asl_exec "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
+    asl_chroot_exec "echo x > /tmp/xfce-keepalive 2>/dev/null || true" 2>/dev/null || true
     sleep 1
     chroot_pkill TERM '\b(asl-start-xfce|dbus-run-session|dbus-daemon)\b'
     if process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || failed=1; fi
@@ -387,6 +426,9 @@ stop_desktop() {
     sysctl_maxmap_restore
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi
     rm -f "$STATE_FILE"
+    if command -v termux-wake-unlock >/dev/null 2>&1; then
+        termux-wake-unlock 2>/dev/null || true
+    fi
     echo "[✓] ASL-managed desktop stopped."
 }
 
@@ -441,8 +483,8 @@ launch_app() {
     local id="${1:-}" root
     safe_id "$id" || { echo "[!] Invalid desktop application ID."; return 1; }
     for root in /usr/share/applications /usr/local/share/applications /root/.local/share/applications; do
-        if su -c "chroot '$DEBIANPATH' /usr/bin/test -f '$root/$id.desktop'" 2>/dev/null; then
-            exec su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\"'"
+        if asl_chroot_exec "test -f '$root/$id.desktop'" 2>/dev/null; then
+            asl_chroot_exec "export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\""
         fi
     done
     echo "[!] Debian desktop entry not found: $id"
@@ -450,7 +492,7 @@ launch_app() {
 }
 
 sync_apps() {
-    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then echo "[!] Mount the Debian chroot before synchronizing apps."; return 1; fi
+    if ! is_mounted; then echo "[!] Mount the Debian chroot before synchronizing apps."; return 1; fi
     mkdir -p "$LAUNCHER_DIR" || return 1
     local file root id name target tmp count=0
     for target in "$LAUNCHER_DIR"/asl-*.desktop; do
@@ -464,7 +506,7 @@ sync_apps() {
         [ -n "$root" ] || continue
         id=$(basename "$file" .desktop)
         safe_id "$id" || continue
-        name=$(su -c "chroot '$DEBIANPATH' /usr/bin/awk -F= 'BEGIN { type=\"\"; hidden=0; nodisplay=0 } /^Type=/{type=\$2} /^Hidden=true$/{hidden=1} /^NoDisplay=true$/{nodisplay=1} /^Name=/{if (name == \"\") name=substr(\$0, 6)} END {if (type == \"Application\" && !hidden && !nodisplay && name != \"\") print name}' '$root/$id.desktop'" 2>/dev/null) || continue
+        name=$(asl_chroot_exec "awk -F= 'BEGIN { type=\"\"; hidden=0; nodisplay=0 } /^Type=/{type=\$2} /^Hidden=true$/{hidden=1} /^NoDisplay=true$/{nodisplay=1} /^Name=/{if (name == \"\") name=substr(\$0, 6)} END {if (type == \"Application\" && !hidden && !nodisplay && name != \"\") print name}' '$root/$id.desktop'" 2>/dev/null) || continue
         [ -n "$name" ] || continue
         target="$LAUNCHER_DIR/asl-$id.desktop"; tmp="$target.tmp.$$"
         umask 077
@@ -473,7 +515,7 @@ sync_apps() {
             printf 'Exec="%s" desktop launch %s\n' "${0%/*}/../bin/asl" "$id"
             printf 'Terminal=false\nX-ASL-Managed=true\nX-ASL-Desktop-Id=%s\n' "$id"
         } > "$tmp" && mv -f "$tmp" "$target" && count=$((count + 1))
-    done < <(su -c "chroot '$DEBIANPATH' /usr/bin/find /usr/share/applications /usr/local/share/applications /root/.local/share/applications -type f -name '*.desktop' -print0 2>/dev/null" 2>/dev/null)
+    done < <(asl_chroot_exec "find /usr/share/applications /usr/local/share/applications /root/.local/share/applications -type f -name '*.desktop' -print0 2>/dev/null" 2>/dev/null)
     echo "[✓] Synchronized $count ASL-owned launchers."
 }
 

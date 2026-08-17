@@ -1,5 +1,12 @@
 # ASL Gaming & Wine Isolation Guide
 
+## Execution Environment & Hardware Acceleration
+ASL provides Direct3D 9/10/11/12 gaming acceleration across Root (`su`), Shizuku (`rish`), and PRoot execution modes:
+- **Root Mode (`su`)**: Direct GPU node access (`/dev/kgsl-3d0`, `/dev/dri/*`) for raw Turnip Mesa Vulkan performance.
+- **Shizuku & PRoot Modes**: Hardware acceleration via Zink and VirGL renderers depending on device kernel permissions.
+
+---
+
 ## Wine Prefix & Directory Isolation Topology
 ASL isolates Wine applications to prevent DLL conflicts and corrupted game configurations across titles.
 
@@ -16,6 +23,22 @@ When an `.exe` file inside `/opt/games/<GameName>/...` or `/sdcard/Games/<GameNa
 To force a game or application into a custom prefix, create a file named `.wineprefix` in the game directory containing the absolute path:
 ```bash
 echo "/root/.wine-prefixes/MyCustomGame" > /opt/games/MyGame/.wineprefix
+```
+
+---
+
+## Box64 Dynarec Precision Tuning Profile
+Toggle dynamic recompilation precision presets between high frame rate and crash recovery:
+
+```bash
+# Maximize performance (Fast mode)
+asl game precision fast
+
+# High Precision compatibility mode (Safe mode for float/NaN sensitive titles)
+asl game precision safe
+
+# Inspect active dynarec precision profile
+asl game precision status
 ```
 
 ---

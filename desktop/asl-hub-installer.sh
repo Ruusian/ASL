@@ -5,13 +5,19 @@
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
+DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-}" != "proot" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
 
 ensure_chroot_mounted() {
-    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+    if ! is_mounted; then
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
             bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
         fi
@@ -19,19 +25,20 @@ ensure_chroot_mounted() {
 }
 
 install_asl_hub_deb() {
-    echo "[*] Deploying ASL Hub GTK3 Control Center into Debian rootfs..."
+    echo "[*] Deploying ASL Hub GTK3 Control Center into Linux rootfs..."
     ensure_chroot_mounted || return 1
 
     local tmp_app="$HOME/.asl_hub_app.tmp"
     local tmp_desk="$HOME/.asl_hub_desk.tmp"
     local target_app="$DEBIANPATH/usr/local/bin/asl-control-center"
 
-    su -c "mkdir -p '$DEBIANPATH/usr/local/bin'"
+    mkdir -p "$DEBIANPATH/usr/local/bin" 2>/dev/null || asl_exec "mkdir -p '$DEBIANPATH/usr/local/bin'"
 
     cat << 'PYEOF' > "$tmp_app"
 #!/usr/bin/env python3
 import os
 import sys
+import shutil
 import gi
 
 gi.require_version('Gtk', '3.0')
@@ -104,7 +111,8 @@ class ASLHubWindow(Gtk.Window):
     def run_cmd(self, cmd_args):
         try:
             self.log(f"$ {' '.join(cmd_args)}")
-            pid = os.posix_spawn(cmd_args[0], cmd_args, os.environ)
+            exec_path = shutil.which(cmd_args[0]) or cmd_args[0]
+            pid = os.posix_spawn(exec_path, [exec_path] + cmd_args[1:], os.environ)
             GLib.child_watch_add(pid, self.on_cmd_done, cmd_args[0])
         except Exception as e:
             self.log(f"Error launching process: {e}")
@@ -249,22 +257,22 @@ if __name__ == "__main__":
     Gtk.main()
 PYEOF
 
-    su -c "
-        cp '$tmp_app' '$target_app'
-        chmod 755 '$target_app'
-        ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-gui'
-        ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-hub'
-    "
+    cp "$tmp_app" "$target_app" 2>/dev/null || asl_exec "cp '$tmp_app' '$target_app'"
+    chmod 755 "$target_app" 2>/dev/null || asl_exec "chmod 755 '$target_app'"
+    ln -sf /usr/local/bin/asl-control-center "$DEBIANPATH/usr/local/bin/asl-gui" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-gui'"
+    ln -sf /usr/local/bin/asl-control-center "$DEBIANPATH/usr/local/bin/asl-hub" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-hub'"
     rm -f "$tmp_app"
 
     # Install GTK3 dependencies inside Debian chroot
-    echo "[*] Ensuring python3-gi & GTK3 packages are installed in Debian..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    echo "[*] Ensuring python3-gi & GTK3 packages are installed in Linux rootfs..."
+    asl_chroot_exec "
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-        if ! python3 -c \"import gi; gi.require_version(\\\"Gtk\\\", \\\"3.0\\\")\" 2>/dev/null; then
-            apt-get update && apt-get install -y python3-gi gir1.2-gtk-3.0 python3
+        if command -v apt-get >/dev/null 2>&1; then
+            if ! python3 -c \"import gi; gi.require_version('Gtk', '3.0')\" 2>/dev/null; then
+                apt-get update && apt-get install -y python3-gi gir1.2-gtk-3.0 python3
+            fi
         fi
-    '" || true
+    " || true
 
     # Deploy Desktop Shortcut (.desktop)
     echo "[*] Creating Desktop launchers in /usr/share/applications & /root/Desktop..."
@@ -280,26 +288,16 @@ Categories=System;Settings;GTK;
 Keywords=ASL;Control;Center;Wine;GPU;
 DESKEOF
 
-    su -c "
-        cp '$tmp_desk' '$DEBIANPATH/usr/share/applications/asl-hub.desktop'
-        chmod 644 '$DEBIANPATH/usr/share/applications/asl-hub.desktop'
+    cp "$tmp_desk" "$DEBIANPATH/usr/share/applications/asl-hub.desktop" 2>/dev/null || asl_exec "cp '$tmp_desk' '$DEBIANPATH/usr/share/applications/asl-hub.desktop'"
+    chmod 644 "$DEBIANPATH/usr/share/applications/asl-hub.desktop" 2>/dev/null || asl_exec "chmod 644 '$DEBIANPATH/usr/share/applications/asl-hub.desktop'"
 
-        # Place directly on Desktop folder so user sees it on the desktop screen
-        mkdir -p '$DEBIANPATH/root/Desktop'
-        cp '$tmp_desk' '$DEBIANPATH/root/Desktop/asl-hub.desktop'
-        chmod +x '$DEBIANPATH/root/Desktop/asl-hub.desktop'
+    mkdir -p "$DEBIANPATH/root/Desktop" 2>/dev/null || asl_exec "mkdir -p '$DEBIANPATH/root/Desktop'"
+    cp "$tmp_desk" "$DEBIANPATH/root/Desktop/asl-hub.desktop" 2>/dev/null || asl_exec "cp '$tmp_desk' '$DEBIANPATH/root/Desktop/asl-hub.desktop'"
+    chmod +x "$DEBIANPATH/root/Desktop/asl-hub.desktop" 2>/dev/null || asl_exec "chmod +x '$DEBIANPATH/root/Desktop/asl-hub.desktop'"
 
-        for user_home in $DEBIANPATH/home/*; do
-            if [ -d \"\$user_home\" ]; then
-                mkdir -p \"\$user_home/Desktop\"
-                cp '$tmp_desk' \"\$user_home/Desktop/asl-hub.desktop\"
-                chmod +x \"\$user_home/Desktop/asl-hub.desktop\"
-            fi
-        done
-    "
     rm -f "$tmp_desk"
 
-    echo "[✓] ASL Hub GTK3 Control Center deployed onto Debian desktop."
+    echo "[✓] ASL Hub GTK3 Control Center deployed onto Linux desktop."
 }
 
 case "${1:-install}" in

@@ -34,7 +34,20 @@ export PULSE_LATENCY_MSEC=80
 ## 3. Box64 Dynarec Tuning Profiles
 Box64 converts x86_64 machine code to ARM64 dynamically.
 
-### Default Optimized Profile (`/root/.config/asl/perf_profile.env`)
+### CLI Precision Profile Switcher (`asl game precision`)
+Switch runtime Box64 dynarec profiles dynamically:
+```bash
+# Maximum FPS Profile (FASTROUND=1, FASTNAN=1, X87DOUBLE=0)
+asl game precision fast
+
+# Safe Compatibility Profile (FASTROUND=0, FASTNAN=0, X87DOUBLE=1)
+asl game precision safe
+
+# Query Active Profile Status
+asl game precision status
+```
+
+### Default Optimized Profile (`/root/.config/asl/perf_profile.env` / `/data/local/tmp/asl_dynarec_precision`)
 ```bash
 export BOX64_DYNAREC=1
 export BOX64_DYNAREC_FASTNAN=1
@@ -46,4 +59,4 @@ export BOX64_NOBANNER=1
 
 ### Compatibility Mode (For crash-prone games)
 If a game crashes due to floating-point calculations or strict NaN requirements:
-Set `BOX64_DYNAREC_FASTNAN=0` in option `7` of `asl-gaming-hub`.
+Run `asl game precision safe` or select option `7` in `asl-gaming-hub`.

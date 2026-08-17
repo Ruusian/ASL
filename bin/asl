@@ -10,6 +10,20 @@ DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
 export ASL_DIR DEBIANPATH
 
+AUTO_CONFIRM=0
+FILTERED_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --yes|-y|--non-interactive) AUTO_CONFIRM=1 ;;
+        *) FILTERED_ARGS+=("$arg") ;;
+    esac
+done
+if [ ${#FILTERED_ARGS[@]} -gt 0 ]; then
+    set -- "${FILTERED_ARGS[@]}"
+else
+    set --
+fi
+
 if [ "${NO_COLOR:-}" = "" ]; then
     C_RESET=$'\033[0m'
     C_BOLD=$'\033[1m'
@@ -43,35 +57,50 @@ menu_item() {
     fi
 }
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ -f "$ASL_DIR/core/common.sh" ]; then
+    source "$ASL_DIR/core/common.sh"
+elif [ -f "$HOME/ASL/core/common.sh" ]; then
+    source "$HOME/ASL/core/common.sh"
+fi
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
-
-is_mounted() {
-    su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null
-}
 
 run_in_chroot() {
     local command_text="$*"
     local command_b64 max_encoded_size
 
     # Validate command size to prevent truncation or argument limit issues
-    # ARG_MAX on Linux is typically 128KB; allow commands up to 50KB encoded
     if [ ${#command_text} -gt 40000 ]; then
         echo "[!] Error: Command is too large (${#command_text} chars; max ~40000 recommended)."
         return 1
     fi
 
     command_b64=$(printf '%s' "$command_text" | base64 | tr -d '\n')
-    
-    # Verify base64 encoding succeeded and isn't truncated
+
     if [ -z "$command_b64" ]; then
         echo "[!] Error: Failed to encode command."
         return 1
     fi
 
-    su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --noprofile --norc -c \"printf \\\"%s\\\" \\\"$command_b64\\\" | /usr/bin/base64 -d | /bin/bash\"; else printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash; fi'" || return $?
+    case "${ASL_EXEC_MODE:-root}" in
+        shizuku)
+            if rish -c "id" >/dev/null 2>&1; then
+                rish -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" 2>/dev/null || \
+                proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
+            else
+                proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
+            fi
+            ;;
+        proot)
+            proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
+            ;;
+        root|*)
+            asl_exec "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --noprofile --norc -c \"printf \\\"%s\\\" \\\"$command_b64\\\" | /usr/bin/base64 -d | /bin/bash\"; else printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash; fi'" || return $?
+            ;;
+    esac
 }
 
 launch_desktop_app() {
@@ -120,6 +149,11 @@ launch_desktop_app() {
                 nohup \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
             fi
         fi
+        sleep 0.5
+        if [ -s /tmp/app_launch.log ] && grep -qiE 'error|failed|cannot open' /tmp/app_launch.log 2>/dev/null; then
+            echo \"[!] Diagnostics (/tmp/app_launch.log):\"
+            tail -n 5 /tmp/app_launch.log
+        fi
     "
 }
 
@@ -133,6 +167,7 @@ show_help() {
     echo "Dashboard:"
     echo "  dashboard, menu  Open the interactive terminal dashboard"
     echo "  overview         Show concise chroot, desktop, audio, X11, and GPU state"
+    echo "  wizard, init     Launch Guided First-Time Setup Wizard"
     echo "  mode [gaming|performance|balanced] Configure performance profile"
     echo "  hud [on|off|toggle|status] Toggle MangoHud / DXVK performance overlay"
     echo "  thermal          Display battery and CPU/GPU thermal temperatures"
@@ -218,7 +253,7 @@ draw_bar() {
 asl_uptime() {
     local up d h m
     up=$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null || true)
-    [ -n "$up" ] && [ "$up" -gt 0 ] 2>/dev/null || up=$(su -c "awk '{printf \"%d\", \$1}' /proc/uptime 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    [ -n "$up" ] && [ "$up" -gt 0 ] 2>/dev/null || up=$(asl_exec "awk '{printf \"%d\", \$1}' /proc/uptime 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
     [ -n "$up" ] || { printf '?'; return; }
     d=$((up / 86400)); up=$((up % 86400))
     h=$((up / 3600)); m=$(((up % 3600) / 60))
@@ -229,7 +264,7 @@ asl_uptime() {
 
 asl_cpu_freq() {
     local f
-    f=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || su -c "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    f=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || asl_exec "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
     if [ -n "$f" ] && [[ "$f" =~ ^[0-9]+$ ]] && [ "$f" -gt 0 ]; then
         printf '%dMHz' "$((f / 1000))"
     else
@@ -253,7 +288,7 @@ batt_temp_c() {
         else printf '%d' "$raw"; fi
         return
     fi
-    su -c "dumpsys battery" 2>/dev/null | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
+    asl_exec "dumpsys battery" 2>/dev/null | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
 }
 
 asl_cpu_temp_c() {
@@ -300,8 +335,8 @@ asl_gpu_cached() {
 
 asl_remote_summary() {
     local active=()
-    if su -c "chroot '$DEBIANPATH' pgrep -x sshd" >/dev/null 2>&1; then active+=("SSH:2222"); fi
-    if su -c "chroot '$DEBIANPATH' pgrep -x x11vnc" >/dev/null 2>&1; then active+=("VNC:5900"); fi
+    if asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then active+=("SSH:2222"); fi
+    if asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then active+=("VNC:5900"); fi
     if pgrep -f "pinggy.io" >/dev/null 2>&1; then active+=("Tunnel"); fi
     if [ ${#active[@]} -gt 0 ]; then
         printf '%s' "${active[*]}"
@@ -347,8 +382,8 @@ overview() {
     swap_free=$(awk '/SwapFree/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)
     if [ "$swap_total" -le 0 ]; then
         local zram_size zram_used_raw
-        zram_size=$(su -c "cat /sys/block/zram0/disksize 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
-        zram_used_raw=$(su -c "cat /sys/block/zram0/mem_used_total 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+        zram_size=$(asl_exec "cat /sys/block/zram0/disksize 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+        zram_used_raw=$(asl_exec "cat /sys/block/zram0/mem_used_total 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$zram_size" ] && [ "$zram_size" -gt 0 ] 2>/dev/null; then
             swap_total=$((zram_size / 1048576))
             swap_used=$((zram_used_raw / 1048576))
@@ -369,10 +404,10 @@ overview() {
     governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
     disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')
     [ -n "$disk_data" ] || disk_data="unknown"
-    load_avg=$(su -c "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3)
+    load_avg=$(cat /proc/loadavg 2>/dev/null || asl_exec "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3)
     [ -n "$load_avg" ] || load_avg="unknown"
 
-    batt_level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || su -c "dumpsys battery" 2>/dev/null | awk '/level:/ {print $2}')
+    batt_level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || asl_exec "dumpsys battery" 2>/dev/null | awk '/level:/ {print $2}')
     batt_temp=$(batt_temp_c)
     cpu_temp=$(asl_cpu_temp_c)
 
@@ -413,8 +448,8 @@ is_safe_target_pid() {
 
     local termux_uid proc_uid proc_root
     termux_uid=$(id -u 2>/dev/null || echo "")
-    proc_uid=$(su -c "awk '/Uid:/ {print \$2}' /proc/$pid/status 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
-    proc_root=$(su -c "readlink /proc/$pid/root 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    proc_uid=$(asl_exec "awk '/Uid:/ {print \$2}' /proc/$pid/status 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    proc_root=$(asl_exec "readlink /proc/$pid/root 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
 
     if [ -n "$termux_uid" ] && [ "$proc_uid" = "$termux_uid" ]; then
         return 0
@@ -434,10 +469,10 @@ process_manager() {
         printf '%s============================================================%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET"
         if [ "$sort_mode" = "mem" ]; then
             printf '%sTop Processes by RAM / Memory Usage (%s%s%s):%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %MEM" "$C_CYAN$C_BOLD" "$C_RESET"
-            su -c "ps -eo pid,user,%cpu,%mem,rss,comm --sort=-%mem | head -n 12" 2>/dev/null || ps aux | head -n 12
+            asl_exec "ps -eo pid,user,%cpu,%mem,rss,comm --sort=-%mem | head -n 12" 2>/dev/null || ps aux | head -n 12
         else
             printf '%sTop Processes by CPU Usage (%s%s%s):%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %CPU" "$C_CYAN$C_BOLD" "$C_RESET"
-            su -c "ps -eo pid,user,%cpu,%mem,rss,comm --sort=-%cpu | head -n 12" 2>/dev/null || ps aux | head -n 12
+            asl_exec "ps -eo pid,user,%cpu,%mem,rss,comm --sort=-%cpu | head -n 12" 2>/dev/null || ps aux | head -n 12
         fi
         echo ""
         echo "Actions:"
@@ -456,8 +491,8 @@ process_manager() {
                 read -r -p "Enter PID to terminate: " target_pid
                 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
                     if is_safe_target_pid "$target_pid"; then
-                        if kill -0 "$target_pid" 2>/dev/null || su -c "kill -0 '$target_pid'" 2>/dev/null; then
-                            if kill "$target_pid" 2>/dev/null || su -c "kill '$target_pid'" 2>/dev/null; then
+                        if kill -0 "$target_pid" 2>/dev/null || asl_exec "kill -0 '$target_pid'" 2>/dev/null; then
+                            if kill "$target_pid" 2>/dev/null || asl_exec "kill '$target_pid'" 2>/dev/null; then
                                 echo "[✓] Sent SIGTERM to PID $target_pid"
                             else
                                 echo "[!] Failed to terminate PID $target_pid"
@@ -477,8 +512,8 @@ process_manager() {
                 read -r -p "Enter PID to force kill: " target_pid
                 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
                     if is_safe_target_pid "$target_pid"; then
-                        if kill -0 "$target_pid" 2>/dev/null || su -c "kill -0 '$target_pid'" 2>/dev/null; then
-                            if kill -9 "$target_pid" 2>/dev/null || su -c "kill -9 '$target_pid'" 2>/dev/null; then
+                        if kill -0 "$target_pid" 2>/dev/null || asl_exec "kill -0 '$target_pid'" 2>/dev/null; then
+                            if kill -9 "$target_pid" 2>/dev/null || asl_exec "kill -9 '$target_pid'" 2>/dev/null; then
                                 echo "[✓] Sent SIGKILL to PID $target_pid"
                             else
                                 echo "[!] Failed to kill PID $target_pid"
@@ -508,7 +543,7 @@ watch_dashboard() {
         echo ""
         printf '%sTop Processes by CPU Usage%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '%s%-7s %-8s %7s %6s  %s%s\n' "$C_DIM" "PID" "USER" "%CPU" "%MEM" "COMMAND" "$C_RESET"
-        su -c "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || ps aux | head -n 9 | tail -n +2 || true
+        asl_exec "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || ps aux | head -n 9 | tail -n +2 || true
         echo ""
         printf '%s[%s] Up %s | Ctrl+C to return to dashboard%s\n' "$C_DIM" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$C_RESET"
         sleep 2
@@ -543,7 +578,7 @@ dashboard() {
         printf '  %s[ 📊 Diagnostics & Tools ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '  20. %s[p]%s Resource & Process Manager     22. Read-Only Environment Check\n' "$C_YELLOW" "$C_RESET"
         printf '  21. %s[t]%s Thermal & Battery Monitor      23. GPU Hardware Profile\n' "$C_YELLOW" "$C_RESET"
-        printf '  24. Host & Modded Apps Launcher\n'
+        printf '  24. Host & Modded Apps Launcher            25. %s[z]%s Guided Setup Wizard\n' "$C_YELLOW" "$C_RESET"
         echo ""
         printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
         printf '  %s[h]%s Help   %s[r]%s Refresh   %s[w]%s Watch Live   %s[q]%s Exit\n\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET"
@@ -700,6 +735,7 @@ dashboard() {
             22) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
             23) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
             24|apps|host) show_host_apps_menu ;;
+            25|z|Z|wizard|init) bash "$REAL_SCRIPT" wizard; pause_dashboard ;;
             h|H) show_help; pause_dashboard ;;
             r|R|"") ;;
             w|W) watch_dashboard ;;
@@ -710,8 +746,38 @@ dashboard() {
 }
 
 case "${1:-}" in
+    exec-mode|execmode)
+        shift
+        subaction="${1:-status}"
+        case "$subaction" in
+            root)
+                mkdir -p "$PREFIX/etc"
+                echo "root" > "$PREFIX/etc/asl_exec_mode"
+                echo "[✓] ASL execution mode set to: ROOT (su kernel chroot)"
+                ;;
+            shizuku)
+                mkdir -p "$PREFIX/etc"
+                echo "shizuku" > "$PREFIX/etc/asl_exec_mode"
+                echo "[✓] ASL execution mode set to: SHIZUKU (rish ADB privileged mode)"
+                ;;
+            proot)
+                mkdir -p "$PREFIX/etc"
+                echo "proot" > "$PREFIX/etc/asl_exec_mode"
+                echo "[✓] ASL execution mode set to: PROOT (user-space emulation)"
+                ;;
+            status|*)
+                active_mode=$(cat "$PREFIX/etc/asl_exec_mode" 2>/dev/null || echo "auto")
+                echo "ASL Execution Mode: ${active_mode:-auto} (Active runtime: ${ASL_EXEC_MODE:-proot})"
+                echo "Usage: asl exec-mode [root|shizuku|proot|status]"
+                ;;
+        esac
+        ;;
     dashboard|menu|ui)
         dashboard
+        ;;
+    wizard|init|setup-wizard)
+        shift
+        bash "$ASL_DIR/core/wizard.sh" "$@"
         ;;
     overview)
         overview
@@ -741,13 +807,14 @@ case "${1:-}" in
             echo " Status:   INACTIVE (Unmounted)"
         fi
         echo " Location: $DEBIANPATH"
-        SIZE=$(su -c "du -shx '$DEBIANPATH' 2>/dev/null | cut -f1")
+        echo " Mode:     ${ASL_EXEC_MODE:-root}"
+        SIZE=$(asl_exec "du -shx '$DEBIANPATH' 2>/dev/null | cut -f1" 2>/dev/null || du -shx "$DEBIANPATH" 2>/dev/null | cut -f1)
         echo " Size:     ${SIZE:-Unknown}"
 
         if is_mounted; then
             echo ""
             echo "Active Sub-mounts:"
-            su -c "grep '$DEBIANPATH' /proc/mounts | awk '{print \" - \" \$2 \" (\" \$3 \")\"}'" 2>/dev/null
+            asl_exec "grep '$DEBIANPATH' /proc/mounts | awk '{print \" - \" \$2 \" (\" \$3 \")\"}'" 2>/dev/null || true
         fi
         ;;
     shell|enter)
@@ -756,18 +823,32 @@ case "${1:-}" in
         if ! is_mounted; then
             bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         fi
-        if [ "$TARGET_USER" = "root" ]; then
-            exec su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --login; else exec /bin/bash --login; fi'"
-        fi
-        if [[ ! "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]]; then
-            echo "Error: Invalid Debian username."
-            exit 1
-        fi
-        if ! su -c "chroot '$DEBIANPATH' id '$TARGET_USER'" >/dev/null 2>&1; then
-            echo "Error: User '$TARGET_USER' does not exist in Debian chroot."
-            exit 1
-        fi
-        exec su -c "chroot '$DEBIANPATH' /bin/su -l '$TARGET_USER'"
+        case "${ASL_EXEC_MODE:-root}" in
+            shizuku)
+                if rish -c "id" >/dev/null 2>&1; then
+                    exec rish -c "chroot '$DEBIANPATH' /bin/bash --login"
+                else
+                    exec proot-distro login asl-debian -- /bin/bash --login
+                fi
+                ;;
+            proot)
+                exec proot-distro login asl-debian -- /bin/bash --login
+                ;;
+            root|*)
+                if [ "$TARGET_USER" = "root" ]; then
+                    exec su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --login; else exec /bin/bash --login; fi'"
+                fi
+                if [[ ! "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]]; then
+                    echo "Error: Invalid Debian username."
+                    exit 1
+                fi
+                if ! su -c "chroot '$DEBIANPATH' id '$TARGET_USER'" >/dev/null 2>&1; then
+                    echo "Error: User '$TARGET_USER' does not exist in Debian chroot."
+                    exit 1
+                fi
+                exec su -c "chroot '$DEBIANPATH' /bin/su -l '$TARGET_USER'"
+                ;;
+        esac
         ;;
     exec|run)
         shift
@@ -873,27 +954,27 @@ case "${1:-}" in
         case "$TARGET_MODE" in
             gaming|game)
                 echo "[*] Applying Gaming Performance Profile & CPU Governor..."
-                su -c "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
-                su -c "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
-                su -c "echo noconform > '$MODE_STATE'" 2>/dev/null || true
+                asl_exec "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
+                asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
+                asl_exec "echo noconform > '$MODE_STATE'" 2>/dev/null || true
                 echo "[✓] Gaming mode active: RAM compacted, CPU governor set to performance, Turnip flags enabled."
                 ;;
             performance|perf)
                 echo "[*] Applying Maximum Performance Mode..."
-                su -c "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
-                su -c "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
-                su -c "echo noconform > '$MODE_STATE'" 2>/dev/null || true
+                asl_exec "sync; echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory" 2>/dev/null || true
+                asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
+                asl_exec "echo noconform > '$MODE_STATE'" 2>/dev/null || true
                 echo "[✓] Performance mode active: RAM freed, CPU governor set to performance."
                 ;;
             balanced|normal)
-                su -c "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > \"\$g\" 2>/dev/null || echo powersave > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
-                su -c "rm -f '$MODE_STATE'" 2>/dev/null || true
+                asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > \"\$g\" 2>/dev/null || echo powersave > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
+                asl_exec "rm -f '$MODE_STATE'" 2>/dev/null || true
                 unset TU_DEBUG
                 echo "[✓] Balanced profile active: CPU governor reset."
                 ;;
             status|"")
                 GOV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
-                TU_MODE=$(su -c "cat '$MODE_STATE' 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+                TU_MODE=$(asl_exec "cat '$MODE_STATE' 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
                 if [ -n "$TU_MODE" ]; then
                     echo "Current Profile Mode: Gaming ($TU_MODE) | Governor: $GOV"
                 else
@@ -986,7 +1067,7 @@ case "${1:-}" in
         BACKUP_FILE="$BACKUP_DIR/asl-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
         PARTIAL_BACKUP="$BACKUP_FILE.partial"
 
-        required_mb=$(su -c "du -sm '$DEBIANPATH' 2>/dev/null" | awk '{print $1}')
+        required_mb=$(asl_exec "du -sm '$DEBIANPATH' 2>/dev/null" | awk '{print $1}')
         target_free_mb=$(df -m "$BACKUP_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
         if [ -n "$required_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$required_mb" ]; then
             echo "[!] Insufficient disk space in $BACKUP_DIR: ${target_free_mb}MB free, ~${required_mb}MB needed."
@@ -994,11 +1075,11 @@ case "${1:-}" in
         fi
 
         echo "[*] Creating backup at $BACKUP_FILE..."
-        if su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; tar --warning=no-file-changed -czf '$PARTIAL_BACKUP' --exclude='./dev*' --exclude='./proc*' --exclude='./sys*' --exclude='./run*' --exclude='./tmp*' -C '$DEBIANPATH' ." && su -c "test -s '$PARTIAL_BACKUP'"; then
-            su -c "mv '$PARTIAL_BACKUP' '$BACKUP_FILE'"
+        if asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; tar --warning=no-file-changed -czf '$PARTIAL_BACKUP' --exclude='./dev*' --exclude='./proc*' --exclude='./sys*' --exclude='./run*' --exclude='./tmp*' -C '$DEBIANPATH' ." && asl_exec "test -s '$PARTIAL_BACKUP'"; then
+            asl_exec "mv '$PARTIAL_BACKUP' '$BACKUP_FILE'"
             echo "[✓] Backup completed: $BACKUP_FILE"
         else
-            su -c "rm -f '$PARTIAL_BACKUP'" 2>/dev/null || true
+            asl_exec "rm -f '$PARTIAL_BACKUP'" 2>/dev/null || true
             echo "[!] Backup failed; no completed archive was created."
             exit 1
         fi
@@ -1015,7 +1096,7 @@ case "${1:-}" in
             exit 1
         }
         restore_b64=$(printf '%s' "$RESTORE_FILE" | "$BASE64_BIN" | tr -d '\n')
-        if ! su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); tar -tzf \"\$archive\" >/dev/null && ! tar -tzf \"\$archive\" | grep -Eq '(^/|(^|/)\.\.(/|\$))'"; then
+        if ! asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); tar -tzf \"\$archive\" >/dev/null && ! tar -tzf \"\$archive\" | grep -Eq '(^/|(^|/)\.\.(/|\$))'"; then
             echo "[!] Restore archive is unreadable or contains unsafe paths."
             exit 1
         fi
@@ -1031,7 +1112,7 @@ case "${1:-}" in
             bash "$ASL_DIR/core/stop-chroot.sh" || exit 1
         fi
         echo "[*] Staging restore from $RESTORE_FILE..."
-        su -c "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.asl-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; if ! mv \"\$target\" \"\$rollback\"; then echo '[!] Restore failed: could not move current root aside.' >&2; exit 1; fi; if ! mv \"\$stage\" \"\$target\"; then echo '[!] Restore failed: moving staged root into place failed; rolling back original root.' >&2; mv \"\$rollback\" \"\$target\" 2>/dev/null || true; exit 1; fi; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
+        asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.asl-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; if ! mv \"\$target\" \"\$rollback\"; then echo '[!] Restore failed: could not move current root aside.' >&2; exit 1; fi; if ! mv \"\$stage\" \"\$target\"; then echo '[!] Restore failed: moving staged root into place failed; rolling back original root.' >&2; mv \"\$rollback\" \"\$target\" 2>/dev/null || true; exit 1; fi; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
             echo "[!] Restore failed; the Debian root is unchanged (or was rolled back)."
             exit 1
         }
@@ -1092,7 +1173,7 @@ case "${1:-}" in
                     bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
                 fi
                 echo "=== Modded Debian Application Launchers ==="
-                su -c "chroot '$DEBIANPATH' /bin/bash -c 'ls /usr/share/applications/*.desktop /root/Desktop/*.desktop 2>/dev/null | sort -u'" 2>/dev/null | sed 's|^.*/||' | awk '{print " - " $0}'
+                asl_chroot_exec "ls /usr/share/applications/*.desktop /root/Desktop/*.desktop 2>/dev/null | sort -u" 2>/dev/null | sed 's|^.*/||' | awk '{print " - " $0}'
                 ;;
             launch|run)
                 APP="$1"

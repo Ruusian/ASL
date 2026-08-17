@@ -3,18 +3,20 @@
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
 
-is_mounted() {
-    su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null
-}
-
 ensure_mounted() {
     if ! is_mounted; then
-        bash "${0%/*}/../core/mount-chroot.sh" || exit 1
+        bash "$SCRIPT_DIR/core/mount-chroot.sh" || exit 1
     fi
 }
 
@@ -23,7 +25,7 @@ ensure_mounted() {
 # can kill unrelated host processes with a matching cmdline.
 kill_chroot() {
     local sig="$1" pat="$2"
-    su -c "
+    asl_exec "
         for pid in /proc/[0-9]*; do
             [ -d \"\$pid\" ] || continue
             [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
@@ -44,7 +46,7 @@ kill_chroot() {
 # $DEBIANPATH root guard filters out every host-side wrapper.
 kill_host() {
     local sig="$1" pat="$2"
-    su -c "
+    asl_exec "
         for pid in /proc/[0-9]*; do
             [ -d \"\$pid\" ] || continue
             [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"/\" ] || continue
@@ -60,21 +62,22 @@ ssh_control() {
         start)
             ensure_mounted
             echo "[*] Checking SSH server installation..."
-            if ! su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/sbin/sshd" 2>/dev/null; then
+            if ! asl_chroot_exec "/usr/bin/test -x /usr/sbin/sshd" 2>/dev/null; then
                 echo "[*] Installing openssh-server inside Debian chroot..."
-                su -c "chroot '$DEBIANPATH' /usr/bin/apt-get update && chroot '$DEBIANPATH' /usr/bin/apt-get install -y openssh-server" || return 1
+                asl_chroot_exec "/usr/bin/apt-get update && /usr/bin/apt-get install -y openssh-server" || return 1
             fi
-            su -c "chroot '$DEBIANPATH' /usr/bin/ssh-keygen -A" 2>/dev/null || true
-            su -c "chroot '$DEBIANPATH' /bin/mkdir -p /var/run/sshd" 2>/dev/null || true
+            asl_chroot_exec "/usr/bin/ssh-keygen -A" 2>/dev/null || true
+            asl_chroot_exec "chmod 600 /etc/ssh/ssh_host_*_key 2>/dev/null || true" 2>/dev/null || true
+            asl_chroot_exec "/bin/mkdir -p /var/run/sshd" 2>/dev/null || true
             # SSH hardening: root login allowed only via public key
             # (prohibit-password); password auth is disabled. Passwords over
             # the network are crackable — use an authorized_keys entry instead.
-            su -c "chroot '$DEBIANPATH' /bin/bash -c 'if grep -qE \"^[#]?PermitRootLogin\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PermitRootLogin.*/PermitRootLogin prohibit-password/\" /etc/ssh/sshd_config; else echo \"PermitRootLogin prohibit-password\" >> /etc/ssh/sshd_config; fi; if grep -qE \"^[#]?PasswordAuthentication\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PasswordAuthentication.*/PasswordAuthentication no/\" /etc/ssh/sshd_config; else echo \"PasswordAuthentication no\" >> /etc/ssh/sshd_config; fi; if grep -qE \"^[#]?PubkeyAuthentication\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PubkeyAuthentication.*/PubkeyAuthentication yes/\" /etc/ssh/sshd_config; else echo \"PubkeyAuthentication yes\" >> /etc/ssh/sshd_config; fi'" 2>/dev/null || true
-            if su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x sshd" >/dev/null 2>&1; then
+            asl_chroot_exec "if grep -qE \"^[#]?PermitRootLogin\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PermitRootLogin.*/PermitRootLogin prohibit-password/\" /etc/ssh/sshd_config; else echo \"PermitRootLogin prohibit-password\" >> /etc/ssh/sshd_config; fi; if grep -qE \"^[#]?PasswordAuthentication\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PasswordAuthentication.*/PasswordAuthentication no/\" /etc/ssh/sshd_config; else echo \"PasswordAuthentication no\" >> /etc/ssh/sshd_config; fi; if grep -qE \"^[#]?PubkeyAuthentication\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PubkeyAuthentication.*/PubkeyAuthentication yes/\" /etc/ssh/sshd_config; else echo \"PubkeyAuthentication yes\" >> /etc/ssh/sshd_config; fi" 2>/dev/null || true
+            if asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then
                 echo "[*] SSH server is already running."
             else
                 echo "[*] Starting SSH daemon on port 2222..."
-                su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /usr/sbin/sshd -p 2222" || return 1
+                asl_chroot_exec "if command -v setpriv >/dev/null 2>&1; then /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /usr/sbin/sshd -p 2222; else /usr/sbin/sshd -p 2222; fi" || return 1
                 echo "[✓] SSH server active. Connect via: ssh root@127.0.0.1 -p 2222"
                 echo "    Note: Password auth is DISABLED; root requires a public key."
                 echo "          Add one with: asl exec sh -c 'mkdir -p ~/.ssh && echo YOUR_PUBKEY >> ~/.ssh/authorized_keys'"
@@ -83,7 +86,7 @@ ssh_control() {
             fi
             ;;
         stop)
-            if is_mounted && su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x sshd" >/dev/null 2>&1; then
+            if is_mounted && asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then
                 kill_chroot TERM 'sshd'
                 echo "[✓] SSH daemon stopped."
             else
@@ -91,7 +94,7 @@ ssh_control() {
             fi
             ;;
         status|"")
-            if is_mounted && su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x sshd" >/dev/null 2>&1; then
+            if is_mounted && asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then
                 echo "SSH Server: RUNNING (port 2222)"
             else
                 echo "SSH Server: STOPPED"
@@ -105,39 +108,44 @@ vnc_control() {
     case "$action" in
         start)
             ensure_mounted
-            if ! su -c "chroot '$DEBIANPATH' /usr/bin/test -x /usr/bin/x11vnc" 2>/dev/null; then
+            if ! asl_chroot_exec "/usr/bin/test -x /usr/bin/x11vnc" 2>/dev/null; then
                 echo "[*] Installing x11vnc inside Debian chroot..."
-                su -c "chroot '$DEBIANPATH' /usr/bin/apt-get update && chroot '$DEBIANPATH' /usr/bin/apt-get install -y x11vnc" || return 1
+                asl_chroot_exec "/usr/bin/apt-get update && /usr/bin/apt-get install -y x11vnc" || return 1
             fi
             # Clean stale VNC locks before checking process
-            su -c "chroot '$DEBIANPATH' rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
-            if su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x x11vnc" >/dev/null 2>&1; then
+            asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
+            if asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then
                 echo "[*] VNC server is already running."
             else
                 PWFILE="/root/.asl-vncpasswd"
-                if ! su -c "chroot '$DEBIANPATH' /usr/bin/test -s '$PWFILE'" 2>/dev/null; then
-                    VNCPW=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; tr -dc A-Za-z0-9 < /dev/urandom | head -c 12'" 2>/dev/null)
+                if ! asl_chroot_exec "test -s '$PWFILE'" 2>/dev/null; then
+                    VNCPW=$(asl_chroot_exec "tr -dc A-Za-z0-9 < /dev/urandom | head -c 12" 2>/dev/null)
                     [ -n "$VNCPW" ] || VNCPW="asl$(date +%s)"
-                    su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; /usr/bin/x11vnc -storepasswd \"$VNCPW\" \"$PWFILE\" >/dev/null 2>&1 && chmod 600 \"$PWFILE\"'" || return 1
+                    asl_chroot_exec "/usr/bin/x11vnc -storepasswd \"$VNCPW\" \"$PWFILE\" >/dev/null 2>&1 && chmod 600 \"$PWFILE\"" || return 1
                     echo "    VNC password set to: $VNCPW (stored at $PWFILE in chroot)"
                 fi
-                echo "[*] Starting optimized low-latency x11vnc server on port 5900..."
-                su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export DISPLAY=:0; /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -display :0 -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1'" || return 1
-                echo "[✓] VNC server active (low-latency near-native mode). Connect to 127.0.0.1:5900."
+                local bind_host="127.0.0.1"
+                if [ "${2:-}" = "--public" ] || [ "${2:-}" = "public" ]; then
+                    bind_host="0.0.0.0"
+                    echo "[!] Warning: Binding VNC server to public network interface (0.0.0.0). Enforcing password authentication."
+                fi
+                echo "[*] Starting optimized low-latency x11vnc server on $bind_host:5900..."
+                asl_chroot_exec "export DISPLAY=:0; if command -v setpriv >/dev/null 2>&1; then /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -display :0 -listen $bind_host -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1; else /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -display :0 -listen $bind_host -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1; fi" || return 1
+                echo "[✓] VNC server active (low-latency near-native mode). Connect to $bind_host:5900."
                 echo "    To reset the password, run: asl remote vnc clean reset-auth"
             fi
             ;;
         stop)
-            if is_mounted && su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x x11vnc" >/dev/null 2>&1; then
+            if is_mounted && asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then
                 kill_chroot TERM 'x11vnc'
                 sleep 1
-                if su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x x11vnc" >/dev/null 2>&1; then
+                if asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then
                     kill_chroot 9 'x11vnc'
                 fi
-                su -c "chroot '$DEBIANPATH' rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
+                asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
                 echo "[✓] VNC server stopped and locks cleaned."
             else
-                su -c "chroot '$DEBIANPATH' rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
+                asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
                 echo "[*] VNC server is not running."
             fi
             ;;
@@ -147,16 +155,16 @@ vnc_control() {
                 kill_chroot TERM 'x11vnc'
                 sleep 1
                 kill_chroot 9 'x11vnc'
-                su -c "chroot '$DEBIANPATH' rm -rf /tmp/.X11-vnc /tmp/.vnc /tmp/.X11-unix/X5900" 2>/dev/null || true
+                asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc /tmp/.X11-unix/X5900" 2>/dev/null || true
                 if [ "${2:-}" = "reset-auth" ]; then
-                    su -c "chroot '$DEBIANPATH' rm -f /root/.asl-vncpasswd" 2>/dev/null || true
+                    asl_chroot_exec "rm -f /root/.asl-vncpasswd" 2>/dev/null || true
                     echo "[✓] VNC authentication credentials reset."
                 fi
             fi
             echo "[✓] VNC server state cleaned successfully."
             ;;
         status|"")
-            if is_mounted && su -c "chroot '$DEBIANPATH' /usr/bin/pgrep -x x11vnc" >/dev/null 2>&1; then
+            if is_mounted && asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then
                 echo "VNC Server: RUNNING (port 5900, low-latency near-native)"
             else
                 echo "VNC Server: STOPPED"
@@ -169,7 +177,7 @@ vnc_control() {
 SSH_PORT=8022
 
 host_sshd_running() {
-    su -c "
+    asl_exec "
         for pid in /proc/[0-9]*; do
             [ -d \"\$pid\" ] || continue
             [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"/\" ] || continue

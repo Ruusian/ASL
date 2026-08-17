@@ -57,7 +57,9 @@ termux_open_file() {
         stem="${base%.*}"
         ext="${base##*.}"
         [ "$stem" = "$base" ] && ext="" || ext=".$ext"
-        tmp_copy=$(mktemp "$download_dir/asl-shared-${stem}.XXXXXX${ext}") || {
+        safe_stem=$(echo "$stem" | sed 's/[^A-Za-z0-9_-]/_/g')
+        [ -n "$safe_stem" ] || safe_stem="file"
+        tmp_copy=$(mktemp "$download_dir/asl-shared-${safe_stem}.XXXXXX${ext}") || {
             echo "[!] Could not allocate a unique file in Android Download."
             return 1
         }

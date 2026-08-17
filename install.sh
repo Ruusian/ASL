@@ -5,6 +5,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -13,20 +16,57 @@ YELLOW='\033[1;33m'
 RESET='\033[0m'
 
 SELECTED_DISTRO="debian"
-DISTRO_TYPE="${TYPE:-auto}" # modded, standard, or auto
+DISTRO_TYPE="${TYPE:-auto}" # modded, standard, ubuntu, arch, alpine, fedora, kali, or auto
+EXEC_MODE_ARG="${MODE:-auto}" # root, shizuku, proot, or auto
 
-# Parse arguments (--modded, --standard, --type=X)
+# Parse arguments (--modded, --standard, --ubuntu, --arch, --alpine, --fedora, --kali, --type=X, --distro=X, --root, --shizuku, --proot)
 while [ $# -gt 0 ]; do
     case "$1" in
         --modded)
             DISTRO_TYPE="modded"
             shift
             ;;
-        --standard|--base)
-            DISTRO_TYPE="standard"
+        --standard|--base|--debian)
+            DISTRO_TYPE="debian"
             shift
             ;;
-        --type=*)
+        --ubuntu)
+            DISTRO_TYPE="ubuntu"
+            shift
+            ;;
+        --arch|--archlinux)
+            DISTRO_TYPE="arch"
+            shift
+            ;;
+        --alpine)
+            DISTRO_TYPE="alpine"
+            shift
+            ;;
+        --fedora)
+            DISTRO_TYPE="fedora"
+            shift
+            ;;
+        --kali)
+            DISTRO_TYPE="kali"
+            shift
+            ;;
+        --root)
+            EXEC_MODE_ARG="root"
+            shift
+            ;;
+        --shizuku)
+            EXEC_MODE_ARG="shizuku"
+            shift
+            ;;
+        --proot)
+            EXEC_MODE_ARG="proot"
+            shift
+            ;;
+        --mode=*)
+            EXEC_MODE_ARG="${1#*=}"
+            shift
+            ;;
+        --type=*|--distro=*)
             DISTRO_TYPE="${1#*=}"
             shift
             ;;
@@ -46,13 +86,34 @@ if [ -z "$PREFIX" ] || [[ "$PREFIX" != *"/com.termux/"* ]]; then
     exit 1
 fi
 
-echo -e "${GREEN}[*] Checking root access (su)...${RESET}"
-if ! su -c "id -u" >/dev/null 2>&1; then
-    echo -e "${YELLOW}[!] Warning: Root access via 'su' was not detected or prompt timed out.${RESET}"
-    echo -e "${YELLOW}[!] ASL requires root access (su) to manage chroot mounts.${RESET}"
+mkdir -p "$PREFIX/etc"
+
+echo -e "${GREEN}[*] Detecting execution mode (Root / Shizuku / PRoot)...${RESET}"
+DETECTED_MODE="$(asl_detect_mode 2>/dev/null || echo proot)"
+
+if [ "$EXEC_MODE_ARG" != "auto" ]; then
+    ACTIVE_MODE="$EXEC_MODE_ARG"
 else
-    echo -e "${GREEN}[✓] Root access confirmed.${RESET}"
+    ACTIVE_MODE="$DETECTED_MODE"
 fi
+
+ASL_EXEC_MODE="$ACTIVE_MODE"
+export ASL_EXEC_MODE
+
+case "$ACTIVE_MODE" in
+    root)
+        echo -e "${GREEN}[✓] Execution Mode: ROOT (su) Kernel Chroot (Full Hardware Acceleration)${RESET}"
+        ;;
+    shizuku)
+        echo -e "${CYAN}[✓] Execution Mode: SHIZUKU (rish) ADB Privileged Mode (Non-Rooted with Shizuku)${RESET}"
+        ;;
+    proot|*)
+        ACTIVE_MODE="proot"
+        echo -e "${YELLOW}[✓] Execution Mode: PROOT User-space Emulation (Non-Rooted / No Shizuku)${RESET}"
+        ;;
+esac
+
+echo "$ACTIVE_MODE" > "$PREFIX/etc/asl_exec_mode"
 
 # 2. Package Installation
 echo -e "${GREEN}[*] Installing required Termux packages...${RESET}"
@@ -64,26 +125,64 @@ pkg install -y git pulseaudio termux-x11 virglrenderer-android tsu socat wget un
 # 3. Interactive Distro Edition Selection
 if [ -t 0 ] && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "\n${CYAN}====================================================${RESET}"
-    echo -e "${CYAN} 🐧 Select Debian Snapdragon Rootfs Edition:        ${RESET}"
+    echo -e "${CYAN} 🐧 Select Linux Subsystem Distribution / Edition:   ${RESET}"
     echo -e "${CYAN}====================================================${RESET}"
     echo -e "  1) ${GREEN}Debian Modded Rootfs${RESET} (Pre-configured Turnip Mesa Vulkan, Box64, Wine64 & XFCE)"
     echo -e "  2) ${CYAN}Debian Clean Base${RESET} (Official Debian Trixie via proot-distro)"
-    echo -e "  3) ${YELLOW}Skip rootfs setup${RESET} (Use existing rootfs at /data/local/tmp/chrootDebian)"
+    echo -e "  3) ${CYAN}Ubuntu LTS Base${RESET} (Official Ubuntu 24.04 via proot-distro)"
+    echo -e "  4) ${CYAN}Arch Linux Base${RESET} (Official Arch via proot-distro)"
+    echo -e "  5) ${CYAN}Alpine Linux Base${RESET} (Official Alpine via proot-distro)"
+    echo -e "  6) ${CYAN}Kali Linux Base${RESET} (Official Kali via proot-distro)"
+    echo -e "  7) ${YELLOW}Skip rootfs setup${RESET} (Use existing rootfs at /data/local/tmp/chrootDebian)"
     echo -e ""
-    read -r -p "Select choice [1-3, default: 1]: " distro_choice
+    read -r -p "Select choice [1-7, default: 1]: " distro_choice
     case "$distro_choice" in
         1|"") DISTRO_TYPE="modded" ;;
-        2) DISTRO_TYPE="standard" ;;
-        3) DISTRO_TYPE="skip" ;;
+        2) DISTRO_TYPE="debian" ;;
+        3) DISTRO_TYPE="ubuntu" ;;
+        4) DISTRO_TYPE="arch" ;;
+        5) DISTRO_TYPE="alpine" ;;
+        6) DISTRO_TYPE="kali" ;;
+        7) DISTRO_TYPE="skip" ;;
         *) DISTRO_TYPE="modded" ;;
     esac
 fi
 
 [ "$DISTRO_TYPE" = "auto" ] && DISTRO_TYPE="modded"
 
-IMAGE_REF="debian:trixie"
 IS_MODDED=false
-[ "$DISTRO_TYPE" = "modded" ] && IS_MODDED=true
+IMAGE_REF=""
+
+case "$DISTRO_TYPE" in
+    modded)
+        IS_MODDED=true
+        IMAGE_REF="debian:trixie"
+        ;;
+    debian|standard)
+        IMAGE_REF="debian:trixie"
+        ;;
+    ubuntu)
+        IMAGE_REF="ubuntu"
+        ;;
+    arch|archlinux)
+        IMAGE_REF="archlinux"
+        ;;
+    alpine)
+        IMAGE_REF="alpine"
+        ;;
+    fedora)
+        IMAGE_REF="fedora"
+        ;;
+    kali)
+        IMAGE_REF="kali"
+        ;;
+    skip)
+        IMAGE_REF=""
+        ;;
+    *)
+        IMAGE_REF="$DISTRO_TYPE"
+        ;;
+esac
 
 cleanup_installer() {
     proot-distro remove asl-temp >/dev/null 2>&1 || true
@@ -94,24 +193,24 @@ trap cleanup_installer EXIT
 # Rootfs replacement is destructive. Stop ASL first and independently verify
 # that no mount remains at or below the chroot before removing any files.
 ensure_chroot_unmounted_for_replace() {
-    if su -c "grep -q -F ' $DEBIANPATH ' /proc/mounts || grep -q -F ' $DEBIANPATH/' /proc/mounts" 2>/dev/null; then
+    if is_mounted "$DEBIANPATH"; then
         echo -e "${YELLOW}[*] Stopping active chroot before overwrite...${RESET}"
         if ! bash "$SCRIPT_DIR/core/stop-chroot.sh"; then
             echo -e "${RED}[!] Failed to stop the active chroot; refusing to replace its rootfs.${RESET}"
             return 1
         fi
     fi
-    if su -c "grep -q -F ' $DEBIANPATH ' /proc/mounts || grep -q -F ' $DEBIANPATH/' /proc/mounts" 2>/dev/null; then
+    if is_mounted "$DEBIANPATH"; then
         echo -e "${RED}[!] ASL mounts remain below $DEBIANPATH; refusing to replace its rootfs.${RESET}"
         return 1
     fi
 }
 
 # 4. Rootfs Download & Chroot Provisioning
-DEBIANPATH="/data/local/tmp/chrootDebian"
+DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 if [ "$DISTRO_TYPE" != "skip" ]; then
     echo -e "${GREEN}[*] Provisioning Debian Snapdragon rootfs (Edition: ${DISTRO_TYPE})...${RESET}"
-    if su -c "test -d '$DEBIANPATH/etc'"; then
+    if [ -d "$DEBIANPATH/etc" ] || asl_exec "test -d '$DEBIANPATH/etc'" 2>/dev/null; then
         echo -e "${YELLOW}[!] Existing chroot detected at $DEBIANPATH.${RESET}"
         if [ -t 0 ]; then
             read -r -p "Overwrite existing chroot with fresh Debian rootfs? [y/N]: " overwrite_confirm
@@ -161,17 +260,17 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                 echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
                 echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
                 ensure_chroot_unmounted_for_replace || exit 1
-                if ! su -c "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
+                if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
                     echo -e "${RED}[!] Failed to extract the modded rootfs.${RESET}"
                     rm -f "$TEMP_TAR"
                     exit 1
                 fi
                 rm -f "$TEMP_TAR"
                 # Configure DNS & hosts
-                su -c "chroot '$DEBIANPATH' /bin/sh -c 'echo \"nameserver 1.1.1.1\" > /etc/resolv.conf && echo \"nameserver 8.8.8.8\" >> /etc/resolv.conf && echo \"127.0.0.1 localhost\" > /etc/hosts'" 2>/dev/null || true
+                asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts' 2>/dev/null || true
                 # The release tarball excludes /etc/shadow; regenerate an empty one so
                 # login works but root stays password-locked until the user runs passwd.
-                su -c "chroot '$DEBIANPATH' /bin/sh -c 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi'" 2>/dev/null || true
+                asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
                 echo -e "${GREEN}[✓] ASL Exclusive Debian Modded Rootfs provisioned successfully!${RESET}"
             else
                 echo -e "${YELLOW}[!] Modded release asset not found online yet. Falling back to Debian Trixie base image...${RESET}"
@@ -191,14 +290,14 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
             if [ -d "$TEMP_ROOTFS" ]; then
                 echo -e "${GREEN}[*] Copying Debian rootfs into chroot location ($DEBIANPATH)...${RESET}"
                 ensure_chroot_unmounted_for_replace || exit 1
-                if ! su -c "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && cp -af '$TEMP_ROOTFS/.' '$DEBIANPATH/'"; then
+                if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && cp -af '$TEMP_ROOTFS/.' '$DEBIANPATH/'"; then
                     echo -e "${RED}[!] Failed to copy the Debian base rootfs.${RESET}"
                     exit 1
                 fi
                 proot-distro remove asl-temp >/dev/null 2>&1 || true
 
                 # Configure DNS & hosts
-                su -c "chroot '$DEBIANPATH' /bin/sh -c 'echo \"nameserver 1.1.1.1\" > /etc/resolv.conf && echo \"nameserver 8.8.8.8\" >> /etc/resolv.conf && echo \"127.0.0.1 localhost\" > /etc/hosts'" 2>/dev/null || true
+                asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts' 2>/dev/null || true
                 echo -e "${GREEN}[✓] Debian base rootfs provisioned successfully.${RESET}"
             else
                 echo -e "${RED}[!] Error: Failed to locate extracted rootfs for $IMAGE_REF.${RESET}"

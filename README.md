@@ -2,13 +2,13 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Termux-brightgreen.svg)](https://termux.dev)
 [![Architecture](https://img.shields.io/badge/Architecture-ARM64-blue.svg)](#)
-[![Requirement](https://img.shields.io/badge/Requirements-Root%20(su)%20%2B%20Termux-red.svg)](#)
+[![Requirement](https://img.shields.io/badge/Requirements-Root%20%7C%20Shizuku%20%7C%20PRoot-blue.svg)](#)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GPU Acceleration](https://img.shields.io/badge/GPU-Mesa%20Turnip%20%7C%20Zink%20%7C%20VirGL-orange.svg)](#)
 
-**Android Subsystem for Linux (ASL)** is a high-performance, root-accelerated Linux chroot management subsystem, gaming container framework, GTK3 desktop control suite, and Android host bridge for ARM64 devices.
+**Android Subsystem for Linux (ASL)** is a high-performance Linux subsystem management engine, gaming container framework, GTK3 desktop control suite, and Android host bridge for ARM64 devices.
 
-Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** transforms your Android smartphone or tablet into a full Linux workstation and gaming environment using **Root (`su`)** and **Termux**.
+Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** transforms your Android smartphone or tablet into a full Linux workstation and gaming environment, supporting **Root (`su`)**, **Shizuku (`rish`)**, and **PRoot (Zero-Root)** environments.
 
 ---
 
@@ -50,14 +50,34 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | ba
 > clone the repo first: `git clone https://github.com/Ruusian5/ASL && cd ASL && bash install.sh`.
 
 ### 🐧 Distro & Image Options
-Select your preferred Debian rootfs edition interactively during setup, or pass non-interactive flags:
+Select your preferred Linux distribution interactively during setup (Debian Modded, Debian Trixie, Ubuntu 24.04, Arch Linux, Alpine, or Kali Linux), or pass non-interactive flags:
 
 ```bash
 # ASL Modded Rootfs (Pre-configured Turnip Vulkan, Box64, Wine64, XFCE Desktop & ASL Hub):
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --modded
 
-# Standard Clean Base Rootfs (Official Debian Trixie via proot-distro):
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --standard
+# Standard Clean Debian Trixie Base:
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --debian
+
+# Ubuntu 24.04 LTS Base:
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --ubuntu
+
+# Arch Linux Base:
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --arch
+
+# Kali Linux Base:
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --kali
+```
+
+### ⚡ Execution Modes (Root / Shizuku / PRoot)
+ASL automatically detects your device capabilities or lets you select your execution mode:
+- **Root (`su`)**: Maximum performance native kernel chroot with direct GPU node access (`--root`).
+- **Shizuku (`rish`)**: ADB-privileged execution mode for non-rooted devices with Shizuku enabled (`--shizuku`).
+- **PRoot**: User-space syscall translation for non-rooted devices without Shizuku (`--proot`).
+
+Switch modes anytime via CLI:
+```bash
+asl exec-mode [root|shizuku|proot|status]
 ```
 
 After installation, launch the interactive console anytime:

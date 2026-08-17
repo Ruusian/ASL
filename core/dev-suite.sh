@@ -5,13 +5,17 @@
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ]; then
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+fi
+
+if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
     exit 2
 fi
 
 ensure_chroot_mounted() {
-    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+    if ! is_mounted; then
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
             bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
         fi
@@ -24,7 +28,7 @@ asl_dev_suite_status() {
 
     check_pkg() {
         local name="$1" cmd="$2"
-        if su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; command -v $cmd >/dev/null 2>&1'" 2>/dev/null; then
+        if asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; command -v $cmd >/dev/null 2>&1" 2>/dev/null; then
             printf "  %-12s : INSTALLED\n" "$name"
         else
             printf "  %-12s : NOT INSTALLED\n" "$name"
@@ -44,7 +48,7 @@ asl_dev_suite_install() {
     ensure_chroot_mounted || return 1
     echo "[*] Installing developer suite preset: $preset..."
 
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    asl_chroot_exec "
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         set -e
         apt-get update
@@ -103,7 +107,7 @@ asl_dev_suite_install() {
                 exit 1
                 ;;
         esac
-    '" || { echo "[!] Dev suite installation failed."; return 1; }
+    " || { echo "[!] Dev suite installation failed."; return 1; }
 
     echo "[✓] Developer suite preset '$preset' installed successfully."
 }

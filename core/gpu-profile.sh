@@ -12,7 +12,7 @@ asl_gpu_detect() {
             is_adreno=1
             ;;
         *)
-            if [ -c /dev/kgsl-3d0 ] || [ -d /sys/class/kgsl/kgsl-3d0 ]; then
+            if [ -c /dev/kgsl-3d0 ] || [ -d /sys/class/kgsl/kgsl-3d0 ] || [ -c /dev/dri/renderD128 ] || [ -c /dev/dri/card0 ]; then
                 is_adreno=1
             fi
             ;;
@@ -20,7 +20,7 @@ asl_gpu_detect() {
 
     if [ "$is_adreno" -eq 1 ]; then
         DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-        if [ -d "$DEBIANPATH" ] && su -c "chroot '$DEBIANPATH' /bin/bash -c 'compgen -G /usr/lib/*/dri/zink_dri.so >/dev/null || compgen -G /usr/share/vulkan/icd.d/freedreno_icd*.json >/dev/null || [ -f /usr/share/vulkan/icd.d/freedreno_icd.aarch64.json ]'" 2>/dev/null; then
+        if [ -d "$DEBIANPATH" ] && asl_chroot_exec "compgen -G /usr/lib/*/dri/zink_dri.so >/dev/null || compgen -G /usr/share/vulkan/icd.d/*freedreno*.json >/dev/null || compgen -G /usr/share/vulkan/icd.d/*turnip*.json >/dev/null || compgen -G /usr/local/share/vulkan/icd.d/*.json >/dev/null" 2>/dev/null; then
             ASL_GPU_PROFILE="adreno-turnip-zink"
         else
             ASL_GPU_PROFILE="generic-virgl"
@@ -32,15 +32,23 @@ asl_gpu_detect() {
     fi
 }
 
-asl_gpu_icd_name() {
+asl_gpu_icd_in_chroot() {
     DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-    if [ -f "$DEBIANPATH/usr/share/vulkan/icd.d/freedreno_icd.json" ]; then
-        printf '%s' "freedreno_icd.json"
-    elif [ -f "$DEBIANPATH/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json" ]; then
-        printf '%s' "freedreno_icd.aarch64.json"
+    local found=""
+    found=$(asl_chroot_exec "find /usr/share/vulkan/icd.d /usr/local/share/vulkan/icd.d /etc/vulkan/icd.d -type f \( -name '*freedreno*.json' -o -name '*turnip*.json' \) 2>/dev/null | head -n1" 2>/dev/null || true)
+    if [ -n "$found" ]; then
+        printf '%s' "$found"
+    elif [ -f "$DEBIANPATH/usr/share/vulkan/icd.d/freedreno_icd.json" ]; then
+        printf '%s' "/usr/share/vulkan/icd.d/freedreno_icd.json"
     else
-        printf '%s' "freedreno_icd.aarch64.json"
+        printf '%s' "/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json"
     fi
+}
+
+asl_gpu_icd_name() {
+    local icd_path
+    icd_path=$(asl_gpu_icd_in_chroot)
+    basename "$icd_path"
 }
 
 asl_gpu_apply() {
@@ -52,18 +60,24 @@ asl_gpu_apply() {
             export GALLIUM_DRIVER=zink
             export MESA_LOADER_DRIVER_OVERRIDE=zink
             export MESA_VK_WINSYS=x11
-            local icd_name
-            icd_name=$(asl_gpu_icd_name)
-            export VK_ICD_FILENAMES="$DEBIANPATH/usr/share/vulkan/icd.d/$icd_name"
-            export VK_DRIVER_FILES="$DEBIANPATH/usr/share/vulkan/icd.d/$icd_name"
-            export MESA_SHADER_CACHE_DIR="/dev/shm/mesa_shader_cache"
+            local icd_chroot
+            icd_chroot=$(asl_gpu_icd_in_chroot)
+            export VK_ICD_FILENAMES="$DEBIANPATH$icd_chroot"
+            export VK_DRIVER_FILES="$DEBIANPATH$icd_chroot"
+            export MESA_SHADER_CACHE_DIR="/tmp/.mesa_cache"
+            export MESA_GL_SHADER_CACHE_DIR="/tmp/.mesa_cache"
+            export MESA_VK_SHADER_CACHE_DIR="/tmp/.mesa_cache"
+            export MESA_SHADER_CACHE_MAX_SIZE="1G"
             export TU_DEBUG=noconform
             ;;
         mali-virgl|generic-virgl|*)
             export GALLIUM_DRIVER=virpipe
             export MESA_GL_VERSION_OVERRIDE=4.0
             export MESA_VK_WINSYS=x11
-            export MESA_SHADER_CACHE_DIR="/dev/shm/mesa_shader_cache"
+            export MESA_SHADER_CACHE_DIR="/tmp/.mesa_cache"
+            export MESA_GL_SHADER_CACHE_DIR="/tmp/.mesa_cache"
+            export MESA_VK_SHADER_CACHE_DIR="/tmp/.mesa_cache"
+            export MESA_SHADER_CACHE_MAX_SIZE="1G"
             ;;
     esac
 }
@@ -72,7 +86,7 @@ asl_gpu_env_exports() {
     asl_gpu_apply
     local icd_path_in_chroot=""
     if [ "$ASL_GPU_PROFILE" = "adreno-turnip-zink" ]; then
-        icd_path_in_chroot="/usr/share/vulkan/icd.d/$(asl_gpu_icd_name)"
+        icd_path_in_chroot=$(asl_gpu_icd_in_chroot)
     fi
     local res=""
     [ -n "${GALLIUM_DRIVER:-}" ] && res="${res}export GALLIUM_DRIVER=\"${GALLIUM_DRIVER}\"\n"
@@ -83,7 +97,10 @@ asl_gpu_env_exports() {
         res="${res}export VK_DRIVER_FILES=\"${icd_path_in_chroot}\"\n"
     fi
     [ -n "${TU_DEBUG:-}" ] && res="${res}export TU_DEBUG=\"${TU_DEBUG}\"\n"
-    res="${res}export MESA_SHADER_CACHE_DIR=\"${MESA_SHADER_CACHE_DIR:-/dev/shm/mesa_shader_cache}\"\n"
+    res="${res}export MESA_SHADER_CACHE_DIR=\"${MESA_SHADER_CACHE_DIR:-/tmp/.mesa_cache}\"\n"
+    res="${res}export MESA_GL_SHADER_CACHE_DIR=\"${MESA_GL_SHADER_CACHE_DIR:-/tmp/.mesa_cache}\"\n"
+    res="${res}export MESA_VK_SHADER_CACHE_DIR=\"${MESA_VK_SHADER_CACHE_DIR:-/tmp/.mesa_cache}\"\n"
+    res="${res}export MESA_SHADER_CACHE_MAX_SIZE=\"${MESA_SHADER_CACHE_MAX_SIZE:-1G}\"\n"
     [ -n "${MESA_GL_VERSION_OVERRIDE:-}" ] && res="${res}export MESA_GL_VERSION_OVERRIDE=\"${MESA_GL_VERSION_OVERRIDE}\"\n"
 
     local script_dir
@@ -102,7 +119,7 @@ asl_sync_chroot_env() {
     if [ -d "$DEBIANPATH/etc/profile.d" ]; then
         local env_script
         env_script="$(asl_gpu_env_exports)"
-        su -c "cat << 'EOF' > '$DEBIANPATH/etc/profile.d/asl_env.sh'
+        asl_exec "cat << 'EOF' > '$DEBIANPATH/etc/profile.d/asl_env.sh'
 #!/bin/sh
 # ASL Dynamic Environment
 $env_script
@@ -131,7 +148,7 @@ asl_gpu_install_drivers() {
         return 1
     fi
 
-    if ! su -c "grep -q -F ' $DEBIANPATH/proc ' /proc/mounts" 2>/dev/null; then
+    if ! is_mounted "$DEBIANPATH"; then
         local script_dir
         script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         if [ -f "$script_dir/mount-chroot.sh" ]; then
@@ -141,11 +158,8 @@ asl_gpu_install_drivers() {
         fi
     fi
 
-    if su -c "chroot '$DEBIANPATH' /usr/bin/test -f /etc/debian_version" 2>/dev/null; then
-        if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            apt-get update && apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri vulkan-tools libvulkan1
-        '"; then
+    if asl_chroot_exec "/usr/bin/test -f /etc/debian_version" 2>/dev/null; then
+        if ! asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/bin; apt-get update && apt-get install -y mesa-vulkan-drivers libgl1-mesa-dri vulkan-tools libvulkan1"; then
             echo "[!] GPU driver package installation failed."
             return 1
         fi
