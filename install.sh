@@ -231,49 +231,51 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
             echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
             echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
 
-            if wget -q --show-progress -O "$TEMP_TAR" "$RELEASE_URL" 2>/dev/null || curl -L -o "$TEMP_TAR" "$RELEASE_URL"; then
+            if (wget -q --show-progress -O "$TEMP_TAR" "$RELEASE_URL" 2>/dev/null || curl -fsSL -o "$TEMP_TAR" "$RELEASE_URL") && [ -s "$TEMP_TAR" ]; then
                 echo -e "${GREEN}[*] Verifying downloaded archive checksum...${RESET}"
                 SHA256SUMS_URL="https://github.com/Ruusian5/ASL/releases/latest/download/SHA256SUMS"
                 TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
                 EXPECTED=""
                 if ! (wget -q -O "$TEMP_SUMS" "$SHA256SUMS_URL" 2>/dev/null || curl -fsSL -o "$TEMP_SUMS" "$SHA256SUMS_URL"); then
-                    echo -e "${RED}[!] Could not download the SHA256SUMS sidecar; refusing to extract.${RESET}"
+                    echo -e "${YELLOW}[!] Could not download SHA256SUMS (HTTP rate limit or release asset unavailable). Falling back to Debian base...${RESET}"
                     rm -f "$TEMP_TAR" "$TEMP_SUMS"
-                    exit 1
+                    IS_MODDED=false
+                else
+                    EXPECTED=$(awk '$2 == "asl-debian-modded-arm64.tar.xz" && $1 ~ /^[[:xdigit:]]{64}$/ { print $1 }' "$TEMP_SUMS" | head -n 1)
+                    rm -f "$TEMP_SUMS"
+                    if [ -z "$EXPECTED" ]; then
+                        echo -e "${YELLOW}[!] SHA256SUMS missing valid checksum. Falling back to Debian base...${RESET}"
+                        rm -f "$TEMP_TAR"
+                        IS_MODDED=false
+                    fi
                 fi
-                EXPECTED=$(awk '$2 == "asl-debian-modded-arm64.tar.xz" && $1 ~ /^[[:xdigit:]]{64}$/ { print $1 }' "$TEMP_SUMS" | head -n 1)
-                rm -f "$TEMP_SUMS"
-                if [ -z "$EXPECTED" ]; then
-                    echo -e "${RED}[!] SHA256SUMS is missing a valid checksum for the modded rootfs; refusing to extract.${RESET}"
-                    rm -f "$TEMP_TAR"
-                    exit 1
+
+                if [ "$IS_MODDED" = "true" ]; then
+                    ACTUAL=$(sha256sum "$TEMP_TAR" | awk '{ print $1 }')
+                    if [ "$ACTUAL" != "$EXPECTED" ]; then
+                        echo -e "${YELLOW}[!] Checksum verification failed for modded rootfs. Falling back to Debian base...${RESET}"
+                        rm -f "$TEMP_TAR"
+                        IS_MODDED=false
+                    else
+                        echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
+                        echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
+                        ensure_chroot_unmounted_for_replace || exit 1
+                        if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
+                            echo -e "${YELLOW}[!] Failed to extract modded rootfs. Falling back to Debian base...${RESET}"
+                            rm -f "$TEMP_TAR"
+                            IS_MODDED=false
+                        else
+                            rm -f "$TEMP_TAR"
+                            # Configure DNS & hosts & APT performance
+                            asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
+                            asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
+                            echo -e "${GREEN}[✓] ASL Exclusive Debian Modded Rootfs provisioned successfully!${RESET}"
+                        fi
+                    fi
                 fi
-                ACTUAL=$(sha256sum "$TEMP_TAR" | awk '{ print $1 }')
-                if [ "$ACTUAL" != "$EXPECTED" ]; then
-                    echo -e "${RED}[!] Checksum verification FAILED for modded rootfs archive.${RESET}"
-                    echo -e "${RED}    Expected: $EXPECTED${RESET}"
-                    echo -e "${RED}    Actual:   $ACTUAL${RESET}"
-                    echo -e "${RED}    Refusing to extract. The release artifact may be corrupted or tampered with.${RESET}"
-                    rm -f "$TEMP_TAR"
-                    exit 1
-                fi
-                echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
-                echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
-                ensure_chroot_unmounted_for_replace || exit 1
-                if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
-                    echo -e "${RED}[!] Failed to extract the modded rootfs.${RESET}"
-                    rm -f "$TEMP_TAR"
-                    exit 1
-                fi
-                rm -f "$TEMP_TAR"
-                # Configure DNS & hosts & APT performance
-                asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
-                # The release tarball excludes /etc/shadow; regenerate an empty one so
-                # login works but root stays password-locked until the user runs passwd.
-                asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
-                echo -e "${GREEN}[✓] ASL Exclusive Debian Modded Rootfs provisioned successfully!${RESET}"
             else
-                echo -e "${YELLOW}[!] Modded release asset not found online yet. Falling back to Debian Trixie base image...${RESET}"
+                rm -f "$TEMP_TAR" 2>/dev/null || true
+                echo -e "${YELLOW}[!] Modded release asset download failed (HTTP 429 rate limit or asset unavailable). Falling back to Debian Trixie base image...${RESET}"
                 IS_MODDED=false
             fi
         fi

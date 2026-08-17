@@ -41,6 +41,14 @@ install_asl_hub_deb() {
 
     cp "$src_app" "$target_app" 2>/dev/null || asl_exec "cp '$src_app' '$target_app'"
     chmod 755 "$target_app" 2>/dev/null || asl_exec "chmod 755 '$target_app'"
+
+    # Verify deployed app compiles
+    if asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; python3 -m py_compile /usr/local/bin/asl-control-center" 2>/dev/null; then
+        echo "[✓] Deployed app passed syntax check."
+    else
+        echo "[!] WARNING: deployed app failed py_compile check."
+    fi
+
     ln -sf /usr/local/bin/asl-control-center "$DEBIANPATH/usr/local/bin/asl-gui" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-gui'"
     ln -sf /usr/local/bin/asl-control-center "$DEBIANPATH/usr/local/bin/asl-hub" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-hub'"
 
