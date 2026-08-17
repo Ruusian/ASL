@@ -11,6 +11,7 @@ import sys
 import shutil
 import signal
 import fcntl
+import glob
 import gi
 
 gi.require_version('Gtk', '3.0')
@@ -18,17 +19,30 @@ from gi.repository import Gtk, Gdk, GLib, Pango
 
 ASL_ENV = dict(os.environ, PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 MAX_LOG_LINES = 500
+KILL_ESCALATION_MS = 5000
+STATUS_REFRESH_SEC = 30
+CONFIG_PATH = os.path.expanduser("~/.config/asl-hub.conf")
+
+EXIT_CODE_HINTS = {
+    126: "permission denied or not executable",
+    127: "command not found",
+    130: "interrupted (SIGINT)",
+    137: "killed (SIGKILL)",
+    143: "terminated (SIGTERM)",
+}
 
 
 class ASLHubWindow(Gtk.Window):
     def __init__(self):
         super().__init__(title="ASL Hub - Android Subsystem for Linux")
-        self.set_default_size(860, 620)
+        self.set_default_size(860, 640)
         self.set_border_width(12)
 
         self.active_pid = None
         self.active_cmd = None
+        self.kill_timer = None
         self.action_buttons = []
+        self.cmd_history = []
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.add(main_box)
@@ -42,6 +56,31 @@ class ASLHubWindow(Gtk.Window):
         btn_about.connect("clicked", self.show_about)
         header.pack_end(btn_about)
         self.set_titlebar(header)
+
+        # Keyboard shortcuts
+        accel = Gtk.AccelGroup()
+        accel.connect(Gdk.KEY_q, Gdk.ModifierType.CONTROL_MASK, 0,
+                      lambda *a: self.destroy())
+        accel.connect(Gdk.KEY_l, Gdk.ModifierType.CONTROL_MASK, 0,
+                      lambda *a: self.clear_log(None))
+        accel.connect(Gdk.KEY_s, Gdk.ModifierType.CONTROL_MASK, 0,
+                      lambda *a: self.save_log(None))
+        self.add_accel_group(accel)
+
+        # Live status panel
+        status_frame = Gtk.Frame(label="System Status")
+        self.status_grid = Gtk.Grid()
+        self.status_grid.set_column_spacing(20)
+        self.status_grid.set_row_spacing(4)
+        self.status_grid.set_border_width(8)
+        self.status_labels = {}
+        for i, key in enumerate(("mounts", "gpu", "wine", "display", "disk", "ram")):
+            lbl = Gtk.Label(label="—")
+            lbl.set_halign(Gtk.Align.START)
+            self.status_labels[key] = lbl
+            self.status_grid.attach(lbl, i % 3, i // 3, 1, 1)
+        status_frame.add(self.status_grid)
+        main_box.pack_start(status_frame, False, False, 0)
 
         # Stack & Switcher for tabs
         stack = Gtk.Stack()
@@ -60,6 +99,19 @@ class ASLHubWindow(Gtk.Window):
         stack.add_titled(self.create_sec_tab(), "sec", "Security Audit")
         stack.add_titled(self.create_maint_tab(), "maint", "Maintenance & Repair")
 
+        # Command history row
+        hist_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        hist_lbl = Gtk.Label(label="History:")
+        hist_row.pack_start(hist_lbl, False, False, 0)
+        self.history_combo = Gtk.ComboBoxText()
+        self.history_combo.set_hexpand(True)
+        hist_row.pack_start(self.history_combo, True, True, 0)
+        btn_rerun = Gtk.Button(label="Re-run")
+        btn_rerun.set_tooltip_text("Re-run the selected command from history")
+        btn_rerun.connect("clicked", self.rerun_history)
+        hist_row.pack_start(btn_rerun, False, False, 0)
+        main_box.pack_start(hist_row, False, False, 0)
+
         # Log Output Box
         log_frame = Gtk.Frame(label="Command Execution Log")
         log_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -72,23 +124,74 @@ class ASLHubWindow(Gtk.Window):
         log_scroll.add(self.log_view)
         log_box.pack_start(log_scroll, True, True, 0)
 
-        # Stop button row
-        stop_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.btn_stop = Gtk.Button(label="Stop Running Command")
+        # Control row: stop, save, clear, spinner, status
+        ctrl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.btn_stop = Gtk.Button(label="Stop")
         self.btn_stop.set_sensitive(False)
+        self.btn_stop.set_tooltip_text("Send SIGTERM to the running command (escalates to SIGKILL after 5s)")
         self.btn_stop.connect("clicked", self.stop_active)
-        stop_row.pack_start(self.btn_stop, False, False, 0)
+        ctrl_row.pack_start(self.btn_stop, False, False, 0)
+
+        btn_save = Gtk.Button(label="Save Log")
+        btn_save.set_tooltip_text("Save log to file (Ctrl+S)")
+        btn_save.connect("clicked", self.save_log)
+        ctrl_row.pack_start(btn_save, False, False, 0)
+
+        btn_clear = Gtk.Button(label="Clear")
+        btn_clear.set_tooltip_text("Clear the log (Ctrl+L)")
+        btn_clear.connect("clicked", self.clear_log)
+        ctrl_row.pack_start(btn_clear, False, False, 0)
+
+        self.spinner = Gtk.Spinner()
+        ctrl_row.pack_start(self.spinner, False, False, 4)
+
         self.status_label = Gtk.Label(label="Idle")
         self.status_label.set_halign(Gtk.Align.START)
-        stop_row.pack_start(self.status_label, True, True, 6)
-        log_box.pack_start(stop_row, False, False, 0)
+        ctrl_row.pack_start(self.status_label, True, True, 6)
 
+        btn_refresh = Gtk.Button(label="Refresh Status")
+        btn_refresh.connect("clicked", lambda w: self.refresh_status())
+        ctrl_row.pack_start(btn_refresh, False, False, 0)
+
+        log_box.pack_start(ctrl_row, False, False, 0)
         log_frame.add(log_box)
         main_box.pack_start(log_frame, False, False, 0)
 
         self.log("ASL Hub GTK3 Control Center initialized.")
+        self.log("Shortcuts: Ctrl+Q quit, Ctrl+L clear log, Ctrl+S save log.")
         if not shutil.which("asl"):
             self.log("WARNING: 'asl' not found in PATH. Buttons may fail.")
+
+        self.load_window_state()
+        self.refresh_status()
+        self.refresh_gamepads()
+        # Periodic status refresh
+        GLib.timeout_add_seconds(STATUS_REFRESH_SEC, self.auto_refresh)
+
+    def auto_refresh(self):
+        self.refresh_status()
+        return True  # keep repeating
+
+    # ── Window state persistence ─────────────────────────────────────────
+
+    def load_window_state(self):
+        try:
+            with open(CONFIG_PATH) as f:
+                for line in f:
+                    if line.startswith("size="):
+                        w, h = line.strip().split("=", 1)[1].split("x")
+                        self.resize(int(w), int(h))
+        except (OSError, ValueError):
+            pass
+
+    def save_window_state(self):
+        try:
+            os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+            w, h = self.get_size()
+            with open(CONFIG_PATH, 'w') as f:
+                f.write(f"size={w}x{h}\n")
+        except OSError:
+            pass
 
     # ── Logging ──────────────────────────────────────────────────────────
 
@@ -96,7 +199,6 @@ class ASLHubWindow(Gtk.Window):
         buf = self.log_view.get_buffer()
         end_iter = buf.get_end_iter()
         buf.insert(end_iter, text + "\n")
-        # Cap log length
         line_count = buf.get_line_count()
         if line_count > MAX_LOG_LINES:
             start = buf.get_start_iter()
@@ -104,6 +206,60 @@ class ASLHubWindow(Gtk.Window):
             buf.delete(start, cut)
         end_iter = buf.get_end_iter()
         self.log_view.scroll_to_iter(end_iter, 0.0, False, 0.0, 0.0)
+
+    def clear_log(self, widget):
+        buf = self.log_view.get_buffer()
+        buf.set_text("")
+        self.log("Log cleared.")
+
+    def save_log(self, widget):
+        dialog = Gtk.FileChooserDialog(
+            title="Save Log", transient_for=self,
+            action=Gtk.FileChooserAction.SAVE)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                           Gtk.STOCK_SAVE, Gtk.ResponseType.OK)
+        dialog.set_do_overwrite_confirmation(True)
+        dialog.set_current_name("asl-hub-log.txt")
+        if dialog.run() == Gtk.ResponseType.OK:
+            path = dialog.get_filename()
+            buf = self.log_view.get_buffer()
+            text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True)
+            try:
+                with open(path, 'w') as f:
+                    f.write(text)
+                self.log(f"[*] Log saved to {path}")
+            except OSError as e:
+                self.log(f"[FAIL] Could not save log: {e}")
+        dialog.destroy()
+
+    # ── Command history ──────────────────────────────────────────────────
+
+    def add_to_history(self, cmd_args):
+        entry = ' '.join(cmd_args)
+        if entry in self.cmd_history:
+            self.cmd_history.remove(entry)
+        self.cmd_history.insert(0, entry)
+        self.cmd_history = self.cmd_history[:20]
+        self.rebuild_history_combo()
+
+    def rebuild_history_combo(self):
+        self.history_combo.remove_all()
+        for entry in self.cmd_history:
+            self.history_combo.append_text(entry)
+        if self.cmd_history:
+            self.history_combo.set_active(0)
+
+    def rerun_history(self, widget):
+        text = self.history_combo.get_active_text()
+        if not text:
+            self.log("[!] No command selected in history.")
+            return
+        # Re-parse: entries are stored as the joined cmd_args
+        if text.startswith("/bin/bash -c "):
+            inner = text[len("/bin/bash -c "):]
+            self.run_cmd(["/bin/bash", "-c", inner])
+        else:
+            self.run_cmd(text.split())
 
     # ── Process management (posix_spawn invariant) ───────────────────────
 
@@ -129,12 +285,12 @@ class ASLHubWindow(Gtk.Window):
                                  ASL_ENV, file_actions=file_actions)
             os.close(w_fd)
 
-            # Non-blocking read on the pipe
             flags = fcntl.fcntl(r_fd, fcntl.F_GETFL)
             fcntl.fcntl(r_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
             self.active_pid = pid
             self.active_cmd = cmd_args[0]
+            self.add_to_history(cmd_args)
             self.set_busy(True)
 
             GLib.io_add_watch(r_fd, GLib.PRIORITY_DEFAULT,
@@ -154,7 +310,6 @@ class ASLHubWindow(Gtk.Window):
                         self.log(f"  {line}")
                     return True
             if condition & GLib.IO_HUP:
-                # Drain remaining data
                 try:
                     while True:
                         data = os.read(fd, 8192)
@@ -179,25 +334,51 @@ class ASLHubWindow(Gtk.Window):
         if exit_code == 0:
             self.log(f"[OK] {cmd_name} finished successfully.")
         else:
-            self.log(f"[FAIL] {cmd_name} exited with code {exit_code}.")
+            hint = EXIT_CODE_HINTS.get(exit_code)
+            if exit_code < 0:
+                hint = f"killed by signal {-exit_code}"
+            suffix = f" ({hint})" if hint else ""
+            self.log(f"[FAIL] {cmd_name} exited with code {exit_code}{suffix}.")
         self.active_pid = None
         self.active_cmd = None
+        if self.kill_timer is not None:
+            GLib.source_remove(self.kill_timer)
+            self.kill_timer = None
         self.set_busy(False)
+        self.refresh_status()
 
     def stop_active(self, widget):
+        if self.active_pid is None:
+            return
+        try:
+            os.kill(self.active_pid, signal.SIGTERM)
+            self.log(f"[*] Sent SIGTERM to PID {self.active_pid}.")
+        except ProcessLookupError:
+            self.log("[*] Process already exited.")
+            return
+        if self.kill_timer is None:
+            self.kill_timer = GLib.timeout_add(KILL_ESCALATION_MS, self.escalate_kill)
+
+    def escalate_kill(self):
+        self.kill_timer = None
         if self.active_pid is not None:
             try:
-                os.kill(self.active_pid, signal.SIGTERM)
-                self.log(f"[*] Sent SIGTERM to PID {self.active_pid}.")
+                os.kill(self.active_pid, signal.SIGKILL)
+                self.log(f"[!] Escalated to SIGKILL for PID {self.active_pid}.")
             except ProcessLookupError:
-                self.log("[*] Process already exited.")
+                pass
+        return False
 
     def set_busy(self, busy):
         for btn in self.action_buttons:
             btn.set_sensitive(not busy)
         self.btn_stop.set_sensitive(busy)
-        self.status_label.set_text(
-            f"Running: {self.active_cmd}" if busy else "Idle")
+        if busy:
+            self.spinner.start()
+            self.status_label.set_text(f"Running: {self.active_cmd}")
+        else:
+            self.spinner.stop()
+            self.status_label.set_text("Idle")
 
     # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -206,6 +387,10 @@ class ASLHubWindow(Gtk.Window):
 
     def add_button(self, grid, col, row, width, label, cmd_args, confirm=None):
         btn = Gtk.Button(label=label)
+        if len(cmd_args) == 3 and cmd_args[0] == "/bin/bash" and cmd_args[1] == "-c":
+            btn.set_tooltip_text(f"Runs: {cmd_args[2]}")
+        else:
+            btn.set_tooltip_text(f"Runs: {' '.join(cmd_args)}")
         if confirm:
             btn.connect("clicked", lambda w: self.confirm_and_run(cmd_args, confirm))
         else:
@@ -228,41 +413,107 @@ class ASLHubWindow(Gtk.Window):
     def show_about(self, widget):
         about = Gtk.AboutDialog(transient_for=self, modal=True)
         about.set_program_name("ASL Hub")
-        about.set_version("1.1")
+        about.set_version("1.3")
         about.set_comments("Android Subsystem for Linux Control Center\n"
                            "Debian 13 Trixie ARM64 System Dashboard")
         about.set_license_type(Gtk.License.MIT_X11)
         about.run()
         about.destroy()
 
-    # ── System status (pure Python reads, no spawn) ──────────────────────
+    # ── Live system status (pure Python reads, no spawn) ─────────────────
 
-    def refresh_status(self, widget=None):
-        info = []
-        # Disk usage
+    def refresh_status(self):
+        self.status_labels["mounts"].set_text(f"Mounts: {self._check_mounts()}")
+        self.status_labels["gpu"].set_text(f"GPU: {self._check_gpu()}")
+        self.status_labels["wine"].set_text(f"Wine: {self._check_wine()}")
+        display = os.environ.get("DISPLAY", "")
+        self.status_labels["display"].set_text(
+            f"Display: {display}" if display else "Display: not set")
+        self.status_labels["disk"].set_text(f"Disk: {self._check_disk()}")
+        self.status_labels["ram"].set_text(f"RAM: {self._check_ram()}")
+
+    def _check_mounts(self):
+        try:
+            with open('/proc/mounts') as f:
+                mounts = f.read()
+            needed = {'/proc': False, '/dev': False, '/sys': False}
+            for line in mounts.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] in needed:
+                    needed[parts[1]] = True
+            missing = [k for k, v in needed.items() if not v]
+            return "OK" if not missing else f"missing {', '.join(missing)}"
+        except OSError:
+            return "unknown"
+
+    def _check_gpu(self):
+        try:
+            with open('/etc/profile.d/asl_env.sh') as f:
+                env = f.read()
+            if 'MESA_LOADER_DRIVER_OVERRIDE=tu' in env:
+                return "Turnip (Vulkan)"
+            if 'GALLIUM_DRIVER=zink' in env:
+                return "Zink (OpenGL-on-Vulkan)"
+            if 'LIBGL_ALWAYS_SOFTWARE=1' in env:
+                return "Software (llvmpipe)"
+            return "profile set"
+        except OSError:
+            return "no profile"
+
+    def _check_wine(self):
+        try:
+            with open('/etc/asl_wine_version.conf') as f:
+                return f.read().strip() or "system-wine"
+        except OSError:
+            return "system-wine"
+
+    def _check_disk(self):
         try:
             st = os.statvfs('/')
             total = st.f_blocks * st.f_frsize
             free = st.f_bavail * st.f_frsize
-            used_pct = int(100 * (1 - free / total)) if total else 0
-            info.append(f"Disk: {used_pct}% used ({free // (1024**3)} GB free)")
+            if not total:
+                return "unknown"
+            used_pct = int(100 * (1 - free / total))
+            return f"{used_pct}% used, {free // (1024**3)} GB free"
         except OSError:
-            info.append("Disk: unknown")
-        # Memory
+            return "unknown"
+
+    def _check_ram(self):
         try:
-            with open('/proc/meminfo') as f:
-                meminfo = f.read()
             mem_total = mem_avail = 0
-            for line in meminfo.splitlines():
-                if line.startswith('MemTotal:'):
-                    mem_total = int(line.split()[1])
-                elif line.startswith('MemAvailable:'):
-                    mem_avail = int(line.split()[1])
+            with open('/proc/meminfo') as f:
+                for line in f:
+                    if line.startswith('MemTotal:'):
+                        mem_total = int(line.split()[1])
+                    elif line.startswith('MemAvailable:'):
+                        mem_avail = int(line.split()[1])
             if mem_total:
-                info.append(f"RAM: {mem_avail // 1024} MB free / {mem_total // 1024} MB")
+                return f"{mem_avail // 1024} MB free / {mem_total // 1024} MB"
+            return "unknown"
         except (OSError, ValueError):
-            pass
-        self.log("  ".join(info) if info else "Status unavailable")
+            return "unknown"
+
+    # ── Gamepad detection (pure Python reads, no spawn) ──────────────────
+
+    def refresh_gamepads(self):
+        devices = []
+        for ev_path in sorted(glob.glob('/dev/input/event*')):
+            name = os.path.basename(ev_path)
+            # Find matching sysfs name
+            sys_name = f"/sys/class/input/{name}/device/name"
+            dev_name = name
+            try:
+                with open(sys_name) as f:
+                    dev_name = f.read().strip()
+            except OSError:
+                pass
+            devices.append(f"{name}: {dev_name}")
+        buf = self.gamepad_view.get_buffer()
+        if devices:
+            buf.set_text("\n".join(devices))
+        else:
+            buf.set_text("No input devices detected in /dev/input/.")
 
     # ── Tabs ─────────────────────────────────────────────────────────────
 
@@ -284,13 +535,6 @@ class ASLHubWindow(Gtk.Window):
                         self.asl_cmd("gpu-install"))
         self.add_button(grid, 0, 3, 2, "Run ASL Doctor Diagnostics",
                         self.asl_cmd("doctor"))
-
-        # Status row
-        status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        btn_refresh = Gtk.Button(label="Refresh System Status")
-        btn_refresh.connect("clicked", self.refresh_status)
-        status_row.pack_start(btn_refresh, False, False, 0)
-        grid.attach(status_row, 0, 4, 2, 1)
 
         box.pack_start(grid, False, False, 10)
         return box
@@ -325,6 +569,22 @@ class ASLHubWindow(Gtk.Window):
                         self.asl_cmd("gamepad test"))
 
         box.pack_start(grid, False, False, 10)
+
+        # Detected devices list
+        dev_frame = Gtk.Frame(label="Detected Input Devices")
+        dev_scroll = Gtk.ScrolledWindow()
+        dev_scroll.set_min_content_height(100)
+        self.gamepad_view = Gtk.TextView()
+        self.gamepad_view.set_editable(False)
+        self.gamepad_view.set_monospace(True)
+        dev_scroll.add(self.gamepad_view)
+        dev_frame.add(dev_scroll)
+        box.pack_start(dev_frame, True, True, 0)
+
+        btn_rescan = Gtk.Button(label="Rescan Devices")
+        btn_rescan.connect("clicked", lambda w: self.refresh_gamepads())
+        box.pack_start(btn_rescan, False, False, 0)
+
         return box
 
     def create_dev_tab(self):
@@ -374,9 +634,13 @@ class ASLHubWindow(Gtk.Window):
         box.pack_start(grid, False, False, 10)
         return box
 
+    def on_destroy(self, widget):
+        self.save_window_state()
+        Gtk.main_quit()
+
 
 if __name__ == "__main__":
     app = ASLHubWindow()
-    app.connect("destroy", Gtk.main_quit)
+    app.connect("destroy", app.on_destroy)
     app.show_all()
     Gtk.main()
