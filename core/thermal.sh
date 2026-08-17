@@ -59,7 +59,7 @@ asl_thermal_report() {
         [ -d "$tz_path" ] || continue
         type=$(cat "$tz_path/type" 2>/dev/null || true)
         raw_temp=$(cat "$tz_path/temp" 2>/dev/null || true)
-        [ -n "$type" ] && [[ "$raw_temp" =~ ^-?[0-9]+$ ]] || continue
+        [ -n "$type" ] && [[ "$raw_temp" =~ ^[0-9]+$ ]] && [ "$raw_temp" -gt 0 ] || continue
 
         if [ "$raw_temp" -gt 1000 ]; then
             temp_c=$((raw_temp / 1000))

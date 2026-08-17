@@ -53,8 +53,9 @@ setup_android_aids() {
         ensure_group aid_gpu_service 1072
         ensure_group aid_shell 2000
         ensure_group aid_inet 3003
+        ensure_group aid_everybody 9997
 
-        for g in aid_graphics aid_input aid_audio aid_camera aid_wifi aid_sdcard_rw aid_media_rw aid_sdcard_r aid_sdcard_all aid_gpu_service aid_shell aid_inet; do
+        for g in aid_graphics aid_input aid_audio aid_camera aid_wifi aid_sdcard_rw aid_media_rw aid_sdcard_r aid_sdcard_all aid_gpu_service aid_shell aid_inet aid_everybody; do
             id -nG root | tr \" \" \"\\n\" | grep -qx \"\$g\" || usermod -aG \"\$g\" root
         done
 

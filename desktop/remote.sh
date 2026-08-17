@@ -130,7 +130,7 @@ vnc_control() {
                     echo "[!] Warning: Binding VNC server to public network interface (0.0.0.0). Enforcing password authentication."
                 fi
                 echo "[*] Starting optimized low-latency x11vnc server on $bind_host:5900..."
-                asl_chroot_exec "export DISPLAY=:0; if command -v setpriv >/dev/null 2>&1; then /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -display :0 -listen $bind_host -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1; else /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -display :0 -listen $bind_host -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1; fi" || return 1
+                asl_chroot_exec "export DISPLAY=:0; if command -v setpriv >/dev/null 2>&1; then /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -noxdamage -display :0 -listen $bind_host -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1; else /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -noxdamage -display :0 -listen $bind_host -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1; fi" || return 1
                 echo "[✓] VNC server active (low-latency near-native mode). Connect to $bind_host:5900."
                 echo "    To reset the password, run: asl remote vnc clean reset-auth"
             fi

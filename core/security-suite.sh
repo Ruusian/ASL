@@ -51,6 +51,7 @@ asl_security_install() {
 
     asl_chroot_exec "
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        export DEBIAN_FRONTEND=noninteractive
         set -e
         apt-get update
 

@@ -92,9 +92,11 @@ asl_wine_version_install() {
                         ln -sf /usr/bin/wine64 /opt/proton-ge/bin/wine64
                         ln -sf /usr/bin/wineserver /opt/proton-ge/bin/wineserver
                     }
-                    if [ -f /tmp/proton-ge.tar.gz ]; then
+                    if [ -s /tmp/proton-ge.tar.gz ]; then
                         tar -xzf /tmp/proton-ge.tar.gz -C /opt/proton-ge --strip-components=1 2>/dev/null || true
                         rm -f /tmp/proton-ge.tar.gz
+                    else
+                        rm -f /tmp/proton-ge.tar.gz 2>/dev/null || true
                     fi
                 fi
                 [ -x /opt/proton-ge/bin/wine ] || ln -sf /usr/bin/wine64 /opt/proton-ge/bin/wine

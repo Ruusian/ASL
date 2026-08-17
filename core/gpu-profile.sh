@@ -8,7 +8,7 @@ asl_gpu_detect() {
 
     local is_adreno=0
     case "$ASL_GPU_PLATFORM" in
-        msm*|sm*|qcom*|sdm*|lahaina*|taro*|cape*|kalama*|pineapple*|sun*|yupik*|crow*|clivo*|bengal*|lito*|atoll*|trinket*)
+        msm*|sm*|qcom*|sdm*|lahaina*|taro*|cape*|kalama*|pineapple*|sun*|yupik*|crow*|clivo*|bengal*|lito*|atoll*|trinket*|pico*|titan*|kailua*|lanai*)
             is_adreno=1
             ;;
         *)

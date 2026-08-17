@@ -67,8 +67,8 @@ asl_gamepad_sync() {
             if ! grep -q -F ' $DEBIANPATH/dev/input ' /proc/mounts; then
                 mount --bind /dev/input '$DEBIANPATH/dev/input' || true
             fi
-            chmod 666 /dev/input/event* /dev/input/js* 2>/dev/null || true
-            chmod 666 '$DEBIANPATH/dev/input/event*' '$DEBIANPATH/dev/input/js*' 2>/dev/null || true
+            chmod 666 /dev/input/event* /dev/input/js* /dev/uinput 2>/dev/null || true
+            chmod 666 '$DEBIANPATH/dev/input/event*' '$DEBIANPATH/dev/input/js*' '$DEBIANPATH/dev/uinput' 2>/dev/null || true
         " 2>/dev/null || true
     fi
 

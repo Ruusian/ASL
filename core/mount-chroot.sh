@@ -87,6 +87,8 @@ asl_exec "
     domount_fs proc \"$DEBIANPATH/proc\"
     domount_fs sysfs \"$DEBIANPATH/sys\"
     domount_bind /dev/pts \"$DEBIANPATH/dev/pts\"
+    chmod 666 \"$DEBIANPATH/dev/pts/ptmx\" 2>/dev/null || true
+    chmod 666 \"$DEBIANPATH/dev/ptmx\" 2>/dev/null || true
 
     if [ -d /proc/sys/fs/binfmt_misc ] && grep -q -w \"/proc/sys/fs/binfmt_misc\" /proc/mounts 2>/dev/null; then
         domount_bind /proc/sys/fs/binfmt_misc \"$DEBIANPATH/proc/sys/fs/binfmt_misc\"

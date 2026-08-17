@@ -52,7 +52,7 @@ asl_clean_run() {
                 ;;
             tmp)
                 echo \"[*] Cleaning /tmp and /var/tmp...\"
-                rm -rf /tmp/* /tmp/.* 2>/dev/null || true
+                rm -rf /tmp/* /tmp/.* /tmp/.X11-unix/X* /tmp/.X0-lock /tmp/pulse-* 2>/dev/null || true
                 rm -rf /var/tmp/* 2>/dev/null || true
                 ;;
             cache)
@@ -64,7 +64,7 @@ asl_clean_run() {
                 apt-get clean
                 rm -rf /var/lib/apt/lists/*
                 echo \"[*] Cleaning temporary files...\"
-                rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+                rm -rf /tmp/* /var/tmp/* /tmp/.X11-unix/X* /tmp/.X0-lock /tmp/pulse-* 2>/dev/null || true
                 echo \"[*] Cleaning user cache & shader cache...\"
                 rm -rf /root/.cache/* /home/*/.cache/* /tmp/.mesa_cache/* 2>/dev/null || true
                 ;;

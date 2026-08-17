@@ -266,8 +266,8 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                     exit 1
                 fi
                 rm -f "$TEMP_TAR"
-                # Configure DNS & hosts
-                asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts' 2>/dev/null || true
+                # Configure DNS & hosts & APT performance
+                asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
                 # The release tarball excludes /etc/shadow; regenerate an empty one so
                 # login works but root stays password-locked until the user runs passwd.
                 asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
@@ -296,8 +296,8 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                 fi
                 proot-distro remove asl-temp >/dev/null 2>&1 || true
 
-                # Configure DNS & hosts
-                asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts' 2>/dev/null || true
+                # Configure DNS & hosts & APT performance
+                asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
                 echo -e "${GREEN}[✓] Debian base rootfs provisioned successfully.${RESET}"
             else
                 echo -e "${RED}[!] Error: Failed to locate extracted rootfs for $IMAGE_REF.${RESET}"

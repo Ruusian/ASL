@@ -55,6 +55,12 @@ gtk-theme-name=$gtk_theme
 gtk-icon-theme-name=$icon_theme
 gtk-cursor-theme-name=$cursor_theme
 GTK3EOF
+        cat << 'GTK2EOF' > /root/.gtkrc-2.0
+gtk-theme-name=\"$gtk_theme\"
+gtk-icon-theme-name=\"$icon_theme\"
+gtk-cursor-theme-name=\"$cursor_theme\"
+GTK2EOF
+        fc-cache -fv /usr/share/fonts /root/.local/share/fonts 2>/dev/null || true
     " 2>/dev/null || true
 
     if [ -n "$dbus_env" ]; then
