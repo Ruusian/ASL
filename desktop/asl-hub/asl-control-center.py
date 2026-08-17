@@ -7,6 +7,7 @@ never os.fork()/subprocess. GTK3 is multithreaded and fork() under
 PRoot/chroot on the 4.14 Myth kernel deadlocks in glibc atfork.
 """
 import os
+import re
 import sys
 import shutil
 import shlex
@@ -16,7 +17,7 @@ import glob
 import time
 import gi
 
-APP_VERSION = "1.5"
+APP_VERSION = "1.5.1"
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Pango
@@ -346,17 +347,17 @@ class ASLHubWindow(Gtk.Window):
         buf.remove_tag(self.tag_search, start, end)
         self.search_matches = []
         self.search_idx = 0
-        needle = entry.get_text().lower()
+        needle = entry.get_text()
         if not needle:
             return
-        full = buf.get_text(start, end, True).lower()
-        idx = full.find(needle)
-        while idx != -1:
-            self.search_matches.append((idx, idx + len(needle)))
-            m_start = buf.get_iter_at_offset(idx)
-            m_end = buf.get_iter_at_offset(idx + len(needle))
+        # Case-insensitive regex on the ORIGINAL text: .lower() can change
+        # string length (e.g. 'İ' -> 'i̇'), desyncing offsets from the buffer.
+        full = buf.get_text(start, end, True)
+        for m in re.finditer(re.escape(needle), full, re.IGNORECASE):
+            self.search_matches.append((m.start(), m.end()))
+            m_start = buf.get_iter_at_offset(m.start())
+            m_end = buf.get_iter_at_offset(m.end())
             buf.apply_tag(self.tag_search, m_start, m_end)
-            idx = full.find(needle, idx + 1)
         if self.search_matches:
             self.jump_to_match(0)
 
