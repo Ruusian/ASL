@@ -107,12 +107,12 @@ asl_chroot_exec() {
 $cmd
 ASLEOF"
                 chmod 755 "$tmpf" 2>/dev/null || asl_exec "chmod 755 '$tmpf'"
-                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash /tmp/.asl_chroot_cmd_$$.sh"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -l /tmp/.asl_chroot_cmd_$$.sh"
                 local res=$?
                 rm -f "$tmpf" 2>/dev/null || asl_exec "rm -f '$tmpf'"
                 return $res
             else
-                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c '$cmd'"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -l -c '$cmd'"
             fi
             ;;
         shizuku)

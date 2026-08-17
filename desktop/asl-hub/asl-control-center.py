@@ -17,7 +17,7 @@ import glob
 import time
 import gi
 
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.6.0"
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Pango
@@ -615,6 +615,29 @@ class ASLHubWindow(Gtk.Window):
         if response == Gtk.ResponseType.OK:
             self.run_cmd(cmd_args)
 
+    def pick_and_run_exe(self):
+        """Pick a Windows executable/installer and run it under Wine."""
+        dialog = Gtk.FileChooserDialog(
+            title="Select Windows Program", transient_for=self,
+            action=Gtk.FileChooserAction.OPEN)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                           Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
+        flt = Gtk.FileFilter()
+        flt.set_name("Windows programs (*.exe, *.msi, *.bat, *.com)")
+        for pat in ("*.exe", "*.EXE", "*.msi", "*.MSI", "*.bat", "*.BAT", "*.com", "*.COM"):
+            flt.add_pattern(pat)
+        dialog.add_filter(flt)
+        flt_all = Gtk.FileFilter()
+        flt_all.set_name("All files")
+        flt_all.add_pattern("*")
+        dialog.add_filter(flt_all)
+        if dialog.run() == Gtk.ResponseType.OK:
+            path = dialog.get_filename()
+            dialog.destroy()
+            self.run_cmd(["/usr/local/bin/run-exe", path])
+        else:
+            dialog.destroy()
+
     def show_about(self, widget):
         about = Gtk.AboutDialog(transient_for=self, modal=True)
         about.set_program_name("ASL Hub")
@@ -744,7 +767,7 @@ class ASLHubWindow(Gtk.Window):
         grid.set_row_spacing(10)
 
         lbl = Gtk.Label()
-        lbl.set_markup("<b>Graphics & Acceleration Management</b>")
+        lbl.set_markup("<b>Graphics &amp; Acceleration Management</b>")
         grid.attach(lbl, 0, 0, 2, 1)
 
         self.add_button(grid, 0, 1, 1, "Enable MangoHud Overlay",
@@ -765,13 +788,31 @@ class ASLHubWindow(Gtk.Window):
         grid.set_column_spacing(15)
         grid.set_row_spacing(10)
 
-        self.add_button(grid, 0, 0, 2, "Install Wine Mono & Gecko Offline Bundles",
+        lbl = Gtk.Label()
+        lbl.set_markup("<b>Windows Environment</b>")
+        lbl.set_halign(Gtk.Align.START)
+        grid.attach(lbl, 0, 0, 2, 1)
+
+        self.add_button(grid, 0, 1, 1, "Start Virtual Windows Desktop",
+                        self.asl_cmd("wine explorer"))
+        btn_exe = Gtk.Button(label="Run / Install Windows Program (.exe/.msi)...")
+        btn_exe.set_tooltip_text("Pick a Windows executable or installer and run it under Wine")
+        btn_exe.connect("clicked", lambda w: self.pick_and_run_exe())
+        grid.attach(btn_exe, 1, 1, 1, 1)
+        self.action_buttons.append(btn_exe)
+
+        lbl2 = Gtk.Label()
+        lbl2.set_markup("<b>Wine Engine &amp; Components</b>")
+        lbl2.set_halign(Gtk.Align.START)
+        grid.attach(lbl2, 0, 2, 2, 1)
+
+        self.add_button(grid, 0, 3, 2, "Install Wine Mono & Gecko Offline Bundles",
                         self.asl_cmd("wine-bundle install"))
-        self.add_button(grid, 0, 1, 1, "Switch to Proton-GE Engine",
+        self.add_button(grid, 0, 4, 1, "Switch to Proton-GE Engine",
                         self.asl_cmd("wine-version set proton-ge"))
-        self.add_button(grid, 1, 1, 1, "Switch to System Wine Engine",
+        self.add_button(grid, 1, 4, 1, "Switch to System Wine Engine",
                         self.asl_cmd("wine-version set system-wine"))
-        self.add_button(grid, 0, 2, 2, "Auto-Install DXVK & VKD3D DirectX Translators",
+        self.add_button(grid, 0, 5, 2, "Auto-Install DXVK & VKD3D DirectX Translators",
                         self.asl_cmd("dxvk"))
 
         box.pack_start(grid, False, False, 10)

@@ -60,6 +60,7 @@ asl_gpu_apply() {
             export GALLIUM_DRIVER=zink
             export MESA_LOADER_DRIVER_OVERRIDE=zink
             export MESA_VK_WINSYS=x11
+            export MESA_VK_WSI_DEBUG=sw
             local icd_chroot
             icd_chroot=$(asl_gpu_icd_in_chroot)
             export VK_ICD_FILENAMES="$DEBIANPATH$icd_chroot"
@@ -92,6 +93,7 @@ asl_gpu_env_exports() {
     [ -n "${GALLIUM_DRIVER:-}" ] && res="${res}export GALLIUM_DRIVER=\"${GALLIUM_DRIVER}\"\n"
     [ -n "${MESA_LOADER_DRIVER_OVERRIDE:-}" ] && res="${res}export MESA_LOADER_DRIVER_OVERRIDE=\"${MESA_LOADER_DRIVER_OVERRIDE}\"\n"
     res="${res}export MESA_VK_WINSYS=\"${MESA_VK_WINSYS:-x11}\"\n"
+    [ -n "${MESA_VK_WSI_DEBUG:-}" ] && res="${res}export MESA_VK_WSI_DEBUG=\"${MESA_VK_WSI_DEBUG}\"\n"
     if [ -n "$icd_path_in_chroot" ]; then
         res="${res}export VK_ICD_FILENAMES=\"${icd_path_in_chroot}\"\n"
         res="${res}export VK_DRIVER_FILES=\"${icd_path_in_chroot}\"\n"

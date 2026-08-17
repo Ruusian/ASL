@@ -278,8 +278,11 @@ export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
 $(asl_gpu_env_exports)
 
-mkdir -p /run/user/0 /dev/shm/mesa_shader_cache 2>/dev/null
-chmod 700 /run/user/0 2>/dev/null
+mkdir -p /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
+chmod 700 /run/user/$target_uid 2>/dev/null
+if [ "$asl_target_user" != "root" ]; then
+    chown "$asl_target_user:$asl_target_user" "/run/user/$target_uid" 2>/dev/null || true
+fi
 mkdir -p /tmp/.cache 2>/dev/null
 
 # Start the D-Bus system bus (the session bus is started below via dbus-run-session).
@@ -462,6 +465,7 @@ launch_app() {
     for root in /usr/share/applications /usr/local/share/applications /root/.local/share/applications; do
         if asl_chroot_exec "test -f '$root/$id.desktop'" 2>/dev/null; then
             asl_chroot_exec "export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\""
+            return 0
         fi
     done
     echo "[!] Debian desktop entry not found: $id"
