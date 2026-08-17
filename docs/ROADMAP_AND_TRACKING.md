@@ -6,7 +6,6 @@
 - [x] **Box64 ARM64 -> x86_64 Dynarec + Wine 64-bit Execution Stack**
 - [x] **Mesa Turnip Vulkan + Zink D3D Driver Integration**
 - [x] **MangoHud & DXVK_HUD Performance Overlay Manager (`asl hud`)**
-- [x] **Wayland / Native Xwayland Display Backend Manager (`asl wayland`)**
 - [x] **Per-Game Wine Prefix Isolation System**
 - [x] **Direct `.exe` / `.msi` MIME Desktop File Associations in Debian File Managers**
 - [x] **DXVK & VKD3D-Proton Runtime Auto-Installer (`asl dxvk`)**

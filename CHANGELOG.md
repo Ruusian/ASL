@@ -11,11 +11,6 @@ All notable changes to the ASL (Android Subsystem for Linux) project are documen
   - Automatically exports `DXVK_HUD` and `MANGOHUD` environment configurations into GPU profiles and Wine/Box64 gaming launches.
   - Real-time FPS, CPU/GPU temperature, RAM/VRAM telemetry overlay.
 
-- **Wayland / Native Xwayland Display Backend Manager (`asl wayland`)**:
-  - Introduced `core/wayland.sh` and `asl wayland [status|set <x11|wayland>]` CLI subcommands.
-  - Auto-detects Wayland sockets (`wayland-0`) across Termux runtime paths.
-  - Configures `XDG_SESSION_TYPE`, `WAYLAND_DISPLAY`, `QT_QPA_PLATFORM`, and `GDK_BACKEND` for Wayland / Xwayland compatibility.
-
 ---
 
 ## [1.2] - 2026-08-17

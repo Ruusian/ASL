@@ -93,11 +93,6 @@ asl_gpu_env_exports() {
         hud_exp=$("$script_dir/hud.sh" env 2>/dev/null || true)
         [ -n "$hud_exp" ] && res="${res}${hud_exp}\n"
     fi
-    if [ -f "$script_dir/wayland.sh" ]; then
-        local wayland_exp
-        wayland_exp=$("$script_dir/wayland.sh" env 2>/dev/null || true)
-        [ -n "$wayland_exp" ] && res="${res}${wayland_exp}\n"
-    fi
 
     printf '%b' "$res"
 }
