@@ -148,46 +148,4 @@ if ! is_mounted; then
     exit 1
 fi
 
-if [ "${ASL_EXEC_MODE:-root}" = "root" ]; then
-    # Sysctl tuning is host-kernel; always apply if root.
-    # Save previous values first so `asl stop` can restore them.
-    SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"
-    SYSCTL_TMP="/data/local/tmp/asl_sysctl_orig.tmp"
-    # A repeated `asl start` must retain the values from before ASL's first tune.
-    # Create the backup once; stop-chroot removes it after restoration.
-    if ! asl_exec "test -e '$SYSCTL_BACKUP'" 2>/dev/null; then
-        asl_exec "rm -f '$SYSCTL_TMP'" 2>/dev/null || true
-        for kv in vm.swappiness=60 vm.vfs_cache_pressure=50 vm.dirty_ratio=15 vm.dirty_background_ratio=5; do
-            key="${kv%%=*}"
-            cur="$(asl_exec "sysctl -n '$key'" 2>/dev/null | tr -d '[:space:]')"
-            if [ -n "$cur" ] && [ "$cur" != "${kv#*=}" ]; then
-                asl_exec "printf '%s\\n' '$key=$cur' >> '$SYSCTL_TMP'" 2>/dev/null || true
-            fi
-        done
-        if asl_exec "test -s '$SYSCTL_TMP'" 2>/dev/null; then
-            asl_exec "mv -f '$SYSCTL_TMP' '$SYSCTL_BACKUP'" 2>/dev/null || true
-        else
-            asl_exec "touch '$SYSCTL_BACKUP'" 2>/dev/null || true
-            asl_exec "rm -f '$SYSCTL_TMP'" 2>/dev/null || true
-        fi
-    fi
-    for kv in vm.swappiness=60 vm.vfs_cache_pressure=50 vm.dirty_ratio=15 vm.dirty_background_ratio=5; do
-        asl_exec "sysctl -w '$kv'" 2>/dev/null || true
-    done
-
-    # Ensure swapfile is enabled if present, or auto-create 2GB swap if RAM < 6GB and disk space > 10GB
-    if ! asl_exec "test -f /data/swapfile" 2>/dev/null; then
-        mem_kb=$(asl_exec "awk '/MemTotal/ {print \$2}' /proc/meminfo" 2>/dev/null || echo 8000000)
-        if [ -n "$mem_kb" ] && [ "$mem_kb" -lt 6291456 ]; then
-            free_data_mb=$(asl_exec "df -m /data | awk 'NR==2 {print \$4}'" 2>/dev/null || echo 0)
-            if [ -n "$free_data_mb" ] && [ "$free_data_mb" -gt 10240 ]; then
-                asl_exec "dd if=/dev/zero of=/data/swapfile bs=1M count=2048 2>/dev/null && chmod 600 /data/swapfile && mkswap /data/swapfile 2>/dev/null" 2>/dev/null || true
-            fi
-        fi
-    fi
-    if asl_exec "test -f /data/swapfile" 2>/dev/null; then
-        asl_exec "swapon /data/swapfile" 2>/dev/null || true
-    fi
-fi
-
 echo "[✓] Chroot mounted successfully."

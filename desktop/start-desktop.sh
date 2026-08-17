@@ -22,23 +22,6 @@ ensure_state_dir() {
     chmod 700 "$STATE_DIR"
 }
 
-sysctl_maxmap_backup() {
-    local cur
-    cur=$(asl_exec "sysctl -n vm.max_map_count" 2>/dev/null | tr -d '[:space:]')
-    if [ -n "$cur" ] && [ "$cur" != "1048576" ]; then
-        asl_exec "echo '$cur' > '$MAXMAP_BACKUP'" 2>/dev/null || true
-    fi
-}
-
-sysctl_maxmap_restore() {
-    local orig
-    orig=$(asl_exec "cat '$MAXMAP_BACKUP' 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
-    if [ -n "$orig" ]; then
-        asl_exec "sysctl -w vm.max_map_count='$orig'" 2>/dev/null || true
-        asl_exec "rm -f '$MAXMAP_BACKUP'" 2>/dev/null || true
-    fi
-}
-
 protect_pid_oom() {
     local pid="${1:-}"
     [ -n "$pid" ] || return 0
@@ -213,9 +196,6 @@ start_desktop() {
     fi
     start_audio || return 1
     start_gpu || true
-    echo "[*] Optimizing system memory before desktop startup..."
-    sysctl_maxmap_backup
-    asl_exec "sysctl -w vm.max_map_count=1048576" 2>/dev/null || true
     DISPLAY_ID=:0
     am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[*] Starting Termux:X11 display server..."
@@ -434,7 +414,6 @@ stop_desktop() {
     if [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || failed=1; fi
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$DEBIANPATH/tmp/.X11-vnc" "$DEBIANPATH/tmp/.vnc"/*.pid 2>/dev/null || true
-    sysctl_maxmap_restore
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi
     rm -f "$STATE_FILE"
     if command -v termux-wake-unlock >/dev/null 2>&1; then
@@ -453,7 +432,6 @@ force_stop_desktop() {
     host_pkill 9 '\b(termux-x11|virgl_test_server_android|pulseaudio|socat)\b'
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$DEBIANPATH/tmp/.X11-vnc" "$DEBIANPATH/tmp/.vnc"/*.pid "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
-    sysctl_maxmap_restore
     sleep 1
     echo "[✓] Complete stop: All GUI and gaming processes terminated and state cleared."
 }

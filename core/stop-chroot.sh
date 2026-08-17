@@ -21,18 +21,10 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-ro
     exit 2
 fi
 
-# Restore host sysctl tuning that mount-chroot.sh applied (even if unmounted already)
+# Remove legacy sysctl backup file if present
 SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"
 if [ "${ASL_EXEC_MODE:-root}" = "root" ]; then
-    if asl_exec "test -s '$SYSCTL_BACKUP'" 2>/dev/null; then
-        echo "[*] Restoring host sysctl tuning..."
-        asl_exec "
-            while IFS='=' read -r key val; do
-                [ -n \"\$key\" ] && [ -n \"\$val\" ] && sysctl -w \"\$key=\$val\" 2>/dev/null || true
-            done < '$SYSCTL_BACKUP'
-            rm -f '$SYSCTL_BACKUP'
-        " || true
-    fi
+    asl_exec "rm -f '$SYSCTL_BACKUP' '${SYSCTL_BACKUP}.tmp'" 2>/dev/null || true
 fi
 
 if ! is_mounted "$DEBIANPATH"; then
