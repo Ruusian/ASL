@@ -93,26 +93,56 @@ EOF_ASLBIN
 
         cat << \"EOF_WINE64\" > /usr/local/bin/wine64
 #!/bin/bash
-exec /usr/local/bin/asl-wine-launch /opt/wine-x64/bin/wine64 \"\$@\"
+WINE_EXEC=\"\"
+if [ -x /opt/wine-x64/bin/wine64 ]; then
+    WINE_EXEC=/opt/wine-x64/bin/wine64
+elif [ -x /usr/lib/wine/wine64 ]; then
+    WINE_EXEC=/usr/lib/wine/wine64
+elif [ -x /usr/bin/wine64 ]; then
+    WINE_EXEC=/usr/bin/wine64
+else
+    WINE_EXEC=/usr/bin/wine
+fi
+exec /usr/local/bin/asl-wine-launch \"\$WINE_EXEC\" \"\$@\"
 EOF_WINE64
         chmod 755 /usr/local/bin/wine64
 
         cat << \"EOF_WINE\" > /usr/local/bin/wine
 #!/bin/bash
 # Win64-only project: route plain \"wine\" to wine64 (ELF32 \"wine\" can't run under box64).
-exec /usr/local/bin/asl-wine-launch /opt/wine-x64/bin/wine64 \"\$@\"
+WINE_EXEC=\"\"
+if [ -x /opt/wine-x64/bin/wine64 ]; then
+    WINE_EXEC=/opt/wine-x64/bin/wine64
+elif [ -x /usr/lib/wine/wine64 ]; then
+    WINE_EXEC=/usr/lib/wine/wine64
+elif [ -x /usr/bin/wine64 ]; then
+    WINE_EXEC=/usr/bin/wine64
+else
+    WINE_EXEC=/usr/bin/wine
+fi
+exec /usr/local/bin/asl-wine-launch \"\$WINE_EXEC\" \"\$@\"
 EOF_WINE
         chmod 755 /usr/local/bin/wine
 
         cat << \"EOF_WINECFG_BIN\" > /usr/local/bin/winecfg
 #!/bin/bash
-exec /usr/local/bin/asl-wine-launch /opt/wine-x64/bin/wine64 winecfg \"\$@\"
+exec /usr/local/bin/asl-wine-launch winecfg \"\$@\"
 EOF_WINECFG_BIN
         chmod 755 /usr/local/bin/winecfg
 
         cat << \"EOF_WINESERVER_BIN\" > /usr/local/bin/wineserver
 #!/bin/bash
-exec /usr/local/bin/asl-wine-launch /opt/wine-x64/bin/wineserver \"\$@\"
+WINESERVER_EXEC=\"\"
+if [ -x /opt/wine-x64/bin/wineserver ]; then
+    WINESERVER_EXEC=/opt/wine-x64/bin/wineserver
+elif [ -x /usr/lib/wine/wineserver64 ]; then
+    WINESERVER_EXEC=/usr/lib/wine/wineserver64
+elif [ -x /usr/lib/wine/wineserver ]; then
+    WINESERVER_EXEC=/usr/lib/wine/wineserver
+else
+    WINESERVER_EXEC=/usr/bin/wineserver
+fi
+exec /usr/local/bin/asl-wine-launch \"\$WINESERVER_EXEC\" \"\$@\"
 EOF_WINESERVER_BIN
         chmod 755 /usr/local/bin/wineserver
 
@@ -420,7 +450,7 @@ run_wine_exe() {
         workdir=\$(dirname \"\$TARGET_EXE\")
         [ -d \"\$workdir\" ] && cd \"\$workdir\" 2>/dev/null || true
         wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true
-        nohup taskset -c $mask box64 /opt/wine-x64/bin/wine64 explorer /desktop=\"\$TARGET_NAME\",1280x720 \"\$TARGET_EXE\" >/tmp/\"\${TARGET_NAME}_wine.log\" 2>&1 &
+        nohup taskset -c $mask box64 wine64 explorer /desktop=\"\$TARGET_NAME\",1280x720 \"\$TARGET_EXE\" >/tmp/\"\${TARGET_NAME}_wine.log\" 2>&1 &
         sleep 1
     '"
 }
@@ -480,7 +510,7 @@ case "${1:-}" in
             echo "Gaming Layer: Chroot unmounted"
         else
             wine_ver=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/bin:/usr/bin:\$PATH; wine --version 2>/dev/null'" 2>/dev/null || echo "Not installed")
-            box64_ver=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'box64 --version 2>/dev/null | head -n1'" 2>/dev/null || echo "Not installed")
+            box64_ver=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; box64 --version 2>&1 | head -n1'" 2>/dev/null || echo "Not installed")
             echo "Gaming Layer Status:"
             echo "  Wine Version:  ${wine_ver:-Not installed}"
             echo "  Box64 Version: ${box64_ver:-Not installed}"
