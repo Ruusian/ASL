@@ -2,10 +2,17 @@
 
 ## Completed Features
 - [x] **Debian 13 (Trixie) ARM64 RootFS Integration**
-- [x] **GTK3 Dashboard (`asl-gui`) with `posix_spawn` multithreading deadlock fix**
+- [x] **GTK3 Dashboard (`asl-gui` / `asl-hub`) with `posix_spawn` multithreading deadlock fix**
+- [x] **Native Debian Desktop GTK3 Control Center ("ASL Hub") App & Launcher**
 - [x] **Box64 ARM64 -> x86_64 Dynarec + Wine 64-bit Execution Stack**
 - [x] **Mesa Turnip Vulkan + Zink D3D Driver Integration**
 - [x] **MangoHud & DXVK_HUD Performance Overlay Manager (`asl hud`)**
+- [x] **Wine Mono / Gecko Offline Bundle Installer (`asl wine-bundle`)**
+- [x] **Wine & Proton-GE Version Engine Manager (`asl wine-version`)**
+- [x] **Bluetooth & Evdev Gamepad Passthrough (`asl gamepad`)**
+- [x] **IDE & Developer Environment Toolsuite (`asl dev-suite`)**
+- [x] **Containerized Defensive Security Audit Suite (`asl security-suite`)**
+- [x] **Storage Cleaner & Automated Integrity Repair (`asl clean` & `asl repair`)**
 - [x] **Per-Game Wine Prefix Isolation System**
 - [x] **Direct `.exe` / `.msi` MIME Desktop File Associations in Debian File Managers**
 - [x] **DXVK & VKD3D-Proton Runtime Auto-Installer (`asl dxvk`)**
@@ -15,8 +22,7 @@
 - [x] **Comprehensive `docs/` Directory Structure**
 
 ## Planned Enhancements & Roadmap
-- [ ] **Wine Mono / Gecko Offline Bundle Installer:** Package offline `.msi` installers for games requiring .NET framework or MSHTML.
-- [ ] **Containerized Security Testing Tools:** Optional chroot security toolsuite (nmap, wireshark, mettle/kali tools) for defensive security auditing inside ASL.
+- [ ] **Wayland Native compositor backend (When Termux:X11 Wayland DRI3 stabilizes)**
 
 ## Known Architecture Invariants to Maintain
 1. **Never replace `os.posix_spawn` in `asl-gui`** with `subprocess.Popen` or `os.fork()`.

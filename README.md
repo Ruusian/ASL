@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GPU Acceleration](https://img.shields.io/badge/GPU-Mesa%20Turnip%20%7C%20Zink%20%7C%20VirGL-orange.svg)](#)
 
-**Android Subsystem for Linux (ASL)** is a high-performance, root-accelerated Linux chroot management subsystem, gaming container framework, and Android host bridge for ARM64 devices.
+**Android Subsystem for Linux (ASL)** is a high-performance, root-accelerated Linux chroot management subsystem, gaming container framework, GTK3 desktop control suite, and Android host bridge for ARM64 devices.
 
 Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** transforms your Android smartphone or tablet into a full Linux workstation and gaming environment using **Root (`su`)** and **Termux**.
 
@@ -18,7 +18,7 @@ Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** transforms yo
  ├─────────────────────────────────────────────────────────────────────────┤
  │                                                                         │
  │  ┌───────────────────────────────────────────────────────────────────┐  │
- │  │                  Debian Trixie ARM64 Subsystem                    │  │
+ │  │       Debian 13 Trixie ARM64 Subsystem + ASL Hub GTK3 Suite       │  │
  │  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────────┐  │  │
  │  │  │ XFCE Desktop │  │ Box64 / Wine │  │ Turnip / Zink / DXVK    │  │  │
  │  │  └──────────────┘  └──────────────┘  └─────────────────────────┘  │  │
@@ -53,14 +53,14 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | ba
 Select your preferred Debian rootfs edition interactively during setup, or pass non-interactive flags:
 
 ```bash
-# ASL Modded Rootfs (Pre-configured Turnip Vulkan, Box64, Wine64, XFCE Desktop):
+# ASL Modded Rootfs (Pre-configured Turnip Vulkan, Box64, Wine64, XFCE Desktop & ASL Hub):
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --modded
 
 # Standard Clean Base Rootfs (Official Debian Trixie via proot-distro):
 curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --standard
 ```
 
-After installation, launch the interactive 3D console anytime:
+After installation, launch the interactive console anytime:
 ```bash
 asl
 ```
@@ -70,45 +70,46 @@ asl
 ## 🔥 Key Features & Capabilities
 
 ### 🛡️ 1. Zero-Crash Isolated Subsystem Core
-- **100% Native Kernel Performance**: Unlike PRoot (which intercepts system calls via `ptrace`), ASL mounts Linux chroots directly using native root kernel privileges (`su`).
-- **Strict Mount Isolation**: Enforces private bind mounts (`--make-rprivate` and `--make-rslave`) without mounting host Android system partitions (`/system`, `/vendor`, `/apex`, `/linkerconfig`). Eliminates SELinux panics, mount deadlocks, and host OS kernel crashes.
+- **100% Native Kernel Performance**: Native root kernel privileges (`su`) mount the chroot directly without system call interception overhead.
+- **Strict Mount Isolation**: Enforces private bind mounts (`--make-rprivate` and `--make-rslave`) without mounting host Android system partitions (`/system`, `/vendor`, `/apex`). Eliminates SELinux panics, mount deadlocks, and OS kernel crashes.
 
-### 🎮 2. Direct3D 11/12 Hardware Acceleration & Gaming Engine
-- **Turnip Mesa Vulkan Drivers**: Native Turnip driver profile support for Qualcomm Adreno 6xx/7xx GPUs and Zink OpenGL-over-Vulkan. DXVK can be installed per Wine prefix with Winetricks; VKD3D is not installed or configured automatically.
-- **VirGL Fallback Support**: Automatic fallback driver selection for Mali, PowerVR, and generic GPU hardware.
-- **Tuned Box64 + Wine64 Pipeline**: Pre-configured Box64 dynarec stability flags (`/etc/box64.box64rc`), automated Wine process lifecycle management (`wineserver -k`), and working directory auto-resolution.
-- **VFS Cache & Memory Optimization**: Tuned VM swappiness, dirty ratio, VFS cache pressure, and `/dev/shm` tmpfs Mesa shader caching to eliminate micro-stuttering.
+### 🎛️ 2. Native Debian GTK3 Control Center ("ASL Hub")
+- **Desktop & CLI GUI**: Provides a full GTK3 desktop app launcher installed directly on the Debian desktop (`/root/Desktop/asl-hub.desktop`) and accessible via `asl hub` or `asl gui`.
+- **Multithreading Invariant**: Built with Python 3 + GTK3 using `os.posix_spawn` process creation, adhering to Architecture Invariant #1 (preventing multithreading GTK3 deadlocks).
 
-### 📱 3. Deep Android Host & Termux Bridge
-- **Android AID (Android ID) Mapping**: Automatically maps host GIDs (`aid_graphics`, `aid_audio`, `aid_sdcard_rw`, `aid_gpu_service`, `aid_inet`) inside the Linux chroot so applications have direct hardware access to GPU device nodes, audio sockets, and `/sdcard`.
-- **Root Manager Integration**: Magisk / KernelSU / APatch action module (`module/action.sh`) for starting or stopping ASL directly from root manager dashboards.
-- **Bi-Directional Host Services**:
-  - 🔒 **CPU WakeLock**: Prevents Android deep sleep during long builds or background operations (`asl wakelock on`).
-  - 🔗 **Host File & URL Launcher**: Opens Linux files or web links directly in native Android apps (`asl open <path|url>`).
-  - 📋 **System Clipboard Bridge**: Syncs clipboard contents between Linux and Android (`asl clip copy/paste`).
-  - 🔔 **Android System Toasts & Notifications**: Triggers native Android system toasts and notifications from Linux scripts (`asl toast "Task Done"`).
+### 🎮 3. Direct3D 11/12 Hardware Acceleration & Gaming Engine
+- **Turnip Mesa Vulkan Drivers**: Native Turnip driver profile support for Qualcomm Adreno 6xx/7xx GPUs and Zink OpenGL-over-Vulkan.
+- **MangoHud & DXVK_HUD Performance Overlay**: Real-time FPS, CPU/GPU temperature, and VRAM telemetry overlay (`asl hud on`).
+- **Wine Mono & Gecko Offline Bundles**: Package offline `.msi` installers for .NET Framework and MSHTML engine (`asl wine-bundle`).
+- **Wine & Proton-GE Version Manager**: Switch between standard Debian Wine and custom Proton-GE gaming engines (`asl wine-version`).
+- **Bluetooth Gamepad Passthrough**: Bind `/dev/input/event*` nodes into chroot for wireless controllers (`asl gamepad`).
 
-### 🌡️ 4. Multi-Zone Thermal & Battery Monitoring
-- Real-time diagnostic reporting for battery temperature and SoC thermal sensors (`CPU`, `GPU`, `TSENS`, `quiet-therm`) across Qualcomm Snapdragon, Samsung Exynos, and MediaTek platforms (`asl thermal`).
+### 💻 4. Dev Suite & Security Auditing Suite
+- **Developer Suite**: One-click installation for Python 3, Node.js, Neovim, Go, Rust, and VS Code Server (`asl dev-suite`).
+- **Containerized Security Suite**: Defensive network auditing toolsuite including Nmap, Wireshark/TShark, Netcat, Socat, and Hydra (`asl security-suite`).
 
-### 📸 5. Point-in-Time Filesystem Snapshots & Backups
-- **Instant Snapshots**: Create instant snapshots (`asl snapshot create <name>`) and safely restore chroot state in seconds.
-- **Rollback Safety**: Includes automated rollback protection and disk headroom validation prior to backup operations.
-
-### 🖥️ 6. Interactive 3D TUI Console
-- Feature-rich terminal interface with 3D drop-shadow banners, categorized card grid layout, real-time telemetry (RAM, Swap, CPU temp, battery, load, host IP, X11 status, WakeLock), and single-letter hotkeys.
+### 🧹 5. Storage Cleaner & Automated Integrity Repair
+- **Storage Cleaner**: Purges APT package archives, temporary `/tmp` files, and Mesa shader caches (`asl clean`).
+- **Automated Integrity Repair**: Self-healing recovery for stale mount points, permission errors, and DPKG lock states (`asl repair`).
 
 ---
 
-## 📚 Dedicated Documentation & Tracking
+## 📖 Guide to the `docs/` Directory
 
-Detailed tracking, guides, and technical specifications are available in the [`docs/`](docs/) directory:
+All technical specifications, architecture invariants, CLI subcommands, and operational guides are documented inside the [`docs/`](docs/) directory. Use this guide to find the information you need:
 
-- 🏗️ **[Architecture & Invariants](docs/ARCHITECTURE.md):** Deep-dive into chroot mounting, hardware driver stack, and process spawning invariants (`os.posix_spawn`).
-- 🎮 **[Gaming & Wine Isolation Guide](docs/GAMING_GUIDE.md):** Wine prefix auto-resolution, DXVK/VKD3D setup, FSR resolution scaling, Steam runner, and backup tools.
-- ⚡ **[Performance & Audio Tuning](docs/PERFORMANCE_TUNING.md):** CPU governor boost, PulseAudio low-latency buffers, Box64 dynarec profiles, and RAM compaction.
-- 🛠️ **[CLI & Utilities Reference](docs/CLI_AND_UTILITIES.md):** Full `asl` CLI subcommand table and utility scripts.
-- 🗺️ **[Roadmap & Feature Tracking](docs/ROADMAP_AND_TRACKING.md):** Progress tracking, planned enhancements, and architectural invariants.
+| Document | Purpose & Target Audience | Key Contents |
+| :--- | :--- | :--- |
+| 🏗️ **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** | System Architects & Developers | Mount isolation mechanisms, process lifecycle invariants (`os.posix_spawn`), GPU driver architecture, dynamic `/etc/profile.d/asl_env.sh` sync. |
+| 🎮 **[`docs/GAMING_GUIDE.md`](docs/GAMING_GUIDE.md)** | Gamers & Power Users | Wine prefix isolation, Turnip/Zink Vulkan drivers, MangoHud telemetry overlay, Proton-GE manager, DXVK/VKD3D auto-installer, Steam setup. |
+| ⚡ **[`docs/PERFORMANCE_TUNING.md`](docs/PERFORMANCE_TUNING.md)** | Performance Engineers | CPU governor boost, sysctl kernel parameters (`swappiness`, `dirty_ratio`), PulseAudio low-latency buffers, Box64 dynarec flags. |
+| 🛠️ **[`docs/CLI_AND_UTILITIES.md`](docs/CLI_AND_UTILITIES.md)** | Command Line & Script Users | Comprehensive subcommand reference table for `asl`, parameter details, utility script index in `core/`, `desktop/`, and `gaming/`. |
+| 🗺️ **[`docs/ROADMAP_AND_TRACKING.md`](docs/ROADMAP_AND_TRACKING.md)** | Contributors & Testers | Completed feature list, upcoming roadmap enhancements, architectural invariants to maintain across edits. |
+
+### How to Use Documentation in Development:
+1. **Adding a Feature**: Consult `docs/ROADMAP_AND_TRACKING.md` to check architectural invariants before making edits.
+2. **Modifying Process Execution**: Review `docs/ARCHITECTURE.md` to ensure `os.posix_spawn` is maintained in GTK3 multithreading contexts.
+3. **Adding CLI Commands**: Update `docs/CLI_AND_UTILITIES.md` whenever adding subcommands to `bin/asl`.
 
 ---
 
@@ -118,7 +119,7 @@ Detailed tracking, guides, and technical specifications are available in the [`d
 ASL/
 ├── install.sh            # Automated setup script with distro selection & driver setup
 ├── bin/
-│   ├── asl               # Main 3D CLI entrypoint & interactive TUI dashboard
+│   ├── asl               # Main CLI entrypoint & interactive console dashboard
 │   └── superkit          # Alternative entrypoint symlink
 ├── core/
 │   ├── mount-chroot.sh   # Safe isolated chroot mount manager
@@ -126,13 +127,22 @@ ASL/
 │   ├── doctor.sh         # Environment pre-flight check & diagnostics
 │   ├── gpu-detect.sh     # Hardware SoC auto-detection & profile selection
 │   ├── gpu-profile.sh    # Mesa Turnip / Zink / VirGL environment profile manager
+│   ├── hud.sh            # MangoHud & DXVK_HUD telemetry overlay manager
+│   ├── wine-bundle.sh    # Wine Mono & Gecko offline MSI bundle installer
+│   ├── wine-version.sh   # Wine & Proton-GE version manager
+│   ├── gamepad.sh        # Bluetooth & USB gamepad evdev input mapper
+│   ├── dev-suite.sh      # Developer suite installer (Python, Node, Go, Rust, VS Code)
+│   ├── security-suite.sh # Defensive security audit toolsuite (Nmap, Wireshark, Socat)
+│   ├── cleaner.sh        # Storage cache purger & disk space cleaner
+│   ├── repair.sh         # Automated integrity repair & system recovery
 │   ├── thermal.sh        # SoC & battery thermal sensor diagnostic monitor
 │   ├── termux-bridge.sh  # WakeLock, open, clipboard, and notification bridge
 │   ├── android-aid.sh    # Android AID GID group mapper
 │   └── snapshot.sh       # Point-in-time chroot snapshot & backup manager
 ├── gaming/
-│   └── wine-box64.sh     # Wine64, Box64 & Windows app execution manager (DXVK via Winetricks)
+│   └── wine-box64.sh     # Wine64, Box64 & Windows app execution manager
 ├── desktop/
+│   ├── asl-hub-installer.sh # Deploys ASL Hub GTK3 Control Center into Debian rootfs
 │   ├── start-desktop.sh  # Termux:X11 desktop session & PulseAudio launcher
 │   ├── theme.sh          # GTK theme & icon set switcher
 │   └── remote.sh         # OpenSSH (port 2222) & x11vnc (port 5900) bridge
@@ -148,60 +158,58 @@ ASL/
 ### 1. Interactive Console & Telemetry
 | Command | Description |
 | :--- | :--- |
-| `asl` | Open the main 3D terminal dashboard |
+| `asl` | Open the main terminal dashboard |
 | `asl overview` | Print concise live system status without dashboard |
+| `asl hud [on\|off\|status]` | Toggle MangoHud / DXVK performance telemetry overlay |
 | `asl thermal` | Monitor battery and CPU/GPU thermal zone temperatures |
 | `asl doctor` | Run environment pre-flight diagnostics |
 
-### 2. Core Linux Subsystem Operations
+### 2. GTK3 Dashboard & System Management
 | Command | Description |
 | :--- | :--- |
-| `asl start` | Safely mount Linux chroot environment |
-| `asl shell` | Enter root bash session inside chroot |
-| `asl exec <cmd>` | Execute a command inside chroot |
-| `asl status` | Inspect mount points, chroot storage, and process state |
-| `asl stop` | Safely terminate GUI sessions and unmount chroot |
-| `asl install <pkgs>` | Install packages inside chroot via `apt-get` |
-| `asl search <query>` | Search available apt repositories |
-| `asl service <action> <svc>` | Manage background services (`start|stop|restart|status`) |
-| `asl snapshot create <name>` | Create instant point-in-time snapshot |
-| `asl snapshot list` | List available chroot snapshots |
-| `asl snapshot restore <name>`| Restore chroot state from snapshot |
-| `asl backup` | Create compressed backup archive |
-| `asl restore <file>` | Restore chroot from backup archive |
-| `asl aid setup` | Map Android host AID GIDs inside chroot |
+| `asl hub` / `asl gui` | Deploy and launch ASL Hub GTK3 Control Center |
+| `asl clean [all\|apt\|tmp]`| Purge APT package cache, `/tmp` files, and Mesa shader caches |
+| `asl repair [all\|mounts]`| Run automated repair for stale mounts, DPKG locks, and permissions |
 
 ### 3. MoBox Gaming & Direct3D Engine
 | Command | Description |
 | :--- | :--- |
 | `asl gpu` | Display active Turnip/Mesa GPU hardware runtime profile |
-| `asl mode [gaming\|performance\|balanced]` | Apply memory compaction & Turnip GPU tuning |
-| `asl setup-gaming` | Auto-install Wine64, Box64, and gaming tooling; install DXVK per Wine prefix via Winetricks (VKD3D is not auto-installed) |
-| `asl game` | Open interactive gaming menu |
-| `asl game run <exe>` | Execute Windows application via Box64 + Wine64 |
+| `asl mode [gaming\|performance]` | Apply memory compaction & Turnip GPU tuning |
+| `asl wine-bundle [install]` | Download & package offline Wine Mono (.NET) & Gecko bundles |
+| `asl wine-version [set]` | Switch between standard system Wine and Proton-GE engines |
+| `asl gamepad [sync\|test]` | Synchronize Bluetooth `/dev/input` gamepads into chroot |
+| `asl dxvk [enable\|status]` | Auto-install DXVK & VKD3D DirectX-to-Vulkan translators |
+| `asl setup-gaming` | Auto-install Wine64, Box64, and gaming tooling |
+| `asl game <exe>` | Execute Windows application via Box64 + Wine64 |
 
-### 4. Termux-X11 Desktop & Remote Services
+### 4. Dev Suite & Security Audit Tools
 | Command | Description |
 | :--- | :--- |
-| `asl desktop start` | Launch hardware-accelerated XFCE4 desktop |
-| `asl desktop status` | Inspect active desktop session state |
+| `asl dev-suite [install]` | Install IDEs and dev tools (`python`, `webdev`, `neovim`, `go`, `rust`, `vscode`) |
+| `asl security-suite [install]`| Deploy defensive security auditing suite (`basic`, `audit`, `nmap`, `wireshark`) |
+
+### 5. Termux-X11 Desktop & Remote Services
+| Command | Description |
+| :--- | :--- |
+| `asl desktop start` | Launch hardware-accelerated XFCE4 desktop (includes ASL Hub shortcut) |
 | `asl desktop stop` | Terminate current desktop session safely |
-| `asl desktop restart` | Force-stop and restart desktop environment |
-| `asl desktop sync-apps` | Sync Debian app shortcuts to Termux |
-| `asl theme [dark\|light\|nord\|dracula]` | Switch GTK theme presets |
-| `asl resolution [720p\|1080p\|native]` | Configure Termux:X11 display resolution |
-| `asl remote ssh [start\|stop\|status]` | Manage SSH server (port 2222) |
-| `asl remote vnc [start\|stop\|status]` | Manage x11vnc server (port 5900) |
-| `asl audio [start\|stop\|test]` | PulseAudio server management |
+| `asl desktop status` | Inspect active desktop session state |
+| `asl theme [dark\|light]` | Switch GTK theme presets |
+| `asl resolution [720p\|1080p]` | Configure Termux:X11 display resolution |
+| `asl remote ssh [start\|stop]` | Manage SSH server (port 2222) |
+| `asl remote vnc [start\|stop]` | Manage x11vnc server (port 5900) |
+| `asl audio [start\|stop\|test]`| PulseAudio server management |
 
-### 5. Termux & Android Host Bridge
+### 6. Termux & Android Host Bridge
 | Command | Description |
 | :--- | :--- |
-| `asl wakelock [on\|off\|status]` | Control CPU WakeLock state |
+| `asl wakelock [on\|off]` | Control CPU WakeLock state |
 | `asl open <file\|url>` | Open file or URL in default Android host app |
 | `asl clip [copy\|paste]` | Read or write Android system clipboard |
 | `asl toast <msg>` | Send Android toast notification |
 | `asl notify <title> <msg>` | Send Android notification banner |
+| `asl aid setup` | Map Android host AID GIDs inside chroot |
 
 ---
 
@@ -214,11 +222,8 @@ Standard chroot scripts often execute `mount --bind / /chroot` or bind Android s
 - Mount points use `--make-rprivate` and `--make-rslave` flags to prevent mount events from leaking into the host Android OS.
 - No host system partitions (`/system`, `/vendor`, `/apex`) are mounted into the chroot, so host OS stability is not threatened by chroot activity.
 
-> ⚠️ **Note:** ASL runs with root privileges and tunes a few *host-wide* kernel parameters (`vm.swappiness`, `vm.vfs_cache_pressure`, `vm.dirty_ratio`, `vm.dirty_background_ratio`, `vm.max_map_count`) for performance. These are backed up and restored on `asl stop`, but they are host-level changes, not chroot-scoped — treat ASL as a powerful tool with root access, not as a sandbox.
-
 ---
 
 ## 📄 License
 
 Distributed under the **MIT License**. See `LICENSE` for details.
-

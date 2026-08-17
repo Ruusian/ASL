@@ -156,11 +156,19 @@ show_help() {
     echo "  game [exe]       Launch Windows .exe with Box64 + Wine"
     echo "  benchmark        Run GPU hardware acceleration & Vulkan rendering benchmark"
     echo "  gpu              Detect SoC & configure Turnip/Zink/VirGL"
+    echo "  wine-bundle [act] Manage offline Wine Mono & Gecko bundles (install|status|clean)"
+    echo "  wine-version [act] Manage Wine / Proton-GE engines (status|set|install)"
+    echo "  gamepad [act]    Bluetooth gamepad evdev passthrough (status|sync|test)"
     echo ""
     echo "Modded Debian & Host Application Commands:"
     echo "  host [app]       Launch Modded Debian applications & launchers"
     echo "                   Options: wine, explorer, winefile, winecfg, winetricks, openbox, xfce, picker, list, launch <id>"
     echo "  apps             Alias for 'asl host' launcher menu"
+    echo "  hub, asl-hub     Deploy/Launch GTK3 Control Center (ASL Hub)"
+    echo "  dev-suite [act]  Install IDE & dev environments (python|webdev|neovim|go|rust|vscode)"
+    echo "  security-suite   Install defensive security audit tools (basic|audit|nmap|wireshark)"
+    echo "  clean [all|apt]  Purge package archives, caches, and temporary files"
+    echo "  repair [all]     Automated integrity repair for mounts, locks, and permissions"
     echo ""
     echo "Termux Desktop & Remote Commands:"
     echo "  desktop start    Start ASL-managed XFCE4 desktop"
@@ -1034,6 +1042,38 @@ case "${1:-}" in
     aid|gids)
         shift
         bash "$ASL_DIR/core/android-aid.sh" "$@"
+        ;;
+    wine-bundle)
+        shift
+        bash "$ASL_DIR/core/wine-bundle.sh" "$@"
+        ;;
+    wine-version)
+        shift
+        bash "$ASL_DIR/core/wine-version.sh" "$@"
+        ;;
+    gamepad)
+        shift
+        bash "$ASL_DIR/core/gamepad.sh" "$@"
+        ;;
+    dev-suite)
+        shift
+        bash "$ASL_DIR/core/dev-suite.sh" "$@"
+        ;;
+    security-suite)
+        shift
+        bash "$ASL_DIR/core/security-suite.sh" "$@"
+        ;;
+    clean)
+        shift
+        bash "$ASL_DIR/core/cleaner.sh" "$@"
+        ;;
+    repair)
+        shift
+        bash "$ASL_DIR/core/repair.sh" "$@"
+        ;;
+    hub|asl-hub|gui-hub)
+        shift
+        bash "$ASL_DIR/desktop/asl-hub-installer.sh" "$@"
         ;;
     host|apps|custom)
         shift

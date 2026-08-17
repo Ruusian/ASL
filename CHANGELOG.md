@@ -2,6 +2,35 @@
 
 All notable changes to the ASL (Android Subsystem for Linux) project are documented in this file.
 
+## [1.4] - 2026-08-17
+
+### 🚀 New Features & Desktop GTK3 Control Center
+
+- **Native Debian GTK3 Control Center ("ASL Hub")**:
+  - Installed `/usr/local/bin/asl-control-center` inside Debian rootfs with shortcuts in `/usr/share/applications/asl-hub.desktop` and directly on `/root/Desktop/asl-hub.desktop`.
+  - Built with GTK3 Python using `os.posix_spawn` process creation to strictly prevent multithreading GTK3 deadlocks (Architecture Invariant #1).
+  - Provides full GUI control over GPU profiles, MangoHud, Wine/Proton engines, Gamepad passthrough, Dev Suite, Security Suite, and System Maintenance.
+
+- **Offline Wine Mono & Gecko Bundle Installer (`asl wine-bundle`)**:
+  - Implemented `core/wine-bundle.sh` to package offline `.msi` installers for games requiring .NET framework or MSHTML.
+
+- **Wine & Proton-GE Version Manager (`asl wine-version`)**:
+  - Implemented `core/wine-version.sh` for seamless switching between system Wine and Proton-GE engines.
+
+- **Bluetooth Gamepad Passthrough (`asl gamepad`)**:
+  - Implemented `core/gamepad.sh` for evdev device detection (`/dev/input/event*`) and chroot input node mapping.
+
+- **IDE & Dev Environment Suite (`asl dev-suite`)**:
+  - Implemented `core/dev-suite.sh` with one-click presets for VS Code Server, Neovim, Python3, Node.js, Go, and Rust.
+
+- **Defensive Security & Audit Suite (`asl security-suite`)**:
+  - Implemented `core/security-suite.sh` for containerized network auditing (Nmap, Wireshark/TShark, Netcat, Socat, Hydra).
+
+- **Storage Cleaner & Integrity Repair (`asl clean` & `asl repair`)**:
+  - Implemented `core/cleaner.sh` and `core/repair.sh` for safe storage cache purging, DPKG lock recovery, and mount point repair.
+
+---
+
 ## [1.3] - 2026-08-17
 
 ### 🚀 New Features

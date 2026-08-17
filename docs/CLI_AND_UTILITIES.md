@@ -6,15 +6,18 @@ The `asl` binary in `/usr/local/bin/asl` serves as the unified entry point for a
 ### Subcommands
 | Command | Subcommand / Syntax | Description |
 | :--- | :--- | :--- |
-| **Interactive GUI** | `asl gui` or `asl -g` | Launches the GTK3 Python graphical manager dashboard (`asl-gui`). |
-| **Gaming Hub** | `asl hub` or `asl launcher` | Launches the terminal menu launcher (`asl-gaming-hub`). |
+| **Interactive GUI** | `asl hub` or `asl gui` | Launches the GTK3 Python Control Center dashboard ("ASL Hub"). |
+| **Wine Bundles** | `asl wine-bundle [install\|status\|clean]` | Manages offline Wine Mono (.NET) & Wine Gecko (MSHTML) MSI bundles. |
+| **Wine Engine Manager**| `asl wine-version [status\|set\|install]` | Switches active Wine engine between Debian system-wine and Proton-GE. |
+| **Bluetooth Gamepad** | `asl gamepad [status\|sync\|test]` | Synchronizes and tests host `/dev/input` evdev gamepads into chroot. |
+| **Dev Suite** | `asl dev-suite [install\|status]` | Installs IDE & dev toolchain (Python, Node, Go, Rust, Neovim, VS Code). |
+| **Security Audit** | `asl security-suite [install\|status]` | Deploys containerized defensive security auditing tools (Nmap, Wireshark, etc.). |
+| **Storage Cleaner** | `asl clean [all\|apt\|tmp\|cache]` | Purges package archives, temporary files, and Mesa shader caches. |
+| **System Repair** | `asl repair [all\|mounts\|permissions\|dpkg]` | Runs automated repair for mounts, lock files, and system permissions. |
 | **Game Executable** | `asl game <path_to_exe>` | Runs a Windows executable via `asl-wine-launch`. |
-| **DXVK Auto-Installer** | `asl dxvk [enable\|disable\|status]` | Configures Direct3D DXVK / VKD3D overrides for the target Wine prefix. |
+| **DXVK Auto-Installer** | `asl dxvk [enable\|disable\|status]` | Configures Direct3D DXVK / VKD3D overrides for target Wine prefix. |
 | **Steam Integration** | `asl steam [args...]` | Launches Steam client or Windows installer with Box64 flags. |
 | **Save & Prefix Backup** | `asl backup [save\|restore\|list]` | Manages compressed game save and Wine prefix backups. |
-| **Gamepad Config** | `asl gamepad` | Opens Wine `joy.cpl` joystick setup tool. |
-| **Wine Configuration** | `asl winecfg` | Opens `winecfg` graphical control panel. |
-| **Performance Boost** | `asl boost` | Executes CPU governor, OOM score, and memory compaction boost. |
 | **Interactive Shell** | `asl shell` or `asl` | Drops into Debian rootfs bash shell. |
 
 ---
