@@ -100,6 +100,18 @@ asl
 
 ---
 
+## 📚 Dedicated Documentation & Tracking
+
+Detailed tracking, guides, and technical specifications are available in the [`docs/`](docs/) directory:
+
+- 🏗️ **[Architecture & Invariants](docs/ARCHITECTURE.md):** Deep-dive into chroot mounting, hardware driver stack, and process spawning invariants (`os.posix_spawn`).
+- 🎮 **[Gaming & Wine Isolation Guide](docs/GAMING_GUIDE.md):** Wine prefix auto-resolution, DXVK/VKD3D setup, FSR resolution scaling, Steam runner, and backup tools.
+- ⚡ **[Performance & Audio Tuning](docs/PERFORMANCE_TUNING.md):** CPU governor boost, PulseAudio low-latency buffers, Box64 dynarec profiles, and RAM compaction.
+- 🛠️ **[CLI & Utilities Reference](docs/CLI_AND_UTILITIES.md):** Full `asl` CLI subcommand table and utility scripts.
+- 🗺️ **[Roadmap & Feature Tracking](docs/ROADMAP_AND_TRACKING.md):** Progress tracking, planned enhancements, and architectural invariants.
+
+---
+
 ## 📦 Repository Structure
 
 ```text
