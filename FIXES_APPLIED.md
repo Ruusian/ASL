@@ -1,3 +1,52 @@
+# ASL Bug Fixes Summary - Round 3 (v1.2 Stress Test Pass)
+
+## Round 3 Stress Test Fixes Applied
+
+### ✅ 1. Standardized Mount Checking (`grep -q -F " $target " /proc/mounts`) (CRITICAL)
+**Files**: `bin/asl`, `core/*.sh`, `desktop/*.sh`, `gaming/*.sh`, `module/action.sh`, `install.sh`
+
+**Changes Made**:
+- Replaced ambiguous `grep -q -w` (which treats `/` as a word boundary, causing false positives on nested chroot paths) with exact space-padded `/proc/mounts` column matching: `grep -q -F " $target " /proc/mounts`.
+- Eliminates false-positive mount checks and prevents unmount bypasses.
+
+---
+
+### ✅ 2. Dynamic Reverse Depth Sorting in `stop-chroot.sh` (HIGH)
+**File**: `core/stop-chroot.sh`
+
+**Changes Made**:
+- Updated mount resolution to dynamically extract all active mounts under `$DEBIANPATH` from `/proc/mounts` and sort by string length descending (`awk '{ print length, $0 }' | sort -rn`).
+- Guarantees nested child filesystems (`/proc/sys/fs/binfmt_misc`, `/dev/pts`, `/dev/shm`, `/tmp`) are unmounted before parent directories, preventing mount point leakage on stop.
+
+---
+
+### ✅ 3. Safe Subshell Execution for Desktop Application Launchers (HIGH)
+**Files**: `bin/asl`, `gaming/wine-box64.sh`
+
+**Changes Made**:
+- Replaced dangerous `eval "nohup $EXEC_CMD ..."` calls with safe explicit subshell invocation `nohup /bin/bash -c "$EXEC_CMD" >/tmp/app_launch.log 2>&1 &`.
+- Prevents command injection and parameter expansion errors when parsing `.desktop` Exec lines.
+
+---
+
+### ✅ 4. Path Escaping and Regex Sanitization (HIGH)
+**Files**: `core/snapshot.sh`, `desktop/theme.sh`
+
+**Changes Made**:
+- Implemented `printf '%q'` shell path escaping for export/import tar operations in `core/snapshot.sh`.
+- Added character escaping for `/`, `&`, and `|` in `desktop/theme.sh` (`esc_val=$(printf '%s\n' "$val" | sed -e 's/[\/&|]/\\&/g')`) to prevent `sed` substitution corruption when updating XFCE XML configuration files.
+
+---
+
+### ✅ 5. Prebuilt GPU Driver Install Mount Guard (MEDIUM)
+**Files**: `core/gpu-profile.sh`, `install.sh`
+
+**Changes Made**:
+- Added an explicit `grep -q -F " $DEBIANPATH/proc " /proc/mounts` guard in `asl_gpu_install_drivers()` to ensure the chroot environment is mounted prior to invoking `apt-get`.
+- Standardized installer mount checks in `install.sh` `ensure_chroot_unmounted_for_replace()`.
+
+---
+
 # ASL Bug Fixes Summary - Round 2
 
 ## Additional Fixes Applied

@@ -2,6 +2,22 @@
 
 All notable changes to the ASL (Android Subsystem for Linux) project are documented in this file.
 
+## [1.2] - 2026-08-17
+
+### 🔒 Security & Subshell Execution Fixes
+
+- **CRITICAL**: Replaced unsafe `eval "nohup $EXEC_CMD ..."` calls in `bin/asl` and `gaming/wine-box64.sh` with explicit bash subshell execution (`nohup /bin/bash -c "$EXEC_CMD"`).
+- **HIGH**: Added robust string path escaping with `printf '%q'` for snapshot export/import operations in `core/snapshot.sh` and XML theme configuration files in `desktop/theme.sh`.
+- **HIGH**: Added regex escaping for `/`, `&`, and `|` in `desktop/theme.sh` (`esc_val=$(printf '%s\n' "$val" | sed -e 's/[\/&|]/\\&/g')`) to prevent `sed` XML replacement corruption.
+
+### ⚙️ Mount Isolation & Robustness Improvements
+
+- **CRITICAL**: Standardized mount point matching across all scripts (`bin/asl`, `core/*.sh`, `desktop/*.sh`, `gaming/*.sh`, `module/action.sh`, `install.sh`) using exact space-padded `/proc/mounts` column matching (`grep -q -F " $target " /proc/mounts`).
+- **HIGH**: Implemented dynamic reverse path-length depth unmounting in `core/stop-chroot.sh` (`awk '{ print length, $0 }' | sort -rn`) to ensure child virtual filesystems (`binfmt_misc`, `/dev/pts`, `/dev/shm`, `/tmp`) are unmounted before parent directories.
+- **MEDIUM**: Added missing chroot mount verification before prebuilt GPU driver auto-installation in `core/gpu-profile.sh`.
+
+---
+
 ## [1.1] - 2026-08-16
 
 ### 🔒 Security Fixes
