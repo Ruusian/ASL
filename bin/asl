@@ -71,7 +71,56 @@ run_in_chroot() {
         return 1
     fi
 
-    su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" || return $?
+    su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --noprofile --norc -c \"printf \\\"%s\\\" \\\"$command_b64\\\" | /usr/bin/base64 -d | /bin/bash\"; else printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash; fi'" || return $?
+}
+
+launch_desktop_app() {
+    local APP="$1"
+    if [ -z "$APP" ]; then
+        echo "[!] No application specified to launch."
+        return 1
+    fi
+    run_in_chroot "
+        export DISPLAY=:0
+        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+        TARGET=\"$APP\"
+        if [[ \"\$TARGET\" == *.desktop ]] && [ ! -f \"\$TARGET\" ]; then
+            if [ -f \"/usr/share/applications/\$TARGET\" ]; then
+                TARGET=\"/usr/share/applications/\$TARGET\"
+            elif [ -f \"/root/Desktop/\$TARGET\" ]; then
+                TARGET=\"/root/Desktop/\$TARGET\"
+            fi
+        elif [ ! -f \"\$TARGET\" ]; then
+            if [ -f \"/usr/share/applications/\${TARGET}.desktop\" ]; then
+                TARGET=\"/usr/share/applications/\${TARGET}.desktop\"
+            elif [ -f \"/root/Desktop/\${TARGET}.desktop\" ]; then
+                TARGET=\"/root/Desktop/\${TARGET}.desktop\"
+            fi
+        fi
+
+        if [ -f \"\$TARGET\" ] && [[ \"\$TARGET\" == *.desktop ]]; then
+            APP_BASE=\$(basename \"\$TARGET\" .desktop)
+            if command -v gio >/dev/null 2>&1; then
+                nohup gio launch \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
+            elif command -v gtk-launch >/dev/null 2>&1; then
+                nohup gtk-launch \"\$APP_BASE\" >/tmp/app_launch.log 2>&1 &
+            else
+                EXEC_LINE=\$(grep -E '^Exec=' \"\$TARGET\" | head -n1 | cut -d'=' -f2-)
+                EXEC_CMD=\$(echo \"\$EXEC_LINE\" | sed -E 's/%[fFuUiIck]//g')
+                if [ -n \"\$EXEC_CMD\" ]; then
+                    eval \"nohup \$EXEC_CMD >/tmp/app_launch.log 2>&1 &\"
+                else
+                    echo \"[!] Could not parse Exec line from \$TARGET\"
+                fi
+            fi
+        else
+            if command -v asl-wine-launch >/dev/null 2>&1; then
+                nohup asl-wine-launch \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
+            else
+                nohup \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
+            fi
+        fi
+    "
 }
 
 show_help() {
@@ -459,55 +508,7 @@ watch_dashboard() {
 }
 
 show_host_apps_menu() {
-    while true; do
-        clear 2>/dev/null || true
-        printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '%s   ASL Host & Modded Debian Applications Launcher%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '%s============================================================%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        echo "1) Virtual Windows Desktop Container (Wine Explorer)"
-        echo "2) Wine File Manager (winefile)"
-        echo "3) Wine Configuration (winecfg)"
-        echo "4) Winetricks Helper"
-        echo "5) Graphical Executable Picker (.exe)"
-        echo "6) Openbox Virtual Desktop (Tint2 + Taskbar)"
-        echo "7) Full XFCE4 Virtual Desktop Session"
-        echo "8) List & Launch Modded Debian Desktop Shortcuts (.desktop)"
-        echo "9) Return to Main Menu"
-        echo ""
-        read -r -p "Select option [1-9]: " ha_choice
-        case "$ha_choice" in
-            1) bash "$REAL_SCRIPT" game desktop ;;
-            2) bash "$REAL_SCRIPT" game winefile ;;
-            3) bash "$REAL_SCRIPT" game winecfg ;;
-            4) bash "$REAL_SCRIPT" game winetricks ;;
-            5) bash "$REAL_SCRIPT" game picker ;;
-            6) bash "$REAL_SCRIPT" game openbox ;;
-            7) bash "$REAL_SCRIPT" desktop start ;;
-            8)
-                if ! is_mounted; then
-                    bash "$REAL_SCRIPT" start || break
-                fi
-                echo ""
-                echo "=== Modded Debian Desktop Shortcuts ==="
-                apps=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'ls /usr/share/applications/*.desktop /root/Desktop/*.desktop 2>/dev/null | sort -u'" 2>/dev/null)
-                if [ -z "$apps" ]; then
-                    echo "  [!] No .desktop launchers found in chroot."
-                else
-                    echo "$apps" | sed 's|^.*/||' | awk '{print "  - " $0}'
-                    echo ""
-                    read -r -p "Enter launcher file name (e.g. winecfg.desktop) or press Enter to cancel: " app_name
-                    if [ -n "$app_name" ]; then
-                        echo "[*] Launching $app_name..."
-                        run_in_chroot "export DISPLAY=:0; export PATH=/usr/local/bin:\$PATH; gtk-launch \"${app_name%.desktop}\" 2>/dev/null || asl-wine-launch \"$app_name\" 2>/dev/null || nohup \"$app_name\" >/dev/null 2>&1 &"
-                    fi
-                fi
-                ;;
-            9|q|exit) break ;;
-            *) echo "[!] Invalid selection." ;;
-        esac
-        echo ""
-        read -r -p "Press Enter to continue..." _tmp
-    done
+    bash "$REAL_SCRIPT" game menu
 }
 
 dashboard() {
@@ -747,7 +748,7 @@ case "${1:-}" in
             bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         fi
         if [ "$TARGET_USER" = "root" ]; then
-            exec su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; exec /bin/bash --login'"
+            exec su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --login; else exec /bin/bash --login; fi'"
         fi
         if [[ ! "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*\$?$ ]]; then
             echo "Error: Invalid Debian username."
@@ -1057,7 +1058,7 @@ case "${1:-}" in
                 if ! is_mounted; then
                     bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
                 fi
-                run_in_chroot "export DISPLAY=:0; export PATH=/usr/local/bin:\$PATH; gtk-launch \"${APP%.desktop}\" 2>/dev/null || asl-wine-launch \"$APP\" 2>/dev/null || nohup \"$APP\" >/dev/null 2>&1 &"
+                launch_desktop_app "$APP"
                 ;;
             menu|*)
                 show_host_apps_menu

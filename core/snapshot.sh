@@ -140,11 +140,56 @@ delete_snapshot() {
     echo "[✓] Snapshot '$name' deleted."
 }
 
+export_snapshot() {
+    local name="${1:-}" out_file="${2:-}"
+    if [ -z "$name" ] || ! safe_name "$name"; then
+        echo "Error: Valid snapshot name required. Usage: asl snapshot export <name> [output.tar.xz]"
+        return 1
+    fi
+    local target="$SNAPSHOT_DIR/$name"
+    if ! su -c "test -d '$target'" 2>/dev/null; then
+        echo "[!] Snapshot '$name' does not exist."
+        return 1
+    fi
+    out_file="${out_file:-/sdcard/Download/${name}.tar.xz}"
+    echo "[*] Exporting snapshot '$name' to '$out_file'..."
+    if su -c "tar -cJf '$out_file' -C '$target' ."; then
+        echo "[✓] Snapshot successfully exported to '$out_file'."
+    else
+        echo "[!] Export failed."
+        return 1
+    fi
+}
+
+import_snapshot() {
+    local file="${1:-}" name="${2:-}"
+    if [ -z "$file" ] || [ -z "$name" ] || ! safe_name "$name"; then
+        echo "Error: Usage: asl snapshot import <archive.tar.xz> <snapshot_name>"
+        return 1
+    fi
+    local target="$SNAPSHOT_DIR/$name"
+    if su -c "test -d '$target'" 2>/dev/null; then
+        echo "[!] Snapshot '$name' already exists."
+        return 1
+    fi
+    su -c "mkdir -p '$target'"
+    echo "[*] Importing snapshot from '$file' as '$name'..."
+    if su -c "tar -xJf '$file' -C '$target'"; then
+        echo "[✓] Snapshot '$name' imported successfully."
+    else
+        echo "[!] Import failed."
+        su -c "rm -rf '$target'" 2>/dev/null
+        return 1
+    fi
+}
+
 case "${1:-list}" in
     create) shift; create_snapshot "$@" ;;
     list) list_snapshots ;;
     restore) shift; restore_snapshot "$@" ;;
     delete|remove) shift; delete_snapshot "$@" ;;
-    *) echo "Usage: asl snapshot [create|list|restore|delete] <name>"; exit 1 ;;
+    export) shift; export_snapshot "$@" ;;
+    import) shift; import_snapshot "$@" ;;
+    *) echo "Usage: asl snapshot [create|list|restore|delete|export|import] <name>"; exit 1 ;;
 esac
 

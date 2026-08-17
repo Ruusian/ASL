@@ -74,16 +74,18 @@ asl_gpu_env_exports() {
     if [ "$ASL_GPU_PROFILE" = "adreno-turnip-zink" ]; then
         icd_path_in_chroot="/usr/share/vulkan/icd.d/$(asl_gpu_icd_name)"
     fi
-    cat << EOF
-export GALLIUM_DRIVER="${GALLIUM_DRIVER:-}"
-export MESA_LOADER_DRIVER_OVERRIDE="${MESA_LOADER_DRIVER_OVERRIDE:-}"
-export MESA_VK_WINSYS="${MESA_VK_WINSYS:-x11}"
-export VK_ICD_FILENAMES="${icd_path_in_chroot}"
-export VK_DRIVER_FILES="${icd_path_in_chroot}"
-export TU_DEBUG="${TU_DEBUG:-}"
-export MESA_SHADER_CACHE_DIR="${MESA_SHADER_CACHE_DIR:-/dev/shm/mesa_shader_cache}"
-export MESA_GL_VERSION_OVERRIDE="${MESA_GL_VERSION_OVERRIDE:-}"
-EOF
+    local res=""
+    [ -n "${GALLIUM_DRIVER:-}" ] && res="${res}export GALLIUM_DRIVER=\"${GALLIUM_DRIVER}\"\n"
+    [ -n "${MESA_LOADER_DRIVER_OVERRIDE:-}" ] && res="${res}export MESA_LOADER_DRIVER_OVERRIDE=\"${MESA_LOADER_DRIVER_OVERRIDE}\"\n"
+    res="${res}export MESA_VK_WINSYS=\"${MESA_VK_WINSYS:-x11}\"\n"
+    if [ -n "$icd_path_in_chroot" ]; then
+        res="${res}export VK_ICD_FILENAMES=\"${icd_path_in_chroot}\"\n"
+        res="${res}export VK_DRIVER_FILES=\"${icd_path_in_chroot}\"\n"
+    fi
+    [ -n "${TU_DEBUG:-}" ] && res="${res}export TU_DEBUG=\"${TU_DEBUG}\"\n"
+    res="${res}export MESA_SHADER_CACHE_DIR=\"${MESA_SHADER_CACHE_DIR:-/dev/shm/mesa_shader_cache}\"\n"
+    [ -n "${MESA_GL_VERSION_OVERRIDE:-}" ] && res="${res}export MESA_GL_VERSION_OVERRIDE=\"${MESA_GL_VERSION_OVERRIDE}\"\n"
+    printf '%b' "$res"
 }
 
 asl_gpu_report() {

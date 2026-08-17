@@ -26,43 +26,29 @@ build_gaming_env_exports() {
 
     snippet=$(cat << 'EOF'
 if [ -d /opt/wine-x64/bin ]; then
-    export PATH=/usr/local/bin:/opt/wine-x64/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+    export PATH=/usr/local/bin:/opt/wine-x64/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
     [ -x /opt/wine-x64/bin/wineserver-wrapper ] && export WINESERVER=/opt/wine-x64/bin/wineserver-wrapper
     [ -x /usr/local/bin/wine64 ] && export WINELOADER=/usr/local/bin/wine64
 else
-    export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+    export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
 fi
 export DISPLAY=:0
 export TMPDIR=/tmp
 export WINEARCH=win64
-export WINEPREFIX="\${WINEPREFIX:-/root/.wine-x64}"
+export WINEPREFIX="${WINEPREFIX:-$([ -d /root/.wine-x64 ] && echo /root/.wine-x64 || echo /root/.wine)}"
 export XDG_RUNTIME_DIR=/run/user/0
 export SDL_GAMECONTROLLERCONFIG_FILE=/etc/gamecontrollerdb.txt
 export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1
-export WINEDLLOVERRIDES="d3d11,dxgi=n,b;winebus.sys=d;winebth.sys=d;wineusb.sys=d;winealsa.drv=d;winemenubuilder.exe=d;mscoree,mshtml=d"
+export WINEDLLOVERRIDES="winemenubuilder.exe=d;mscoree,mshtml=d"
 export WINEDEBUG=-all
 @GPU_VARS@
-export DXVK_CONFIG_FILE=/etc/dxvk.conf
 export PULSE_SERVER=127.0.0.1
-export BOX64_MAXTHREADS=8
-export BOX64_EMULATED_LIBS=libGL.so.1:libvulkan.so.1
-export BOX64_DYNAREC_BLEEDING_EDGE=1
-export BOX64_DYNAREC_STRONGMEM=0
-export BOX64_DYNAREC_CALLRET=1
-export BOX64_DYNAREC_WAIT=0
-export BOX64_DYNAREC_FASTSYS=1
-export BOX64_DYNAREC_PAUSE=0
-export BOX64_DYNAREC_BIGBLOCK=2
-export BOX64_DYNAREC_FORWARD=1024
-export BOX64_DYNAREC_WEAKBARRIER=1
-export BOX64_DYNAREC_FASTNAN=1
-export BOX64_DYNAREC_FASTROUND=1
-export BOX64_DYNAREC_SAFEFLAGS=1
-export BOX64_DYNAREC_X87_NO80BITS=1
+export BOX64_ALLOW_MISSING_LIBS=1
 export BOX64_NOBANNER=1
-export vblank_mode=0
-export DXVK_ASYNC=1
-export DXVK_GPL=1
+export BOX64_DYNAREC=1
+export BOX64_DYNAREC_FASTROUND=1
+export BOX64_DYNAREC_FASTNAN=1
+export BOX64_DYNAREC_X87DOUBLE=0
 mkdir -p /run/user/0 /dev/shm/mesa_shader_cache 2>/dev/null || true
 EOF
 )
@@ -72,7 +58,7 @@ EOF
 ensure_wine_desktop_launchers() {
     local env_exports launcher_b64 setup_script script_b64
     env_exports=$(build_gaming_env_exports)
-    launcher_b64=$(printf '%s\n%s\nif [ "$1" = "winetricks" ]; then\n    exec "$@"\nfi\nif [[ "$1" != "box64" ]] && command -v box64 >/dev/null 2>&1; then\n    exec box64 "$@"\nelse\n    exec "$@"\nfi\n' "#!/bin/bash" "$env_exports" | base64 | tr -d '\n')
+    launcher_b64=$(printf '%s\n%s\nif [ "$1" = "winetricks" ]; then\n    exec "$@"\nfi\nif [[ "$1" != "box64" ]] && command -v box64 >/dev/null 2>&1; then\n    if [ -f "$1" ] && file "$1" 2>/dev/null | grep -q "x86-64"; then\n        exec box64 "$@"\n    elif [[ "$1" == "/opt/wine-x64"* ]]; then\n        exec box64 "$@"\n    else\n        exec "$@"\n    fi\nelse\n    exec "$@"\nfi\n' "#!/bin/bash" "$env_exports" | base64 | tr -d '\n')
 
     setup_script=$(cat << EOF_SETUP
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
@@ -202,29 +188,30 @@ Type=Application
 Categories=Settings;System;Wine;
 EOF_TRICKS
 
-cat << 'EOF_ASLGAME' > /usr/share/applications/asl-gaming.desktop
+cat << 'EOF_ASLHUB' > /usr/share/applications/asl-hub.desktop
 [Desktop Entry]
-Name=ASL Gaming Hub
-Comment=Interactive Windows Emulation and Gaming Management Terminal
+Name=ASL Gaming & Host Hub
+Comment=Interactive Windows Emulation and Host Applications Management Terminal
 Exec=asl game
 Icon=utilities-terminal
 Terminal=true
 Type=Application
 Categories=Game;Utility;System;Wine;
-EOF_ASLGAME
+EOF_ASLHUB
 
+rm -f /usr/share/applications/asl-gaming.desktop /usr/share/applications/asl-host.desktop /root/Desktop/asl-gaming.desktop /root/Desktop/asl-host.desktop 2>/dev/null || true
 cp -f /usr/share/applications/winefile.desktop /root/Desktop/ 2>/dev/null || true
 cp -f /usr/share/applications/winecfg.desktop /root/Desktop/ 2>/dev/null || true
 cp -f /usr/share/applications/wine-explorer.desktop /root/Desktop/ 2>/dev/null || true
 cp -f /usr/share/applications/winetricks.desktop /root/Desktop/ 2>/dev/null || true
-cp -f /usr/share/applications/asl-gaming.desktop /root/Desktop/ 2>/dev/null || true
+cp -f /usr/share/applications/asl-hub.desktop /root/Desktop/ 2>/dev/null || true
 chmod +x /root/Desktop/*.desktop /usr/share/applications/*.desktop 2>/dev/null || true
 gio trust /root/Desktop/*.desktop 2>/dev/null || true
 EOF_SETUP
 )
 
     script_b64=$(printf '%s' "$setup_script" | base64 | tr -d '\n')
-    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; echo $script_b64 | base64 -d | /bin/bash'"; then
+    if ! su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; echo $script_b64 | base64 -d | /bin/bash'"; then
         echo "[!] Failed to create Wine desktop launchers."
         return 1
     fi
@@ -232,7 +219,7 @@ EOF_SETUP
 
 setup_gaming() {
     echo "[*] Initializing Gaming Environment dependencies inside Debian chroot..."
-    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    if ! su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '
         export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
         dpkg --add-architecture i386 2>/dev/null || true
         CODENAME=\$(. /etc/os-release 2>/dev/null; printf %s \"\$VERSION_CODENAME\")
@@ -273,7 +260,7 @@ EOF_DXVK
     ensure_wine_desktop_launchers || return 1
     echo "[*] Setting up Wine win64 prefix..."
     ENV_EXPORTS=$(build_gaming_env_exports)
-    if ! su -c "chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
+    if ! su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '$ENV_EXPORTS
         wineboot -u
     '"; then
         echo "[!] Wine win64 prefix initialization failed."
@@ -290,7 +277,7 @@ run_gpu_benchmark() {
     asl_gpu_report
     echo ""
     ENV_EXPORTS=$(build_gaming_env_exports)
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
+    su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '$ENV_EXPORTS
         echo \"[*] Checking OpenGL / Mesa Information (glxinfo)...\"
         if command -v glxinfo >/dev/null 2>&1; then
             glxinfo -B 2>/dev/null || echo \"glxinfo failed to connect to DISPLAY :0\"
@@ -314,42 +301,99 @@ run_gpu_benchmark() {
     '"
 }
 
+run_desktop_shortcuts() {
+    echo ""
+    echo "=== Modded Debian & Host Application Shortcuts ==="
+    local apps
+    apps=$(su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'ls /usr/share/applications/*.desktop /root/Desktop/*.desktop 2>/dev/null | sort -u'" 2>/dev/null)
+    if [ -z "$apps" ]; then
+        echo "  [!] No .desktop launchers found in chroot."
+    else
+        echo "$apps" | sed 's|^.*/||' | awk '{print "  - " $0}'
+        echo ""
+        echo -n "Enter launcher file name (e.g. winecfg.desktop) or press Enter to cancel: "
+        read -r app_name
+        if [ -n "$app_name" ]; then
+            echo "[*] Launching $app_name..."
+            ENV_EXPORTS=$(build_gaming_env_exports)
+            su -c "TARGET=\"$app_name\" chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '$ENV_EXPORTS
+                if [[ \"\$TARGET\" == *.desktop ]] && [ ! -f \"\$TARGET\" ]; then
+                    if [ -f \"/usr/share/applications/\$TARGET\" ]; then
+                        TARGET=\"/usr/share/applications/\$TARGET\"
+                    elif [ -f \"/root/Desktop/\$TARGET\" ]; then
+                        TARGET=\"/root/Desktop/\$TARGET\"
+                    fi
+                elif [ ! -f \"\$TARGET\" ]; then
+                    if [ -f \"/usr/share/applications/\${TARGET}.desktop\" ]; then
+                        TARGET=\"/usr/share/applications/\${TARGET}.desktop\"
+                    elif [ -f \"/root/Desktop/\${TARGET}.desktop\" ]; then
+                        TARGET=\"/root/Desktop/\${TARGET}.desktop\"
+                    fi
+                fi
+
+                if [ -f \"\$TARGET\" ] && [[ \"\$TARGET\" == *.desktop ]]; then
+                    APP_BASE=\$(basename \"\$TARGET\" .desktop)
+                    if command -v gio >/dev/null 2>&1; then
+                        nohup gio launch \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
+                    elif command -v gtk-launch >/dev/null 2>&1; then
+                        nohup gtk-launch \"\$APP_BASE\" >/tmp/app_launch.log 2>&1 &
+                    else
+                        EXEC_LINE=\$(grep -E '^Exec=' \"\$TARGET\" | head -n1 | cut -d'=' -f2-)
+                        EXEC_CMD=\$(echo \"\$EXEC_LINE\" | sed -E 's/%[fFuUiIck]//g')
+                        if [ -n \"\$EXEC_CMD\" ]; then
+                            eval \"nohup \$EXEC_CMD >/tmp/app_launch.log 2>&1 &\"
+                        fi
+                    fi
+                else
+                    if command -v asl-wine-launch >/dev/null 2>&1; then
+                        nohup asl-wine-launch \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
+                    else
+                        nohup \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
+                    fi
+                fi
+            '"
+        fi
+    fi
+}
+
 show_gaming_menu() {
     while true; do
         echo "=========================================="
-        echo "       ASL Gaming & Virtual Windows"
+        echo "   ASL Gaming & Host Applications Hub"
         echo "=========================================="
         if ! check_emulation_available; then
             echo "0) Auto-Install Wine / Box64 Gaming Packages"
         fi
-        echo "1) Launch Virtual Windows Desktop Window (Wine Explorer)"
+        echo "1) Full-Screen Windows Explorer (Wine Desktop)"
         echo "2) Run Windows Executable (.exe)"
         echo "3) Graphical File Picker (Select .exe to run)"
-        echo "4) Launch Openbox Virtual Desktop (Tint2 + Taskbar + PCManFM)"
-        echo "5) Launch Wine File Manager (winefile)"
-        echo "6) Launch Wine Configuration (winecfg)"
-        echo "7) Launch Winetricks Helper"
-        echo "8) Launch Full XFCE4 Virtual Desktop Session"
-        echo "9) Run GPU & Vulkan Benchmark (glmark2 / vulkaninfo)"
-        echo "10) Exit"
+        echo "4) Wine File Manager (winefile)"
+        echo "5) Wine Configuration (winecfg)"
+        echo "6) Winetricks Helper"
+        echo "7) Modded Debian Shortcuts (.desktop)"
+        echo "8) Openbox Virtual Desktop (Tint2 + Taskbar + PCManFM)"
+        echo "9) Full XFCE4 Virtual Desktop Session"
+        echo "10) Run GPU & Vulkan Benchmark (glmark2 / vulkaninfo)"
+        echo "11) Exit"
         echo ""
-        echo -n "Select option [1-10]: "
+        echo -n "Select option [1-11]: "
         read -r CHOICE
         case "$CHOICE" in
             0) setup_gaming ;;
-            1) run_wine_desktop "1280x720" ;;
+            1) run_wine_desktop ;;
             2) run_wine_exe ;;
             3) run_gui_picker ;;
-            4) run_openbox_desktop ;;
-            5) run_winefile ;;
-            6) run_winecfg ;;
-            7) run_winetricks ;;
-            8)
+            4) run_winefile ;;
+            5) run_winecfg ;;
+            6) run_winetricks ;;
+            7) run_desktop_shortcuts ;;
+            8) run_openbox_desktop ;;
+            9)
                 echo "[*] Launching ASL-managed XFCE4 Desktop..."
                 bash "$SCRIPT_DIR/desktop/start-desktop.sh" start
                 ;;
-            9) run_gpu_benchmark ;;
-            10|q|exit) break ;;
+            10) run_gpu_benchmark ;;
+            11|q|exit) break ;;
             *) echo "[!] Invalid selection." ;;
         esac
         echo ""
@@ -358,19 +402,20 @@ show_gaming_menu() {
 
 run_wine_desktop() {
     if ! check_emulation_available; then return 1; fi
+    ensure_wine_desktop_launchers || return 1
     RES="${1:-1280x720}"
     asl_gpu_apply
     local ncpu mask
     ncpu=$(nproc 2>/dev/null || echo 8)
     mask="0-$((ncpu - 1))"
-    echo "[*] Launching Virtual Windows Desktop Container ($RES)..."
+    echo "[*] Launching Full-Screen Windows Explorer Desktop..."
     ENV_EXPORTS=$(build_gaming_env_exports)
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
+    su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '$ENV_EXPORTS
         wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true
-        nohup taskset -c $mask box64 wine64 explorer /desktop=VirtualWindows,$RES >/tmp/wine_desktop.log 2>&1 &
+        nohup taskset -c $mask wine64 explorer >/tmp/wine_desktop.log 2>&1 &
         sleep 1
     '"
-    echo "[✓] Virtual Windows Desktop launched on DISPLAY :0."
+    echo "[✓] Full-Screen Windows Explorer launched on DISPLAY :0."
 }
 
 run_winefile() {
@@ -378,15 +423,15 @@ run_winefile() {
     asl_gpu_apply
     echo "[*] Opening Wine File Manager..."
     ENV_EXPORTS=$(build_gaming_env_exports)
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
-        box64 wine64 winefile
+    su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '$ENV_EXPORTS
+        wine64 winefile
     '"
 }
 
 run_gui_picker() {
     if ! check_emulation_available; then return 1; fi
     echo "[*] Opening Graphical File Picker..."
-    EXE=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; zenity --file-selection --file-filter=\"Executable files (*.exe) | *.exe\" --title=\"Select Windows Executable\"'" 2>/dev/null)
+    EXE=$(su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export DISPLAY=:0; zenity --file-selection --file-filter=\"Executable files (*.exe) | *.exe\" --title=\"Select Windows Executable\"'" 2>/dev/null)
     if [ -n "$EXE" ]; then
         run_wine_exe "$EXE"
     else
@@ -397,7 +442,7 @@ run_gui_picker() {
 run_openbox_desktop() {
     if ! check_emulation_available; then return 1; fi
     echo "[*] Launching Openbox + Tint2 Desktop Environment Container..."
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '
+    su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '
         export DISPLAY=:0
         export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
         nohup openbox >/tmp/openbox.log 2>&1 &
@@ -450,11 +495,11 @@ run_wine_exe() {
     export TARGET_EXE="$internal_exe"
     export TARGET_NAME="$SAFE_APP_NAME"
     ENV_EXPORTS=$(build_gaming_env_exports)
-    su -c "TARGET_EXE=\"$TARGET_EXE\" TARGET_NAME=\"$TARGET_NAME\" chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
+    su -c "TARGET_EXE=\"$TARGET_EXE\" TARGET_NAME=\"$TARGET_NAME\" chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '$ENV_EXPORTS
         workdir=\$(dirname \"\$TARGET_EXE\")
         [ -d \"\$workdir\" ] && cd \"\$workdir\" 2>/dev/null || true
         wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true
-        nohup taskset -c $mask box64 wine64 explorer /desktop=\"\$TARGET_NAME\",1280x720 \"\$TARGET_EXE\" >/tmp/\"\${TARGET_NAME}_wine.log\" 2>&1 &
+        nohup box64 wine64 "\$TARGET_EXE" >/tmp/"\${TARGET_NAME}_wine.log" 2>&1 &
         sleep 1
     '"
 }
@@ -464,7 +509,7 @@ run_winecfg() {
     asl_gpu_apply
     echo "[*] Opening Wine Configuration..."
     ENV_EXPORTS=$(build_gaming_env_exports)
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
+    su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '$ENV_EXPORTS
         winecfg
     '"
 }
@@ -474,7 +519,7 @@ run_winetricks() {
     asl_gpu_apply
     echo "[*] Launching Winetricks..."
     ENV_EXPORTS=$(build_gaming_env_exports)
-    su -c "chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
+    su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c '$ENV_EXPORTS
         winetricks
     '"
 }
@@ -513,8 +558,8 @@ case "${1:-}" in
         if ! su -c "grep -q -w '$DEBIANPATH/proc' /proc/mounts" 2>/dev/null; then
             echo "Gaming Layer: Chroot unmounted"
         else
-            wine_ver=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/bin:/usr/bin:\$PATH; wine --version 2>/dev/null'" 2>/dev/null || echo "Not installed")
-            box64_ver=$(su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; box64 --version 2>&1 | head -n1'" 2>/dev/null || echo "Not installed")
+            wine_ver=$(su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export PATH=/opt/wine-x64/bin:/usr/local/bin:/usr/bin:\$PATH; wine --version 2>/dev/null'" 2>/dev/null || echo "Not installed")
+            box64_ver=$(su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; box64 --version 2>&1 | head -n1'" 2>/dev/null || echo "Not installed")
             echo "Gaming Layer Status:"
             echo "  Wine Version:  ${wine_ver:-Not installed}"
             echo "  Box64 Version: ${box64_ver:-Not installed}"

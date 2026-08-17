@@ -332,7 +332,7 @@ exec dbus-run-session -- bash -c '
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
     cp -f "$launcher_script" "$termux_tmp/asl-start-xfce.sh" 2>/dev/null || true
-    su -c "chroot '$DEBIANPATH' /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+    su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
     SESSION_PID=
     SESSION_START=
     for _i in 1 2 3 4 5 6 7 8 9 10; do
@@ -442,7 +442,7 @@ launch_app() {
     safe_id "$id" || { echo "[!] Invalid desktop application ID."; return 1; }
     for root in /usr/share/applications /usr/local/share/applications /root/.local/share/applications; do
         if su -c "chroot '$DEBIANPATH' /usr/bin/test -f '$root/$id.desktop'" 2>/dev/null; then
-            exec su -c "chroot '$DEBIANPATH' /bin/bash -c 'export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\"'"
+            exec su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\"'"
         fi
     done
     echo "[!] Debian desktop entry not found: $id"

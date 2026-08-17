@@ -140,4 +140,9 @@ for kv in vm.swappiness=60 vm.vfs_cache_pressure=50 vm.dirty_ratio=15 vm.dirty_b
     su -c "sysctl -w '$kv'" 2>/dev/null || true
 done
 
+# Ensure swapfile is enabled if present
+if su -c "test -f /data/swapfile" 2>/dev/null; then
+    su -c "swapon /data/swapfile" 2>/dev/null || true
+fi
+
 echo "[✓] Chroot mounted successfully."

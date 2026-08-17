@@ -74,7 +74,7 @@ ssh_control() {
                 echo "[*] SSH server is already running."
             else
                 echo "[*] Starting SSH daemon on port 2222..."
-                su -c "chroot '$DEBIANPATH' /usr/sbin/sshd -p 2222" || return 1
+                su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /usr/sbin/sshd -p 2222" || return 1
                 echo "[✓] SSH server active. Connect via: ssh root@127.0.0.1 -p 2222"
                 echo "    Note: Password auth is DISABLED; root requires a public key."
                 echo "          Add one with: asl exec sh -c 'mkdir -p ~/.ssh && echo YOUR_PUBKEY >> ~/.ssh/authorized_keys'"
@@ -122,7 +122,7 @@ vnc_control() {
                     echo "    VNC password set to: $VNCPW (stored at $PWFILE in chroot)"
                 fi
                 echo "[*] Starting optimized low-latency x11vnc server on port 5900..."
-                su -c "chroot '$DEBIANPATH' /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export DISPLAY=:0; /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -display :0 -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1'" || return 1
+                su -c "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export DISPLAY=:0; /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -display :0 -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1'" || return 1
                 echo "[✓] VNC server active (low-latency near-native mode). Connect to 127.0.0.1:5900."
                 echo "    To reset the password, run: asl remote vnc clean reset-auth"
             fi
