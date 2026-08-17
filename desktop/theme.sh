@@ -17,7 +17,7 @@ get_dbus_env() {
 
 update_xml_property() {
     local xml_file="$1" prop="$2" val="$3"
-    [ -f "$xml_file" ] || return 0
+    su -c "test -f '$xml_file'" 2>/dev/null || return 0
     su -c "sed -i -E 's|(<property name=\"'$prop'\" type=\"string\" value=\")[^\"]*(\"/>)|\1'$val'\2|' '$xml_file'" 2>/dev/null || true
 }
 

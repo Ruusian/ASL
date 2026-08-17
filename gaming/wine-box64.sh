@@ -406,13 +406,15 @@ run_wine_exe() {
     fi
 
     APP_NAME=$(basename "$EXE_PATH" .exe)
+    SAFE_APP_NAME=$(echo "$APP_NAME" | sed 's/[^A-Za-z0-9_-]/_/g')
+    [ -n "$SAFE_APP_NAME" ] || SAFE_APP_NAME="App"
     asl_gpu_apply
     local ncpu mask
     ncpu=$(nproc 2>/dev/null || echo 8)
     mask="0-$((ncpu - 1))"
     echo "[*] Executing $EXE_PATH ($APP_NAME) with Box64 + Wine64..."
     export TARGET_EXE="$internal_exe"
-    export TARGET_NAME="$APP_NAME"
+    export TARGET_NAME="$SAFE_APP_NAME"
     ENV_EXPORTS=$(build_gaming_env_exports)
     su -c "TARGET_EXE=\"$TARGET_EXE\" TARGET_NAME=\"$TARGET_NAME\" chroot '$DEBIANPATH' /bin/bash -c '$ENV_EXPORTS
         workdir=\$(dirname \"\$TARGET_EXE\")

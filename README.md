@@ -40,24 +40,24 @@ Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** transforms yo
 Install or update **ASL** with a single command inside Termux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash
 ```
 
 > ⚠️ **Trust note:** Piping a remote script into `bash` executes it with your current
 > privileges. Review [`install.sh`](install.sh) before running — it installs Termux
 > packages, requires root (`su`), and downloads a prebuilt rootfs (checksum-verified
 > for the modded edition; see the `SHA256SUMS` sidecar). For an auditable install,
-> clone the repo first: `git clone https://github.com/Ruusian5/AndroidLinux-SuperKit && cd AndroidLinux-SuperKit && bash install.sh`.
+> clone the repo first: `git clone https://github.com/Ruusian5/ASL && cd ASL && bash install.sh`.
 
 ### 🐧 Distro & Image Options
 Select your preferred Debian rootfs edition interactively during setup, or pass non-interactive flags:
 
 ```bash
 # ASL Modded Rootfs (Pre-configured Turnip Vulkan, Box64, Wine64, XFCE Desktop):
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --modded
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --modded
 
 # Standard Clean Base Rootfs (Official Debian Trixie via proot-distro):
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/AndroidLinux-SuperKit/master/install.sh | bash -s -- --standard
+curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --standard
 ```
 
 After installation, launch the interactive 3D console anytime:

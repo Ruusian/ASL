@@ -53,8 +53,8 @@ echo -e "${GREEN}[✓] SHA256SUMS generated ($ARCHIVE_SUM)${RESET}"
 if command -v gh >/dev/null 2>&1; then
     echo -e "${GREEN}[*] Creating GitHub Release $RELEASE_TAG and uploading modded asset...${RESET}"
     RELEASE_SUMS="$(dirname "$OUTPUT_TAR")/SHA256SUMS"
-    gh release create "$RELEASE_TAG" "$OUTPUT_TAR" "$RELEASE_SUMS" --title "ASL Modded Subsystem Release $RELEASE_TAG" --notes "Prebuilt modded ASL rootfs with Turnip Mesa Vulkan, Box64, Wine64, and XFCE desktop pre-configured." --repo Ruusian5/AndroidLinux-SuperKit 2>/dev/null || \
-    gh release upload "$RELEASE_TAG" "$OUTPUT_TAR" "$RELEASE_SUMS" --clobber --repo Ruusian5/AndroidLinux-SuperKit
+    gh release create "$RELEASE_TAG" "$OUTPUT_TAR" "$RELEASE_SUMS" --title "ASL Modded Subsystem Release $RELEASE_TAG" --notes "Prebuilt modded ASL rootfs with Turnip Mesa Vulkan, Box64, Wine64, and XFCE desktop pre-configured." --repo Ruusian5/ASL 2>/dev/null || \
+    gh release upload "$RELEASE_TAG" "$OUTPUT_TAR" "$RELEASE_SUMS" --clobber --repo Ruusian5/ASL
     echo -e "${GREEN}[✓] GitHub release asset uploaded successfully!${RESET}"
 else
     echo -e "${YELLOW}[!] GitHub CLI (gh) not found. To upload manually, run:${RESET}"

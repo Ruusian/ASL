@@ -56,6 +56,7 @@ fi
 
 # 2. Package Installation
 echo -e "${GREEN}[*] Installing required Termux packages...${RESET}"
+pkg install -y x11-repo 2>/dev/null || true
 pkg update -y || true
 pkg install -y git pulseaudio termux-x11-nightly virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || \
 pkg install -y git pulseaudio termux-x11 virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || true
@@ -126,14 +127,14 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
 
     if [ "$DISTRO_TYPE" != "skip" ]; then
         if [ "$IS_MODDED" = "true" ]; then
-            RELEASE_URL="https://github.com/Ruusian5/AndroidLinux-SuperKit/releases/latest/download/asl-debian-modded-arm64.tar.xz"
+            RELEASE_URL="https://github.com/Ruusian5/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
             TEMP_TAR="$PREFIX/tmp/asl-modded-temp.tar.xz"
             echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
             echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
 
             if wget -q --show-progress -O "$TEMP_TAR" "$RELEASE_URL" 2>/dev/null || curl -L -o "$TEMP_TAR" "$RELEASE_URL"; then
                 echo -e "${GREEN}[*] Verifying downloaded archive checksum...${RESET}"
-                SHA256SUMS_URL="https://github.com/Ruusian5/AndroidLinux-SuperKit/releases/latest/download/SHA256SUMS"
+                SHA256SUMS_URL="https://github.com/Ruusian5/ASL/releases/latest/download/SHA256SUMS"
                 TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
                 EXPECTED=""
                 if ! (wget -q -O "$TEMP_SUMS" "$SHA256SUMS_URL" 2>/dev/null || curl -fsSL -o "$TEMP_SUMS" "$SHA256SUMS_URL"); then
@@ -216,7 +217,7 @@ if [ -d "$TARGET_DIR/.git" ]; then
     git pull origin master || true
 else
     echo -e "${GREEN}[*] Cloning ASL repository to $TARGET_DIR...${RESET}"
-    git clone https://github.com/Ruusian5/AndroidLinux-SuperKit.git "$TARGET_DIR"
+    git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR"
     cd "$TARGET_DIR"
 fi
 
