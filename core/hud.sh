@@ -30,6 +30,14 @@ asl_hud_get_mangohud() {
     fi
 }
 
+sync_chroot() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$script_dir/gpu-profile.sh" ]; then
+        (source "$script_dir/gpu-profile.sh" && asl_sync_chroot_env 2>/dev/null) || true
+    fi
+}
+
 asl_hud_enable() {
     ensure_state_dir
     local dxvk_cfg="${1:-$DEFAULT_DXVK_HUD}"
@@ -38,12 +46,14 @@ asl_hud_enable() {
     echo "[✓] Performance Overlay (MangoHud / DXVK HUD) ENABLED."
     echo "    DXVK_HUD: $dxvk_cfg"
     echo "    MANGOHUD_CONFIG: $mango_cfg"
+    sync_chroot
 }
 
 asl_hud_disable() {
     ensure_state_dir
     printf 'ENABLED=0\n' > "$HUD_STATE_FILE"
     echo "[✓] Performance Overlay DISABLED."
+    sync_chroot
 }
 
 asl_hud_toggle() {

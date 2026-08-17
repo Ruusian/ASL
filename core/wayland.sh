@@ -35,6 +35,11 @@ asl_set_backend() {
             return 1
             ;;
     esac
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$script_dir/gpu-profile.sh" ]; then
+        (source "$script_dir/gpu-profile.sh" && asl_sync_chroot_env 2>/dev/null) || true
+    fi
 }
 
 asl_detect_wayland_socket() {

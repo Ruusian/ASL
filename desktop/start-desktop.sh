@@ -238,6 +238,7 @@ start_desktop() {
         SOCAT_START=$(pid_start_time "$SOCAT_PID")
     fi
     asl_gpu_apply
+    asl_sync_chroot_env 2>/dev/null || true
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
     [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
     mkdir -p "$termux_tmp"
@@ -267,7 +268,6 @@ export NO_AT_BRIDGE=1
 export GIO_USE_PORTALS=0
 export GIO_USE_VFS=local
 export WEBKIT_FORCE_SANDBOX=0
-export QT_QPA_PLATFORM=xcb
 export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
 $(asl_gpu_env_exports)

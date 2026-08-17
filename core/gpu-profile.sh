@@ -102,6 +102,21 @@ asl_gpu_env_exports() {
     printf '%b' "$res"
 }
 
+asl_sync_chroot_env() {
+    DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
+    if [ -d "$DEBIANPATH/etc/profile.d" ]; then
+        local env_script
+        env_script="$(asl_gpu_env_exports)"
+        su -c "cat << 'EOF' > '$DEBIANPATH/etc/profile.d/asl_env.sh'
+#!/bin/sh
+# ASL Dynamic Environment
+$env_script
+EOF
+chmod 644 '$DEBIANPATH/etc/profile.d/asl_env.sh'
+" 2>/dev/null || true
+    fi
+}
+
 asl_gpu_report() {
     asl_gpu_apply
     printf 'Profile: %s\n' "$ASL_GPU_PROFILE"
