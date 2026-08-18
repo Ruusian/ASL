@@ -56,6 +56,30 @@ kill_host() {
     " 2>/dev/null || true
 }
 
+chroot_sshd_running() {
+    is_mounted || return 1
+    asl_exec "
+        for pid in /proc/[0-9]*; do
+            [ -d \"\$pid\" ] || continue
+            [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
+            grep -q '^sshd\$' \"\$pid/comm\" 2>/dev/null && exit 0
+        done
+        exit 1
+    " 2>/dev/null
+}
+
+chroot_vnc_running() {
+    is_mounted || return 1
+    asl_exec "
+        for pid in /proc/[0-9]*; do
+            [ -d \"\$pid\" ] || continue
+            [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
+            grep -q '^x11vnc\$' \"\$pid/comm\" 2>/dev/null && exit 0
+        done
+        exit 1
+    " 2>/dev/null
+}
+
 ssh_control() {
     local action="${1:-status}"
     case "$action" in
@@ -73,7 +97,7 @@ ssh_control() {
             # (prohibit-password); password auth is disabled. Passwords over
             # the network are crackable — use an authorized_keys entry instead.
             asl_chroot_exec "if grep -qE \"^[#]?PermitRootLogin\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PermitRootLogin.*/PermitRootLogin prohibit-password/\" /etc/ssh/sshd_config; else echo \"PermitRootLogin prohibit-password\" >> /etc/ssh/sshd_config; fi; if grep -qE \"^[#]?PasswordAuthentication\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PasswordAuthentication.*/PasswordAuthentication no/\" /etc/ssh/sshd_config; else echo \"PasswordAuthentication no\" >> /etc/ssh/sshd_config; fi; if grep -qE \"^[#]?PubkeyAuthentication\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PubkeyAuthentication.*/PubkeyAuthentication yes/\" /etc/ssh/sshd_config; else echo \"PubkeyAuthentication yes\" >> /etc/ssh/sshd_config; fi" 2>/dev/null || true
-            if asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then
+            if chroot_sshd_running; then
                 echo "[*] SSH server is already running."
             else
                 echo "[*] Starting SSH daemon on port 2222..."
@@ -86,7 +110,7 @@ ssh_control() {
             fi
             ;;
         stop)
-            if is_mounted && asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then
+            if chroot_sshd_running; then
                 kill_chroot TERM 'sshd'
                 echo "[✓] SSH daemon stopped."
             else
@@ -94,7 +118,7 @@ ssh_control() {
             fi
             ;;
         status|"")
-            if is_mounted && asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then
+            if chroot_sshd_running; then
                 echo "SSH Server: RUNNING (port 2222)"
             else
                 echo "SSH Server: STOPPED"
@@ -114,7 +138,7 @@ vnc_control() {
             fi
             # Clean stale VNC locks before checking process
             asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
-            if asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then
+            if chroot_vnc_running; then
                 echo "[*] VNC server is already running."
             else
                 PWFILE="/root/.asl-vncpasswd"
@@ -136,10 +160,10 @@ vnc_control() {
             fi
             ;;
         stop)
-            if is_mounted && asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then
+            if chroot_vnc_running; then
                 kill_chroot TERM 'x11vnc'
                 sleep 1
-                if asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then
+                if chroot_vnc_running; then
                     kill_chroot 9 'x11vnc'
                 fi
                 asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
@@ -164,7 +188,7 @@ vnc_control() {
             echo "[✓] VNC server state cleaned successfully."
             ;;
         status|"")
-            if is_mounted && asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then
+            if chroot_vnc_running; then
                 echo "VNC Server: RUNNING (port 5900, low-latency near-native)"
             else
                 echo "VNC Server: STOPPED"
@@ -202,7 +226,7 @@ lan_set_password() {
 }
 
 lan_sshd_running() {
-    pgrep -x sshd >/dev/null 2>&1
+    host_sshd_running
 }
 
 lan_start() {

@@ -335,10 +335,10 @@ asl_gpu_cached() {
 
 asl_remote_summary() {
     local active=()
-    if pgrep -x sshd >/dev/null 2>&1; then active+=("LAN:8022"); fi
-    if asl_chroot_exec "pgrep -x sshd" >/dev/null 2>&1; then active+=("SSH:2222"); fi
-    if asl_chroot_exec "pgrep -x x11vnc" >/dev/null 2>&1; then active+=("VNC:5900"); fi
-    if pgrep -f "pinggy.io" >/dev/null 2>&1; then active+=("Tunnel"); fi
+    if bash "$ASL_DIR/desktop/remote.sh" lan status 2>/dev/null | grep -q "RUNNING"; then active+=("LAN:8022"); fi
+    if bash "$ASL_DIR/desktop/remote.sh" ssh status 2>/dev/null | grep -q "RUNNING"; then active+=("SSH:2222"); fi
+    if bash "$ASL_DIR/desktop/remote.sh" vnc status 2>/dev/null | grep -q "RUNNING"; then active+=("VNC:5900"); fi
+    if bash "$ASL_DIR/desktop/remote.sh" public status 2>/dev/null | grep -q "RUNNING"; then active+=("Tunnel"); fi
     if [ ${#active[@]} -gt 0 ]; then
         printf '%s' "${active[*]}"
     else
@@ -387,9 +387,13 @@ overview() {
         zram_used_raw=$(asl_exec "cat /sys/block/zram0/mem_used_total 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$zram_size" ] && [ "$zram_size" -gt 0 ] 2>/dev/null; then
             swap_total=$((zram_size / 1048576))
-            swap_used=$((zram_used_raw / 1048576))
+            swap_used=$(( ${zram_used_raw:-0} / 1048576 ))
             [ "$swap_used" -gt "$swap_total" ] && swap_used=$swap_total
-            swap_pct=$((swap_used * 100 / swap_total))
+            if [ "$swap_total" -gt 0 ]; then
+                swap_pct=$((swap_used * 100 / swap_total))
+            else
+                swap_pct=0
+            fi
             swap_from_zram=1
         fi
     fi
