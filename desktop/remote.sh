@@ -230,12 +230,13 @@ lan_start() {
 
     printf '%s %s\n' "$user" "$host" > "$LAN_STATE" 2>/dev/null || true
 
-    echo "[✓] LAN SSH active. Any device on the same network can connect:"
+    echo "[✓] LAN SSH active (Root Access Enabled). Any device on the same network can connect:"
     echo ""
-    echo "        ssh -p $SSH_PORT ${user}@${host}"
+    echo "        ssh -p $SSH_PORT root@${host}   (or ${user}@${host})"
     echo ""
     echo "    Access code (password): $code"
-    echo "    Change it later with:   asl remote lan code <new-code>"
+    echo "    Root Access:            Run 'su' or 'asl' after login"
+    echo "    Change code later:      asl remote lan code <new-code>"
 }
 
 lan_stop() {
@@ -259,8 +260,8 @@ lan_status() {
     host=$(lan_host_ip)
     code=$(lan_code)
     if lan_sshd_running; then
-        echo "LAN SSH:      RUNNING (port $SSH_PORT)"
-        echo "    Command:  ssh -p $SSH_PORT ${user}@${host}"
+        echo "LAN SSH:      RUNNING (port $SSH_PORT, Root Access Enabled)"
+        echo "    Command:  ssh -p $SSH_PORT root@${host}"
         echo "    Code:     $code"
     else
         echo "LAN SSH:      STOPPED"
