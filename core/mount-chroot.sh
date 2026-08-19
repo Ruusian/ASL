@@ -136,6 +136,24 @@ asl_exec "
         fi
     fi
 
+    # Create pkg -> apt compatibility shim inside Debian chroot for third-party scripts
+    if [ -d \"$DEBIANPATH/usr/local/bin\" ] && [ ! -f \"$DEBIANPATH/usr/local/bin/pkg\" ]; then
+        cat <<'EOFSHIM' > \"$DEBIANPATH/usr/local/bin/pkg\"
+#!/bin/bash
+# ASL Debian chroot compatibility shim for Termux 'pkg' commands
+if [ "\$1" = "install" ] || [ "\$1" = "in" ]; then
+    shift
+    apt-get update && exec apt-get install -y "\$@"
+elif [ "\$1" = "upgrade" ] || [ "\$1" = "up" ]; then
+    shift
+    apt-get update && exec apt-get dist-upgrade -y "\$@"
+else
+    exec apt-get "\$@"
+fi
+EOFSHIM
+        chmod +x \"$DEBIANPATH/usr/local/bin/pkg\" 2>/dev/null || true
+    fi
+
     trap - ERR
 " || {
     echo "[!] Chroot mount failed during initialization."
