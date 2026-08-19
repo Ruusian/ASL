@@ -195,6 +195,13 @@ asl_exec "
         fi
     fi
 
+    # Ensure chroot profile/bashrc unsets host Termux environment variables
+    for rc in \"$DEBIANPATH/etc/bash.bashrc\" \"$DEBIANPATH/etc/profile\"; do
+        if [ -f \"\$rc\" ] && ! grep -q \"ASL Environment Isolation\" \"\$rc\" 2>/dev/null; then
+            printf '\n# ASL Environment Isolation\nunset PREFIX TERMUX_VERSION TERMUX_APP_PID TERMUX_MAIN_PACKAGE_NAME TERMUX__PREFIX TERMUX__HOME TERMUX__ROOTFS_DIR TMPDIR\n' >> \"\$rc\" 2>/dev/null || true
+        fi
+    done
+
     # Create pkg -> apt compatibility shim inside Debian chroot for third-party scripts
     mkdir -p \"$DEBIANPATH/usr/local/bin\" \"$DEBIANPATH/usr/bin\" \"$DEBIANPATH/bin\" 2>/dev/null || true
     cat <<'EOFSHIM' > \"$DEBIANPATH/usr/local/bin/pkg\"
