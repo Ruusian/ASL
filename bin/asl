@@ -467,6 +467,11 @@ asl_remote_details() {
     fi
     if [ -f "$prefix/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
         local s_alias="asl-${user}"
+        if [ -f "$HOME/.asl/serveo_alias.txt" ] && [ -s "$HOME/.asl/serveo_alias.txt" ]; then
+            s_alias=$(cat "$HOME/.asl/serveo_alias.txt" 2>/dev/null)
+        elif [ -n "${ASL_SERVEO_ALIAS:-}" ]; then
+            s_alias="$ASL_SERVEO_ALIAS"
+        fi
         details+=("  • Serveo Tunnel:    ssh -J serveo.net ${user}@${s_alias}")
     fi
     if [ -f "$prefix/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then
