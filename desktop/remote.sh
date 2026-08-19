@@ -362,7 +362,130 @@ tailscale_control() {
     esac
 }
 
-# --- 6. Seamless Auto-Connect Daemon & Fallback Engine -----------------------
+# --- 6. Direct Chroot SSH Server (Port 2222) ----------------------------------
+chroot_ssh_running() {
+    is_mounted && asl_chroot_exec "pgrep -f 'sshd.*2222|sshd' >/dev/null 2>&1"
+}
+
+chroot_ssh_control() {
+    local action="${1:-status}"
+    case "$action" in
+        start)
+            if ! is_mounted; then
+                echo "Error: Debian chroot is not mounted. Run 'asl start' first."
+                return 1
+            fi
+            echo "[*] Configuring and starting OpenSSH server inside Debian chroot (port 2222)..."
+            local pass
+            pass=$(get_password)
+            asl_chroot_exec "
+                export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                mkdir -p /var/run/sshd /root/.ssh
+                chmod 700 /root/.ssh
+                if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
+                    ssh-keygen -A >/dev/null 2>&1 || true
+                fi
+                printf '%s\n%s\n' '$pass' '$pass' | passwd root >/dev/null 2>&1 || true
+                if grep -qE '^#?PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null; then
+                    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+                else
+                    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+                fi
+                if grep -qE '^#?Port' /etc/ssh/sshd_config 2>/dev/null; then
+                    sed -i 's/^#\?Port.*/Port 2222/' /etc/ssh/sshd_config
+                else
+                    echo 'Port 2222' >> /etc/ssh/sshd_config
+                fi
+                if ! pgrep -f 'sshd.*2222' >/dev/null 2>&1; then
+                    /usr/sbin/sshd -p 2222 2>/dev/null || service ssh start 2>/dev/null || true
+                fi
+            " 2>/dev/null || true
+            echo "[✓] Direct Chroot SSH Server active on port 2222."
+            echo "    Connect command: ssh -p 2222 root@$(lan_host_ip)"
+            echo "    Password:        $pass"
+            ;;
+        stop)
+            if is_mounted; then
+                asl_chroot_exec "pkill -f 'sshd.*2222' 2>/dev/null || true" 2>/dev/null || true
+                echo "[✓] Chroot SSH Server stopped."
+            fi
+            ;;
+        status|"")
+            if chroot_ssh_running; then
+                echo "Chroot SSH:   RUNNING (port 2222)"
+                echo "    Connect:  ssh -p 2222 root@$(lan_host_ip)"
+                echo "    Password: $(get_password)"
+            else
+                echo "Chroot SSH:   STOPPED"
+            fi
+            ;;
+    esac
+}
+
+# --- 7. SSH Public Key Authorization Management -----------------------------
+key_control() {
+    local action="${1:-list}"
+    local key_file="$HOME/.ssh/authorized_keys"
+    local chroot_key_file="$DEBIANPATH/root/.ssh/authorized_keys"
+    case "$action" in
+        add)
+            local key="$2"
+            if [ -z "$key" ]; then
+                echo "Usage: asl remote keys add \"<ssh-pubkey-string>\""
+                return 1
+            fi
+            mkdir -p "$HOME/.ssh"
+            echo "$key" >> "$key_file"
+            chmod 600 "$key_file"
+            if is_mounted; then
+                asl_chroot_exec "mkdir -p /root/.ssh && chmod 700 /root/.ssh" 2>/dev/null || true
+                asl_exec "echo '$key' >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || true
+            fi
+            echo "[✓] SSH Public Key added successfully to host & chroot."
+            ;;
+        import-github|github)
+            local gh_user="$2"
+            if [ -z "$gh_user" ]; then
+                echo "Usage: asl remote keys import-github <github_username>"
+                return 1
+            fi
+            echo "[*] Fetching SSH public keys for GitHub user '$gh_user'..."
+            local fetched_keys
+            fetched_keys=$(curl -s "https://github.com/${gh_user}.keys")
+            if [ -n "$fetched_keys" ] && ! echo "$fetched_keys" | grep -q "Not Found"; then
+                mkdir -p "$HOME/.ssh"
+                echo "$fetched_keys" >> "$key_file"
+                chmod 600 "$key_file"
+                if is_mounted; then
+                    asl_chroot_exec "mkdir -p /root/.ssh && chmod 700 /root/.ssh" 2>/dev/null || true
+                    asl_exec "echo '$fetched_keys' >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || true
+                fi
+                echo "[✓] Successfully imported SSH key(s) from GitHub user '$gh_user'."
+            else
+                echo "Error: Could not fetch SSH keys for GitHub user '$gh_user'."
+                return 1
+            fi
+            ;;
+        list|show)
+            echo "=== Authorized SSH Public Keys ==="
+            if [ -f "$key_file" ] && [ -s "$key_file" ]; then
+                cat "$key_file"
+            else
+                echo "(No public keys authorized yet. Add using 'asl remote keys add' or 'asl remote keys import-github <user>')"
+            fi
+            ;;
+        clear|purge)
+            rm -f "$key_file"
+            [ -f "$chroot_key_file" ] && asl_exec "rm -f '$chroot_key_file'" 2>/dev/null || true
+            echo "[✓] Authorized SSH keys cleared."
+            ;;
+        *)
+            echo "Usage: asl remote keys [list|add <key>|import-github <username>|clear]"
+            ;;
+    esac
+}
+
+# --- 8. Seamless Auto-Connect Daemon & Fallback Engine -----------------------
 AUTOCONNECT_STATE="$PREFIX/tmp/asl-autoconnect.state"
 AUTOCONNECT_LOG="$PREFIX/tmp/asl-autoconnect.log"
 AUTOCONNECT_PID="$PREFIX/tmp/asl-autoconnect.pid"
@@ -440,11 +563,15 @@ autoconnect_control() {
     esac
 }
 
-# --- 7. Start All Remote Services ------------------------------------------
+# --- 9. Start All Remote Services ------------------------------------------
 start_all() {
     echo "[*] Initializing ASL Remote Bridge Services..."
     lan_control start
     echo ""
+    if is_mounted; then
+        chroot_ssh_control start || true
+        echo ""
+    fi
     serveo_control start
     echo ""
     ngrok_control start || true
@@ -461,6 +588,8 @@ case "$TARGET" in
     all|start-all) start_all ;;
     password|pass) password_control "$@" ;;
     lan) lan_control "$@" ;;
+    chroot) chroot_ssh_control "$@" ;;
+    key|keys|pubkey) key_control "$@" ;;
     serveo) serveo_control "$@" ;;
     ngrok) ngrok_control "$@" ;;
     tailscale) tailscale_control "$@" ;;
@@ -471,6 +600,8 @@ case "$TARGET" in
         echo ""
         lan_control status
         echo ""
+        chroot_ssh_control status
+        echo ""
         serveo_control status
         echo ""
         ngrok_control status
@@ -480,7 +611,7 @@ case "$TARGET" in
         autoconnect_control status
         ;;
     *)
-        echo "Usage: asl remote [all|password|lan|serveo|ngrok|tailscale|autoconnect] [start|stop|status]"
+        echo "Usage: asl remote [all|password|lan|chroot|keys|serveo|ngrok|tailscale|autoconnect] [start|stop|status]"
         exit 1
         ;;
 esac

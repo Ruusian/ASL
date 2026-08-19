@@ -336,9 +336,10 @@ asl_gpu_cached() {
 asl_remote_summary() {
     local active=()
     if pgrep -f "sshd" >/dev/null 2>&1; then active+=("LAN:8022"); fi
+    if is_mounted && asl_chroot_exec "pgrep -f 'sshd.*2222|sshd' >/dev/null 2>&1" 2>/dev/null; then active+=("Chroot:2222"); fi
     if [ -f "$PREFIX/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then active+=("Serveo"); fi
     if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then active+=("Ngrok"); fi
-    if pgrep -f "tailscaled" >/dev/null 2>&1; then active+=("Tailscale"); fi
+    if su -c "pgrep -f tailscaled" >/dev/null 2>&1 || pgrep -f "tailscaled" >/dev/null 2>&1; then active+=("Tailscale"); fi
     if [ ${#active[@]} -gt 0 ]; then
         printf '%s' "${active[*]}"
     else
@@ -355,11 +356,14 @@ asl_remote_details() {
     host_ip=$(asl_host_ip)
 
     if pgrep -f "sshd" >/dev/null 2>&1; then
-        details+=("  • LAN SSH:    ssh -p 8022 ${user}@${host_ip}")
+        details+=("  • LAN SSH (Host):   ssh -p 8022 ${user}@${host_ip}")
+    fi
+    if is_mounted && asl_chroot_exec "pgrep -f 'sshd.*2222|sshd' >/dev/null 2>&1" 2>/dev/null; then
+        details+=("  • Chroot SSH (Root): ssh -p 2222 root@${host_ip}")
     fi
     if [ -f "$prefix/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
         local s_alias="asl-${user}"
-        details+=("  • Serveo:    ssh -J serveo.net ${user}@${s_alias}")
+        details+=("  • Serveo Tunnel:    ssh -J serveo.net ${user}@${s_alias}")
     fi
     if [ -f "$prefix/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then
         local ng_url ng_host ng_port
@@ -367,16 +371,16 @@ asl_remote_details() {
         if [ -n "$ng_url" ]; then
             ng_host=$(echo "$ng_url" | sed -E 's|tcp://([^:]+):.*|\1|')
             ng_port=$(echo "$ng_url" | sed -E 's|tcp://[^:]+:([0-9]+)|\1|')
-            details+=("  • Ngrok:     ssh -p ${ng_port} ${user}@${ng_host}")
+            details+=("  • Ngrok Tunnel:     ssh -p ${ng_port} ${user}@${ng_host}")
         else
-            details+=("  • Ngrok:     Active (Fetching tunnel URL...)")
+            details+=("  • Ngrok Tunnel:     Active (Fetching tunnel URL...)")
         fi
     fi
     if su -c "pgrep -f tailscaled" >/dev/null 2>&1 || pgrep -f "tailscaled" >/dev/null 2>&1; then
         local ts_ip
         ts_ip=$(su -c "PATH=$prefix/bin:\$PATH tailscale --socket=$HOME/.asl/tailscaled.sock ip -4" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$ts_ip" ]; then
-            details+=("  • Tailscale: ssh -p 8022 ${user}@${ts_ip}")
+            details+=("  • Tailscale Mesh:   ssh -p 8022 ${user}@${ts_ip}")
         fi
     fi
 
