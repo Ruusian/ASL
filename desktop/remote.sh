@@ -17,45 +17,46 @@ if [ -d "$CONFIG_DIR" ] && [ ! -w "$CONFIG_DIR" ]; then
 fi
 
 PASS_FILE="$CONFIG_DIR/remote_password"
-DEFAULT_PASS="1011"
 
 get_password() {
     if [ -f "$PASS_FILE" ]; then
         cat "$PASS_FILE" 2>/dev/null
-    else
-        printf '%s' "$DEFAULT_PASS"
     fi
 }
 
 set_password() {
-    local new_pass="${1:-$DEFAULT_PASS}"
-    if [ -z "$new_pass" ]; then
-        echo "Error: Password cannot be empty."
+    local new_pass="${1:-}"
+    if [ -z "$new_pass" ] || [[ "$new_pass" == *$'\n'* || "$new_pass" == *$'\r'* ]]; then
+        echo "Error: Password cannot be empty or contain newlines."
         return 1
     fi
-    printf '%s\n%s\n' "$new_pass" "$new_pass" | passwd >/dev/null 2>&1 || true
+    if ! printf '%s\n%s\n' "$new_pass" "$new_pass" | passwd >/dev/null 2>&1; then
+        echo "Error: Could not update the host password."
+        return 1
+    fi
     if is_mounted; then
-        asl_exec "printf '%s\n%s\n' '$new_pass' '$new_pass' | passwd >/dev/null 2>&1" || true
+        local pass_b64
+        pass_b64=$(printf '%s' "$new_pass" | base64 | tr -d '\n')
+        if ! asl_exec "pass=\$(printf '%s' '$pass_b64' | base64 -d); printf '%s\n%s\n' \"\$pass\" \"\$pass\" | passwd >/dev/null 2>&1"; then
+            echo "Error: Host password changed, but the chroot password update failed."
+            return 1
+        fi
     fi
     printf '%s' "$new_pass" > "$PASS_FILE"
     chmod 600 "$PASS_FILE"
-    echo "[✓] ASL Remote SSH password successfully updated to: $new_pass"
+    echo "[✓] ASL Remote SSH password updated."
 }
 
 ensure_host_sshd() {
-    local pass
-    pass=$(get_password)
-    # Ensure password set
-    printf '%s\n%s\n' "$pass" "$pass" | passwd >/dev/null 2>&1 || true
-
     mkdir -p "$PREFIX/etc/ssh"
     if [ ! -f "$PREFIX/etc/ssh/ssh_host_ed25519_key" ]; then
-        ssh-keygen -A >/dev/null 2>&1 || true
+        ssh-keygen -A >/dev/null 2>&1 || return 1
     fi
     if ! pgrep -f "sshd.*8022\|sshd" >/dev/null 2>&1; then
         echo "[*] Starting Termux host SSH daemon on port 8022..."
-        sshd -p 8022 2>/dev/null || sshd 2>/dev/null || true
+        sshd -p 8022 -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no 2>/dev/null || return 1
     fi
+    pgrep -f "sshd.*8022" >/dev/null 2>&1 || return 1
 }
 
 # --- 1. Fixed Password Management -------------------------------------------
@@ -71,8 +72,12 @@ password_control() {
             set_password "$new_p"
             ;;
         show|*)
-            echo "Current SSH Remote Password: $(get_password)"
-            echo "Change password using: asl remote password set <new_password>"
+            if [ -n "$(get_password)" ]; then
+                echo "A remote password is configured."
+            else
+                echo "No remote password is configured; key-based access is required."
+            fi
+            echo "Set a password using: asl remote password set <new_password>"
             ;;
     esac
 }
@@ -89,13 +94,12 @@ lan_control() {
     local action="${1:-status}"
     case "$action" in
         start)
-            ensure_host_sshd
+            ensure_host_sshd || { echo "Error: Failed to start host SSH in key-only mode."; return 1; }
             local host pass
             host=$(lan_host_ip)
-            pass=$(get_password)
             echo "[✓] LAN SSH Server active on port 8022."
             echo "    Connect command: ssh -p 8022 $(whoami)@$host"
-            echo "    Password:        $pass"
+            echo "    Authentication:  SSH key only"
             ;;
         stop)
             pkill -f "sshd" 2>/dev/null || true
@@ -105,7 +109,7 @@ lan_control() {
             if pgrep -f "sshd" >/dev/null 2>&1; then
                 echo "LAN SSH:      RUNNING (port 8022)"
                 echo "    Connect:  ssh -p 8022 $(whoami)@$(lan_host_ip)"
-                echo "    Password: $(get_password)"
+                echo "    Authentication: SSH key only"
             else
                 echo "LAN SSH:      STOPPED"
             fi
@@ -139,10 +143,11 @@ serveo_control() {
             if serveo_running; then
                 echo "[*] Serveo tunnel is already running."
             else
-                local serveo_alias="asl-$(whoami)"
+                local serveo_alias
+                serveo_alias="asl-$(whoami)"
                 echo "[*] Launching Serveo persistent SSH tunnel on port 8022 (alias: ${serveo_alias})..."
                 rm -f "$SERVEO_LOG"
-                nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=no -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R "${serveo_alias}:22:localhost:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
+                nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R "${serveo_alias}:22:localhost:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
                 echo $! > "$SERVEO_STATE"
                 sleep 4
                 if ! serveo_running; then
@@ -179,7 +184,7 @@ serveo_status() {
         user=$(whoami 2>/dev/null || echo "user")
         s_alias="asl-${user}"
         echo "    Connect:  ssh -J serveo.net ${user}@${s_alias}"
-        echo "    Password: $(get_password)"
+        echo "    Authentication: SSH key or configured remote credential"
     else
         echo "Serveo Tunnel: STOPPED"
     fi
@@ -203,6 +208,7 @@ ngrok_add_token() {
     mkdir -p "$CONFIG_DIR"
     if ! grep -qF "$token" "$NGROK_TOKENS_FILE" 2>/dev/null; then
         echo "$token" >> "$NGROK_TOKENS_FILE"
+        chmod 600 "$NGROK_TOKENS_FILE"
         echo "[✓] Added ngrok auth token to token pool."
     else
         echo "[*] Token is already in the token pool."
@@ -298,7 +304,7 @@ ngrok_status() {
             port=$(echo "$url" | sed -E 's|tcp://[^:]+:([0-9]+)|\1|')
             echo "    URL:      $url"
             echo "    Connect:  ssh -p $port $(whoami)@$host"
-            echo "    Password: $(get_password)"
+            echo "    Authentication: configured remote credential"
         else
             echo "    (Fetching connection info... run 'asl remote ngrok status')"
         fi
@@ -353,7 +359,7 @@ tailscale_control() {
                 if [ -n "$ts_ip" ]; then
                     echo "Tailscale:    RUNNING"
                     echo "    Connect:  ssh -p 8022 $(whoami)@$ts_ip"
-                    echo "    Password: $(get_password)"
+                    echo "    Authentication: SSH key only"
                     return 0
                 fi
             fi
@@ -375,34 +381,41 @@ chroot_ssh_control() {
                 echo "Error: Debian chroot is not mounted. Run 'asl start' first."
                 return 1
             fi
-            echo "[*] Configuring and starting OpenSSH server inside Debian chroot (port 2222)..."
-            local pass
-            pass=$(get_password)
-            asl_chroot_exec "
+            echo "[*] Configuring and starting key-only OpenSSH server inside Debian chroot (port 2222)..."
+            if ! asl_chroot_exec "test -s /root/.ssh/authorized_keys"; then
+                echo "Error: Add an SSH public key first: asl remote keys add \"<public-key>\""
+                return 1
+            fi
+            if ! asl_chroot_exec "
                 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
                 mkdir -p /var/run/sshd /root/.ssh
                 chmod 700 /root/.ssh
-                if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
-                    ssh-keygen -A >/dev/null 2>&1 || true
-                fi
-                printf '%s\n%s\n' '$pass' '$pass' | passwd root >/dev/null 2>&1 || true
+                [ -f /etc/ssh/ssh_host_ed25519_key ] || ssh-keygen -A
                 if grep -qE '^#?PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null; then
-                    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+                    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
                 else
-                    echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+                    echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config
+                fi
+                if grep -qE '^#?PasswordAuthentication' /etc/ssh/sshd_config 2>/dev/null; then
+                    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+                else
+                    echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config
                 fi
                 if grep -qE '^#?Port' /etc/ssh/sshd_config 2>/dev/null; then
                     sed -i 's/^#\?Port.*/Port 2222/' /etc/ssh/sshd_config
                 else
                     echo 'Port 2222' >> /etc/ssh/sshd_config
                 fi
-                if ! pgrep -f 'sshd.*2222' >/dev/null 2>&1; then
-                    /usr/sbin/sshd -p 2222 2>/dev/null || service ssh start 2>/dev/null || true
-                fi
-            " 2>/dev/null || true
+                /usr/sbin/sshd -t -f /etc/ssh/sshd_config
+                pgrep -f 'sshd.*2222' >/dev/null 2>&1 || /usr/sbin/sshd -p 2222
+            " 2>/dev/null; then
+                echo "Error: Failed to configure or start chroot SSH."
+                return 1
+            fi
+            chroot_ssh_running || { echo "Error: Chroot SSH did not remain running."; return 1; }
             echo "[✓] Direct Chroot SSH Server active on port 2222."
             echo "    Connect command: ssh -p 2222 root@$(lan_host_ip)"
-            echo "    Password:        $pass"
+            echo "    Authentication:  SSH key only"
             ;;
         stop)
             if is_mounted; then
@@ -414,7 +427,7 @@ chroot_ssh_control() {
             if chroot_ssh_running; then
                 echo "Chroot SSH:   RUNNING (port 2222)"
                 echo "    Connect:  ssh -p 2222 root@$(lan_host_ip)"
-                echo "    Password: $(get_password)"
+                echo "    Authentication: SSH key only"
             else
                 echo "Chroot SSH:   STOPPED"
             fi
@@ -429,8 +442,8 @@ key_control() {
     local chroot_key_file="$DEBIANPATH/root/.ssh/authorized_keys"
     case "$action" in
         add)
-            local key="$2"
-            if [ -z "$key" ]; then
+            local key="${2:-}"
+            if [ -z "$key" ] || ! printf '%s\n' "$key" | grep -qE '^(ssh-(rsa|ed25519|ecdsa)|ecdsa-sha2-)[[:space:]]+[A-Za-z0-9+/]+=*([[:space:]]+[^[:space:]]+)?$'; then
                 echo "Usage: asl remote keys add \"<ssh-pubkey-string>\""
                 return 1
             fi
@@ -439,13 +452,15 @@ key_control() {
             chmod 600 "$key_file"
             if is_mounted; then
                 asl_chroot_exec "mkdir -p /root/.ssh && chmod 700 /root/.ssh" 2>/dev/null || true
-                asl_exec "echo '$key' >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || true
+                local key_b64
+                key_b64=$(printf '%s\n' "$key" | base64 | tr -d '\n')
+                asl_exec "printf '%s' '$key_b64' | base64 -d >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || return 1
             fi
             echo "[✓] SSH Public Key added successfully to host & chroot."
             ;;
         import-github|github)
             local gh_user="$2"
-            if [ -z "$gh_user" ]; then
+            if [ -z "$gh_user" ] || [[ ! "$gh_user" =~ ^[A-Za-z0-9-]+$ ]]; then
                 echo "Usage: asl remote keys import-github <github_username>"
                 return 1
             fi
@@ -458,7 +473,9 @@ key_control() {
                 chmod 600 "$key_file"
                 if is_mounted; then
                     asl_chroot_exec "mkdir -p /root/.ssh && chmod 700 /root/.ssh" 2>/dev/null || true
-                    asl_exec "echo '$fetched_keys' >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || true
+                    local fetched_b64
+                    fetched_b64=$(printf '%s\n' "$fetched_keys" | base64 | tr -d '\n')
+                    asl_exec "printf '%s' '$fetched_b64' | base64 -d >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || return 1
                 fi
                 echo "[✓] Successfully imported SSH key(s) from GitHub user '$gh_user'."
             else
@@ -596,7 +613,11 @@ case "$TARGET" in
     autoconnect) autoconnect_control "$@" ;;
     status|"")
         echo "=== ASL Remote Bridge Status ==="
-        echo "Remote Password: $(get_password)"
+        if [ -n "$(get_password)" ]; then
+            echo "Remote password: configured"
+        else
+            echo "Remote password: not configured"
+        fi
         echo ""
         lan_control status
         echo ""

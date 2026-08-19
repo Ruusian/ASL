@@ -25,14 +25,18 @@ setup_android_aids() {
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         set -e
         ensure_group() {
-            local name=\"\$1\" gid=\"\$2\" existing_name existing_gid gid_name
-            existing_name=\$(getent group \"\$name\" || true)
-            existing_gid=\$(getent group \"\$gid\" || true)
+            local name=\"\$1\" gid=\"\$2\" existing_name existing_gid existing_gid_num
+            existing_name=\$(getent group \"\$name\" 2>/dev/null || true)
+            existing_gid=\$(getent group \"\$gid\" 2>/dev/null || true)
             if [ -n \"\$existing_name\" ]; then
-                [ \"\${existing_name#*:*:}\" != \"\$existing_name\" ] || exit 1
-                [ \"\$(printf %s \"\$existing_name\" | cut -d: -f3)\" = \"\$gid\" ] || { echo \"[!] Group \$name has an unexpected GID.\" >&2; exit 1; }
+                existing_gid_num=\$(printf '%s' \"\$existing_name\" | cut -d: -f3)
+                if [ \"\$existing_gid_num\" != \"\$gid\" ]; then
+                    echo \"[!] Group \$name exists with GID \$existing_gid_num, expected \$gid.\" >&2
+                    exit 1
+                fi
             elif [ -n \"\$existing_gid\" ]; then
-                gid_name=\$(printf %s \"\$existing_gid\" | cut -d: -f1)
+                local gid_name
+                gid_name=\$(printf '%s' \"\$existing_gid\" | cut -d: -f1)
                 echo \"[!] GID \$gid is already assigned to \$gid_name, not \$name.\" >&2
                 exit 1
             else

@@ -14,10 +14,11 @@ if [ -d "$TARGET_DIR/.git" ]; then
     git pull origin master 2>/dev/null || true
 else
     echo -e "\033[0;32m[*] Cloning ASL repository to $TARGET_DIR...\033[0m"
-    git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null || true
-    if [ -d "$TARGET_DIR" ]; then
-        cd "$TARGET_DIR"
+    if ! git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null; then
+        echo -e "\033[0;31m[!] Failed to clone ASL repository. Check your internet connection.\033[0m"
+        exit 1
     fi
+    cd "$TARGET_DIR"
 fi
 
 if [ -f "$TARGET_DIR/core/common.sh" ]; then
@@ -25,6 +26,9 @@ if [ -f "$TARGET_DIR/core/common.sh" ]; then
 elif [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
+
+: "${DEBIANPATH:=/data/local/tmp/chrootDebian}"
+export DEBIANPATH
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -171,13 +175,14 @@ if ([ -t 0 ] || [ -c /dev/tty ]) && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "  4) ${CYAN}Arch Linux Base${RESET} (Official Arch via proot-distro)"
     echo -e "  5) ${CYAN}Alpine Linux Base${RESET} (Official Alpine via proot-distro)"
     echo -e "  6) ${CYAN}Kali Linux Base${RESET} (Official Kali via proot-distro)"
-    echo -e "  7) ${YELLOW}Skip rootfs setup${RESET} (Use existing rootfs at /data/local/tmp/chrootDebian)"
+    echo -e "  7) ${CYAN}Fedora Linux Base${RESET} (Official Fedora via proot-distro)"
+    echo -e "  8) ${YELLOW}Skip rootfs setup${RESET} (Use existing rootfs at /data/local/tmp/chrootDebian)"
     echo -e ""
     distro_choice=""
     if [ -c /dev/tty ]; then
-        read -r -p "Select choice [1-7, default: 1]: " distro_choice < /dev/tty 2>/dev/null || true
+        read -r -p "Select choice [1-8, default: 1]: " distro_choice < /dev/tty 2>/dev/null || true
     else
-        read -r -p "Select choice [1-7, default: 1]: " distro_choice || true
+        read -r -p "Select choice [1-8, default: 1]: " distro_choice || true
     fi
     case "$distro_choice" in
         1|"") DISTRO_TYPE="modded" ;;
@@ -186,7 +191,8 @@ if ([ -t 0 ] || [ -c /dev/tty ]) && [ "$DISTRO_TYPE" = "auto" ]; then
         4) DISTRO_TYPE="arch" ;;
         5) DISTRO_TYPE="alpine" ;;
         6) DISTRO_TYPE="kali" ;;
-        7) DISTRO_TYPE="skip" ;;
+        7) DISTRO_TYPE="fedora" ;;
+        8) DISTRO_TYPE="skip" ;;
         *) DISTRO_TYPE="modded" ;;
     esac
 fi

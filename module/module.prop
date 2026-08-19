@@ -1,6 +1,0 @@
-id=asl
-name=Android Subsystem for Linux (ASL)
-version=2.5.1
-versionCode=251
-author=Ruusian5
-description=Root-Accelerated Debian Chroot + Box64 Gaming Container

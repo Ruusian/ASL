@@ -36,7 +36,7 @@ if [ "${NO_COLOR:-}" = "" ]; then
     C_DIM=$'\033[2m'
     C_SHADOW=$'\033[90m'
 else
-    C_RESET= C_BOLD= C_CYAN= C_BLUE= C_GREEN= C_YELLOW= C_RED= C_PURPLE= C_DIM= C_SHADOW=
+    C_RESET='' C_BOLD='' C_CYAN='' C_BLUE='' C_GREEN='' C_YELLOW='' C_RED='' C_PURPLE='' C_DIM='' C_SHADOW=''
 fi
 
 status_label() {
@@ -61,6 +61,9 @@ if [ -f "$ASL_DIR/core/common.sh" ]; then
     source "$ASL_DIR/core/common.sh"
 elif [ -f "$HOME/ASL/core/common.sh" ]; then
     source "$HOME/ASL/core/common.sh"
+fi
+if [ -f "$ASL_DIR/core/termux-droid.sh" ]; then
+    source "$ASL_DIR/core/termux-droid.sh"
 fi
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
@@ -159,7 +162,7 @@ launch_desktop_app() {
 
 show_help() {
     echo "============================================================"
-    echo "    Android Subsystem for Linux (ASL) Console v1.0"
+    echo "    Android Subsystem for Linux (ASL) Console v2.5.1"
     echo "  Root-Accelerated Linux Environment & Gaming Container"
     echo "============================================================"
     echo "Usage: asl [dashboard|command] [args]  (or superkit [command])"
@@ -210,6 +213,7 @@ show_help() {
     echo "  desktop stop     Stop only the ASL-managed desktop"
     echo "  desktop status   Show desktop lifecycle status"
     echo "  desktop sync-apps Create ASL-owned Termux launchers"
+    echo "  termux-droid [setup|start|stop|status|sync-apps|bridge]  Termux Droid compatibility workflow"
     echo "  theme [preset]   Set XFCE look & feel (dark|light|nord|dracula)"
     echo "  resolution [preset] Set Termux:X11 display resolution (720p|1080p|native)"
     echo "  remote [all|password|lan|serveo|ngrok|tailscale|autoconnect]  Manage SSH, Serveo, Ngrok (multi-token), Tailscale & Auto-Connect"
@@ -235,7 +239,9 @@ pause_dashboard() {
 }
 
 draw_bar() {
-    local pct="$1" width="${2:-10}" filled empty bar_color i
+    local pct="${1:-0}" width="${2:-10}" filled empty bar_color i
+    pct="${pct%%[^0-9]*}"
+    [ -z "$pct" ] && pct=0
     [ "$pct" -gt 100 ] && pct=100
     [ "$pct" -lt 0 ] && pct=0
     filled=$(( (pct * width) / 100 ))
@@ -264,7 +270,8 @@ asl_uptime() {
 
 asl_cpu_freq() {
     local f
-    f=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || asl_exec "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
+    f=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || asl_exec "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq" 2>/dev/null)
+    f=$(printf '%s' "$f" | tr -d '[:space:]')
     if [ -n "$f" ] && [[ "$f" =~ ^[0-9]+$ ]] && [ "$f" -gt 0 ]; then
         printf '%dMHz' "$((f / 1000))"
     else
@@ -297,7 +304,7 @@ asl_cpu_temp_c() {
         [ -d "$zone" ] || continue
         type=$(cat "$zone/type" 2>/dev/null | tr '[:upper:]' '[:lower:]')
         case "$type" in
-            *cpu*|*cpuss*) ;;
+            *cpu*|*cpus*) ;;
             *) continue ;;
         esac
         raw=$(cat "$zone/temp" 2>/dev/null | tr -d '[:space:]')
@@ -457,10 +464,12 @@ overview() {
     governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
     disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')
     [ -n "$disk_data" ] || disk_data="unknown"
-    load_avg=$(cat /proc/loadavg 2>/dev/null || asl_exec "cat /proc/loadavg" 2>/dev/null | cut -d' ' -f1-3)
+    load_avg=$(cat /proc/loadavg 2>/dev/null || asl_exec "cat /proc/loadavg" 2>/dev/null)
+    load_avg=$(printf '%s' "$load_avg" | cut -d' ' -f1-3)
     [ -n "$load_avg" ] || load_avg="unknown"
 
-    batt_level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || asl_exec "dumpsys battery" 2>/dev/null | awk '/level:/ {print $2}')
+    batt_level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || asl_exec "dumpsys battery" 2>/dev/null)
+    batt_level=$(printf '%s' "$batt_level" | awk '/level:/ {print $2}')
     batt_temp=$(batt_temp_c)
     cpu_temp=$(asl_cpu_temp_c)
 
@@ -483,11 +492,11 @@ overview() {
     if [ -S "$x11_socket" ]; then x11_lbl="$(status_label READY)"; else x11_lbl="$(status_label STOPPED)"; fi
     audio_lbl="$(status_label "$audio_status")"
 
-    printf '%s━━━ %sAndroid Subsystem for Linux (ASL)%s %sConsole v1.1%s %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_DIM" "$C_CYAN$C_BOLD" "$C_CYAN$C_BOLD" "$C_RESET"
-    printf '  %sChroot:%s %s   %sDesktop:%s %s   %sGPU:%s %s%s\n' "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW$ASL_GPU_PROFILE$C_RESET"
-    printf '  %sDisplay:%s %s  %sAudio:%s %s     %sGov:%s %s%s\n' "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN$governor$C_RESET"
+    printf '%s━━━ %sAndroid Subsystem for Linux (ASL)%s %sConsole v2.5.1%s %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_DIM" "$C_CYAN$C_BOLD" "$C_CYAN$C_BOLD" "$C_RESET"
+    printf '  %sChroot:%s %s   %sDesktop:%s %s   %sGPU:%s %s%s\n' "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE$C_RESET"
+    printf '  %sDisplay:%s %s  %sAudio:%s %s     %sGov:%s %s%s\n' "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor$C_RESET"
     printf '  %sBattery:%s %s%-13s %sCPU Temp:%s %s%-6s %sWake Lock:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_BOLD" "$C_RESET" "$C_GREEN" "$wlock_status"
-    printf '  %sHost IP:%s %s%-13s %sRemote:%s %s%-10s %sStorage:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_BOLD" "$C_RESET" "$C_CYAN$disk_data$C_RESET"
+    printf '  %sHost IP:%s %s%-13s %sRemote:%s %s%-10s %sStorage:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data$C_RESET"
     printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
     asl_remote_details
     printf '  %sRAM:%s  [' "$C_BOLD" "$C_RESET"; draw_bar "$mem_pct" 12; printf '] %3d%% (%d/%d MB)  %sLoad:%s %s%s\n' "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg"
@@ -1005,6 +1014,10 @@ case "${1:-}" in
         shift
         bash "$ASL_DIR/desktop/remote.sh" "$@"
         ;;
+    termux-droid)
+        shift
+        termux_droid "${1:-help}"
+        ;;
     desktop)
         shift
         DESKTOP_ACTION="${1:-start}"
@@ -1028,7 +1041,6 @@ case "${1:-}" in
                 exit 1
             fi
         done
-        unset pkg
         if ! is_mounted; then
             bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         fi
@@ -1048,7 +1060,6 @@ case "${1:-}" in
                 exit 1
             fi
         done
-        unset term
         if ! is_mounted; then
             bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         fi
@@ -1300,12 +1311,16 @@ case "${1:-}" in
         show_help
         ;;
     "")
+        if [ "$#" -gt 0 ]; then
+            echo "Unknown command: (empty)"
+            echo "Run 'asl help' for usage information."
+            exit 1
+        fi
         dashboard
         ;;
     *)
-        if ! is_mounted; then
-            bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
-        fi
-        run_in_chroot "$*"
+        echo "Unknown command: $1"
+        echo "Run 'asl help' for usage information."
+        exit 1
         ;;
 esac

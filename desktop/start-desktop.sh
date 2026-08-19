@@ -10,7 +10,6 @@ source "$SCRIPT_DIR/core/gpu-profile.sh"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/asl/desktop"
 STATE_FILE="$STATE_DIR/state"
 LAUNCHER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-MAXMAP_BACKUP="/data/local/tmp/asl_desktop_max_map_count"
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
@@ -105,7 +104,7 @@ write_state() {
 }
 
 start_audio() {
-    PULSE_OWNED=0 PULSE_PID= PULSE_START=
+                    PULSE_OWNED=0 PULSE_PID='' PULSE_START=''
     if pgrep -x pulseaudio >/dev/null; then
         echo "[*] Reusing existing PulseAudio server."
         return 0
@@ -127,7 +126,7 @@ start_audio() {
 }
 
 start_gpu() {
-    VIRGL_OWNED=0 VIRGL_PID= VIRGL_START=
+    VIRGL_OWNED=0 VIRGL_PID='' VIRGL_START=''
     asl_gpu_detect
     if [ "$ASL_GPU_PROFILE" = "adreno-turnip-zink" ]; then
         echo "[*] Direct Adreno Turnip + Zink Vulkan acceleration active; VirGL server not needed."
@@ -192,13 +191,30 @@ start_desktop() {
     DISPLAY_ID=:0
     am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[*] Starting Termux:X11 display server..."
+    local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+    local xauth_file="$termux_tmp/.Xauthority"
+    if ! command -v xauth >/dev/null 2>&1; then
+        echo "[!] xauth is required for authenticated Termux:X11 access."
+        echo "    Install it with: pkg install xorg-xauth"
+        cleanup_started
+        return 1
+    fi
+    local xauth_cookie
+    xauth_cookie=$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d '[:space:]')
+    if [ -z "$xauth_cookie" ] || ! xauth -f "$xauth_file" add "$DISPLAY_ID" MIT-MAGIC-COOKIE-1 "$xauth_cookie" 2>/dev/null; then
+        echo "[!] Failed to create the X11 authentication cookie."
+        cleanup_started
+        return 1
+    fi
+    chmod 600 "$xauth_file"
+    if ! asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp '$xauth_file' '$DEBIANPATH/tmp/.Xauthority' && chmod 600 '$DEBIANPATH/tmp/.Xauthority'" 2>/dev/null; then
+        echo "[!] Failed to install the X11 authentication cookie in the chroot."
+        cleanup_started
+        return 1
+    fi
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
         rm -f "/data/data/com.termux/files/usr/tmp/.X11-unix/X0" "/data/data/com.termux/files/usr/tmp/.X0-lock" 2>/dev/null || true
-        # -ac disables X host access control (Termux:X11's auth model relies on
-        # the socket being reachable by chroot clients without xauth). The X
-        # socket is exposed only via the socat bridge above with mode=700, so
-        # access is limited to the Termux user + root rather than any local app.
-        termux-x11 "$DISPLAY_ID" +iglx -ac >/dev/null 2>&1 &
+        termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp -auth "$xauth_file" >/dev/null 2>&1 &
         sleep 1
     fi
     X11_PID=$(pgrep -f "termux-x11.*:[0-9]" | head -n1 || true)
@@ -211,7 +227,6 @@ start_desktop() {
     done
     [ -n "$X11_START" ] || { echo "[!] Termux:X11 failed to start."; echo "    💡 Hint: Ensure Termux:X11 companion app is installed and open on your device."; cleanup_started; return 1; }
     protect_pid_oom "$X11_PID"
-    local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     for _i in 1 2 3 4 5 6 7 8 9 10; do
         if [ -S "$termux_tmp/.X11-unix/X0" ] || asl_exec "grep -q -E '\.X11-unix/X0' /proc/net/unix 2>/dev/null" 2>/dev/null; then
             break
@@ -224,7 +239,6 @@ start_desktop() {
         fi
         sleep 1
     done
-    local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     mkdir -p "$termux_tmp/.X11-unix"
     if [ ! -S "$termux_tmp/.X11-unix/X0" ] && command -v socat >/dev/null 2>&1; then
         # mode=700: only the Termux user (plus root, who bypasses mode checks)
@@ -259,6 +273,7 @@ for v in \$(env | grep -E -o '^(TERMUX|SHELL_CMD|ANDROID|OPENAI|CLAUDE|OPENCLAUD
     unset "\$v"
 done
 export DISPLAY=:0
+export XAUTHORITY=/tmp/.Xauthority
 export TMPDIR=/tmp
 export PULSE_SERVER=unix:/tmp/pulse-socket,tcp:127.0.0.1
 export TERM=xterm-256color
@@ -507,7 +522,7 @@ audio_control() {
         stop)
             if read_state && [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then
                 if kill -TERM "$PULSE_PID" 2>/dev/null; then
-                    PULSE_OWNED=0 PULSE_PID= PULSE_START=
+    PULSE_OWNED=0 PULSE_PID='' PULSE_START=''
                     write_state || return 1
                     echo "[✓] ASL-managed PulseAudio stopped."
                 else

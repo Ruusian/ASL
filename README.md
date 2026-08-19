@@ -146,11 +146,13 @@ ASL/
 │   ├── asl               # Main CLI entrypoint & interactive console dashboard
 │   └── superkit          # Alternative entrypoint symlink
 ├── core/
+│   ├── common.sh         # Shared environment & common utilities (exec modes, mounts)
 │   ├── mount-chroot.sh   # Safe isolated chroot mount manager
 │   ├── stop-chroot.sh    # Safe unmount & process termination manager
 │   ├── doctor.sh         # Environment pre-flight check & diagnostics
 │   ├── gpu-detect.sh     # Hardware SoC auto-detection & profile selection
 │   ├── gpu-profile.sh    # Mesa Turnip / Zink / VirGL environment profile manager
+│   ├── wizard.sh         # Guided first-time setup wizard
 │   ├── hud.sh            # MangoHud & DXVK_HUD telemetry overlay manager
 │   ├── wine-bundle.sh    # Wine Mono & Gecko offline MSI bundle installer
 │   ├── wine-version.sh   # Wine & Proton-GE version manager
@@ -161,18 +163,28 @@ ASL/
 │   ├── repair.sh         # Automated integrity repair & system recovery
 │   ├── thermal.sh        # SoC & battery thermal sensor diagnostic monitor
 │   ├── termux-bridge.sh  # WakeLock, open, clipboard, and notification bridge
+│   ├── termux-droid.sh   # Termux Droid compatibility workflow
 │   ├── android-aid.sh    # Android AID GID group mapper
 │   └── snapshot.sh       # Point-in-time chroot snapshot & backup manager
 ├── gaming/
 │   └── wine-box64.sh     # Wine64, Box64 & Windows app execution manager
 ├── desktop/
+│   ├── asl-hub/          # ASL Hub GTK3 Control Center source (Python)
 │   ├── asl-hub-installer.sh # Deploys ASL Hub GTK3 Control Center into Debian rootfs
 │   ├── start-desktop.sh  # Termux:X11 desktop session & PulseAudio launcher
 │   ├── theme.sh          # GTK theme & icon set switcher
-│   └── remote.sh         # OpenSSH (port 2222) & x11vnc (port 5900) bridge
-└── module/
-    ├── action.sh         # KernelSU / Magisk / APatch UI action handler
-    └── module.prop       # Root module metadata properties
+│   ├── remote.sh         # SSH tunnels, Ngrok, Tailscale & LAN SSH bridge
+│   └── pi-bridge.sh      # Raspberry Pi VNC monitor bridge
+├── tools/
+│   └── make-release.sh   # Release automation
+├── tests/                # Lint, unit, integration & stress test suites
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── CLI_AND_UTILITIES.md
+│   ├── GAMING_GUIDE.md
+│   ├── PERFORMANCE_TUNING.md
+│   ├── ROADMAP_AND_TRACKING.md
+│   └── TERMUX_DROID_MIGRATION.md
 ```
 
 ---
@@ -236,6 +248,22 @@ ASL/
 | `asl aid setup` | Map Android host AID GIDs inside chroot |
 
 ---
+
+## 🔗 Termux Droid Compatibility
+
+ASL now provides the Termux Droid workflow through one management surface. It
+uses ASL's existing root/proot detection, Debian environment, XFCE4 desktop,
+Termux:X11 integration, and GPU profiles instead of maintaining a second
+container configuration.
+
+```bash
+asl termux-droid setup
+asl termux-droid start
+asl termux-droid status
+```
+
+For Raspberry Pi monitor output, use `desktop/pi-bridge.sh` after enabling USB
+tethering and starting the ASL VNC service on the phone.
 
 ## 🔒 Safety & Isolation Guarantees
 

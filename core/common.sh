@@ -164,21 +164,20 @@ if [ "${NO_COLOR:-}" = "" ]; then
     C_DIM=$'\033[2m'
     C_SHADOW=$'\033[90m'
 else
-    C_RESET= C_BOLD= C_CYAN= C_BLUE= C_GREEN= C_YELLOW= C_RED= C_PURPLE= C_DIM= C_SHADOW=
+    C_RESET='' C_BOLD='' C_CYAN='' C_BLUE='' C_GREEN='' C_YELLOW='' C_RED='' C_PURPLE='' C_DIM='' C_SHADOW=''
 fi
 export C_RESET C_BOLD C_CYAN C_BLUE C_GREEN C_YELLOW C_RED C_PURPLE C_DIM C_SHADOW
 
 is_mounted() {
     local target="${1:-$DEBIANPATH}"
-    (grep -q -F " $target/proc " /proc/mounts 2>/dev/null || grep -q -F " $target " /proc/mounts 2>/dev/null) && return 0
+    (awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null) && return 0
     case "$ASL_EXEC_MODE" in
         root)
-            su -c "grep -q -F ' $target/proc ' /proc/mounts" 2>/dev/null || \
-            su -c "grep -q -F ' $target ' /proc/mounts" 2>/dev/null
+            su -c "awk -v target='$target' '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
             ;;
         shizuku)
-            rish -c "grep -q -F ' $target/proc ' /proc/mounts" 2>/dev/null || \
-            grep -q -F " $target/proc " /proc/mounts 2>/dev/null || \
+            rish -c "awk -v target='$target' '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null || \
+            awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null || \
             proot-distro login asl-debian -- true 2>/dev/null
             ;;
         proot|*)

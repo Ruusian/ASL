@@ -28,7 +28,7 @@ get_dbus_env() {
 update_xml_property() {
     local xml_file="$1" prop="$2" val="$3" esc_val file_q
     asl_exec "test -f '$xml_file'" 2>/dev/null || return 0
-    esc_val=$(printf '%s\n' "$val" | sed -e 's/[\/&|]/\\&/g')
+    esc_val=$(printf '%s\n' "$val" | sed -e 's/[\/&|!#]/\\&/g' -e 's/]/\\]/g')
     file_q=$(printf '%q' "$xml_file")
     asl_exec "sed -i -E 's|(<property name=\"$prop\" type=\"string\" value=\")[^\"]*(\"/>)|\1$esc_val\2|' $file_q" 2>/dev/null || true
 }

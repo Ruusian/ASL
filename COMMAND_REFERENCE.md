@@ -288,6 +288,18 @@ asl resolution 2560x1440            # 1440p
 asl resolution list                 # Show options
 ```
 
+### `asl termux-droid [action]`
+Use ASL as the unified replacement for the Termux Droid setup workflow.
+
+```bash
+asl termux-droid setup              # Show the recommended setup sequence
+asl termux-droid start              # Start the ASL desktop workflow
+asl termux-droid stop               # Stop the ASL desktop and chroot
+asl termux-droid status             # Show ASL status
+asl termux-droid sync-apps          # Sync Debian apps into the desktop menu
+asl termux-droid bridge             # Show Raspberry Pi bridge instructions
+```
+
 ---
 
 ### `asl remote ssh`
