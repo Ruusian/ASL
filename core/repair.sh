@@ -59,7 +59,7 @@ asl_repair_run() {
         echo "[3/4] Repairing Debian DPKG / APT lock states & dynamic linker bindings (ldconfig)..."
         asl_chroot_exec "
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            rm -f /var/lib/dpkg/lock* /var/cache/apt/archives/lock*
+            rm -f /var/lib/dpkg/lock* /var/cache/apt/archives/lock* /var/lib/apt/lists/lock*
             dpkg --configure -a 2>/dev/null || true
             apt-get install -f -y 2>/dev/null || true
             ldconfig 2>/dev/null || true
