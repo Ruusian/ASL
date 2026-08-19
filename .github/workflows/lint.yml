@@ -12,7 +12,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Install ShellCheck
       run: |
@@ -22,8 +22,8 @@ jobs:
     - name: Run ShellCheck on shell scripts
       run: |
         echo "Linting all shell scripts in the repository..."
-        find . -type f \( -name "*.sh" -o -path "*/bin/*" \) ! -path "./.git/*" ! -path "./node_modules/*" -print0 | \
-        xargs -0 -I {} bash -c 'echo "Checking: {}" && shellcheck --severity=warning {} || true'
+        find . -type f \( -name "*.sh" -o -path "*/bin/*" \) ! -path "./.git/*" ! -path "./.venv/*" -print0 | \
+        xargs -0 -r shellcheck --severity=warning
     
     - name: Verify syntax of bin/asl
       run: |
@@ -63,7 +63,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Lint Markdown files
       uses: nostalgia-squirrel/markdown-linter@v1
@@ -76,7 +76,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Check README exists
       run: |
@@ -93,3 +93,19 @@ jobs:
           exit 1
         fi
         echo "✓ CHANGELOG.md found"
+
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install test dependencies
+      run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+    - name: Run ASL test suite
+      run: bash tests/run-all.sh
+
+    - name: Compile GTK control center
+      run: python3 -m py_compile desktop/asl-hub/asl-control-center.py

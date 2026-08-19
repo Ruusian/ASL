@@ -5,7 +5,6 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ASL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║            ASL Test Suite — Full Test Run                   ║"

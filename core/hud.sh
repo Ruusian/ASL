@@ -8,7 +8,11 @@ DEFAULT_MANGOHUD_CONFIG="fps,cpu_temp,gpu_temp,ram,vram,font_size=16,position=to
 
 ensure_state_dir() {
     mkdir -p "$STATE_DIR" 2>/dev/null || true
-    chmod 755 "$STATE_DIR" 2>/dev/null || true
+    chmod 700 "$STATE_DIR" 2>/dev/null || true
+}
+
+sanitize_hud_value() {
+    printf '%s' "$1" | tr -d '\n\r"\`$\\'
 }
 
 asl_hud_is_enabled() {
@@ -16,16 +20,20 @@ asl_hud_is_enabled() {
 }
 
 asl_hud_get_dxvk() {
+    local val
     if [ -f "$HUD_STATE_FILE" ]; then
-        grep '^DXVK_HUD=' "$HUD_STATE_FILE" 2>/dev/null | cut -d'=' -f2- || echo "$DEFAULT_DXVK_HUD"
+        val=$(grep '^DXVK_HUD=' "$HUD_STATE_FILE" 2>/dev/null | cut -d'=' -f2-)
+        sanitize_hud_value "${val:-$DEFAULT_DXVK_HUD}"
     else
         echo "$DEFAULT_DXVK_HUD"
     fi
 }
 
 asl_hud_get_mangohud() {
+    local val
     if [ -f "$HUD_STATE_FILE" ]; then
-        grep '^MANGOHUD_CONFIG=' "$HUD_STATE_FILE" 2>/dev/null | cut -d'=' -f2- || echo "$DEFAULT_MANGOHUD_CONFIG"
+        val=$(grep '^MANGOHUD_CONFIG=' "$HUD_STATE_FILE" 2>/dev/null | cut -d'=' -f2-)
+        sanitize_hud_value "${val:-$DEFAULT_MANGOHUD_CONFIG}"
     else
         echo "$DEFAULT_MANGOHUD_CONFIG"
     fi
@@ -41,10 +49,11 @@ sync_chroot() {
 
 asl_hud_enable() {
     ensure_state_dir
-    local dxvk_cfg="${1:-$DEFAULT_DXVK_HUD}"
-    local mango_cfg="${2:-$DEFAULT_MANGOHUD_CONFIG}"
+    local dxvk_cfg mango_cfg
+    dxvk_cfg=$(sanitize_hud_value "${1:-$DEFAULT_DXVK_HUD}")
+    mango_cfg=$(sanitize_hud_value "${2:-$DEFAULT_MANGOHUD_CONFIG}")
     printf 'ENABLED=1\nDXVK_HUD=%s\nMANGOHUD_CONFIG=%s\n' "$dxvk_cfg" "$mango_cfg" > "$HUD_STATE_FILE"
-    chmod 666 "$HUD_STATE_FILE" 2>/dev/null || true
+    chmod 600 "$HUD_STATE_FILE" 2>/dev/null || true
     echo "[✓] Performance Overlay (MangoHud / DXVK HUD) ENABLED."
     echo "    DXVK_HUD: $dxvk_cfg"
     echo "    MANGOHUD_CONFIG: $mango_cfg"
@@ -54,7 +63,7 @@ asl_hud_enable() {
 asl_hud_disable() {
     ensure_state_dir
     printf 'ENABLED=0\n' > "$HUD_STATE_FILE"
-    chmod 666 "$HUD_STATE_FILE" 2>/dev/null || true
+    chmod 600 "$HUD_STATE_FILE" 2>/dev/null || true
     echo "[✓] Performance Overlay DISABLED."
     sync_chroot
 }

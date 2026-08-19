@@ -11,7 +11,17 @@ TARGET_DIR="$HOME/ASL"
 if [ -d "$TARGET_DIR/.git" ]; then
     echo -e "\033[0;32m[*] Updating ASL repository at $TARGET_DIR...\033[0m"
     cd "$TARGET_DIR"
-    git pull origin master 2>/dev/null || true
+    # Verify the configured origin is the official ASL repo before updating
+    # to avoid pulling code from a hijacked or mistyped remote.
+    origin_url=$(git config --get remote.origin.url 2>/dev/null || echo "")
+    case "$origin_url" in
+        https://github.com/Ruusian5/ASL.git|https://github.com/Ruusian/ASL.git|git@github.com:Ruusian5/ASL.git|git@github.com:Ruusian/ASL.git)
+            git pull origin master 2>/dev/null || true
+            ;;
+        *)
+            echo -e "\033[0;33m[!] Skipping auto-update: origin remote is not the official ASL repo (got: ${origin_url:-none}).${RESET}"
+            ;;
+    esac
 else
     echo -e "\033[0;32m[*] Cloning ASL repository to $TARGET_DIR...\033[0m"
     if ! git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null; then
@@ -29,6 +39,26 @@ fi
 
 : "${DEBIANPATH:=/data/local/tmp/chrootDebian}"
 export DEBIANPATH
+
+# Safety guard: DEBIANPATH is used with `rm -rf` and `mkdir -p` as root.
+# Refuse values that could destroy the device if misconfigured.
+asl_validate_debianpath() {
+    local p="$1"
+    case "$p" in
+        /|/data|/data/*|/sdcard|/sdcard/*|/system|/system/*|/vendor|/vendor/*)
+            echo -e "\033[0;31m[!] Refusing unsafe DEBIANPATH: $p${RESET}" >&2
+            return 1
+            ;;
+    esac
+    case "$p" in
+        /*) return 0 ;;
+        *) echo -e "\033[0;31m[!] DEBIANPATH must be an absolute path: $p${RESET}" >&2; return 1 ;;
+    esac
+}
+if ! asl_validate_debianpath "$DEBIANPATH"; then
+    echo -e "\033[0;31m[!] Aborting installation due to unsafe DEBIANPATH.${RESET}"
+    exit 1
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -144,24 +174,31 @@ echo "$ACTIVE_MODE" > "$PREFIX/etc/asl_exec_mode"
 # 2. Package Installation
 echo -e "${GREEN}[*] Installing required Termux packages...${RESET}"
 export DEBIAN_FRONTEND=noninteractive
-pkg install -y x11-repo 2>/dev/null || true
-pkg update -y 2>/dev/null || true
-pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git pulseaudio termux-x11-nightly virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || \
-pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git pulseaudio termux-x11 virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null || true
+pkg install -y x11-repo 2>/dev/null || { echo -e "${RED}[!] Failed to install the Termux X11 repository.${RESET}"; exit 1; }
+pkg update -y 2>/dev/null || { echo -e "${RED}[!] Failed to update Termux packages.${RESET}"; exit 1; }
+if ! pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git pulseaudio termux-x11-nightly virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null && \
+   ! pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git pulseaudio termux-x11 virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null; then
+    echo -e "${RED}[!] Failed to install required Termux packages.${RESET}"
+    exit 1
+fi
 
 # Automated repair for broken Termux package dependencies (e.g. ncurses mismatches)
 if ! command -v proot-distro >/dev/null 2>&1; then
     echo -e "${YELLOW}[!] Termux package manager encountered held/broken dependencies. Running automated repair...${RESET}"
-    apt-get install -y --allow-downgrades --fix-broken ncurses ncurses-utils proot-distro git pulseaudio tsu socat wget unzip xz-utils 2>/dev/null || true
+    apt-get install -y --allow-downgrades --fix-broken ncurses ncurses-utils proot-distro git pulseaudio tsu socat wget unzip xz-utils 2>/dev/null || {
+        echo -e "${RED}[!] Automatic package repair failed.${RESET}"
+        exit 1
+    }
 fi
 
 # Re-verify Repository Clone now that git is installed
 if [ ! -d "$TARGET_DIR/.git" ]; then
     echo -e "${GREEN}[*] Provisioning ASL repository to $TARGET_DIR...${RESET}"
-    git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null || true
-    if [ -d "$TARGET_DIR" ]; then
-        cd "$TARGET_DIR"
-    fi
+    git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null || {
+        echo -e "${RED}[!] Failed to clone the ASL repository.${RESET}"
+        exit 1
+    }
+    cd "$TARGET_DIR"
 fi
 
 # 3. Interactive Distro Edition Selection
@@ -281,12 +318,12 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
             echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
             echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
 
-            if (curl -fsSL --connect-timeout 15 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=15 -O "$TEMP_TAR" "$RELEASE_URL") && [ -s "$TEMP_TAR" ]; then
+            if (curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_TAR" "$RELEASE_URL") && [ -s "$TEMP_TAR" ]; then
                 echo -e "${GREEN}[*] Verifying downloaded archive checksum...${RESET}"
                 SHA256SUMS_URL="https://github.com/Ruusian5/ASL/releases/latest/download/SHA256SUMS"
                 TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
                 EXPECTED=""
-                if ! (curl -fsSL --connect-timeout 15 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 -O "$TEMP_SUMS" "$SHA256SUMS_URL"); then
+                if ! (curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL"); then
                     echo -e "${YELLOW}[!] Could not download SHA256SUMS (HTTP rate limit or release asset unavailable). Falling back to Debian base...${RESET}"
                     rm -f "$TEMP_TAR" "$TEMP_SUMS"
                     IS_MODDED=false

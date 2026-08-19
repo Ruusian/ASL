@@ -42,6 +42,29 @@ install_asl_hub_deb() {
     cp "$src_app" "$target_app" 2>/dev/null || asl_exec "cp '$src_app' '$target_app'"
     chmod 755 "$target_app" 2>/dev/null || asl_exec "chmod 755 '$target_app'"
 
+    # Deploy the real ASL CLI into the chroot so the Hub's buttons work.
+    # Inside the chroot the CLI must operate on the current rootfs, so we set
+    # ASL_CHROOT_SELF=1 (handled in core/common.sh) and provide an asl-cli
+    # wrapper that does not collide with the wine-shim /usr/local/bin/asl.
+    echo "[*] Deploying ASL CLI into Linux rootfs..."
+    local asl_cli_dir="$DEBIANPATH/usr/local/share/asl-cli"
+    mkdir -p "$asl_cli_dir" 2>/dev/null || asl_exec "mkdir -p '$asl_cli_dir'"
+    cp "$SCRIPT_DIR/bin/asl" "$asl_cli_dir/asl" 2>/dev/null || asl_exec "cp '$SCRIPT_DIR/bin/asl' '$asl_cli_dir/asl'"
+    mkdir -p "$asl_cli_dir/core" 2>/dev/null || asl_exec "mkdir -p '$asl_cli_dir/core'"
+    for f in "$SCRIPT_DIR"/core/*.sh; do
+        cp "$f" "$asl_cli_dir/core/" 2>/dev/null || asl_exec "cp '$f' '$asl_cli_dir/core/'"
+    done
+    chmod 755 "$asl_cli_dir/asl" 2>/dev/null || asl_exec "chmod 755 '$asl_cli_dir/asl'"
+
+    cat << 'CLI_EOF' > "$DEBIANPATH/usr/local/bin/asl-cli"
+#!/bin/bash
+export ASL_CHROOT_SELF=1
+export DEBIANPATH=/
+export ASL_EXEC_MODE=direct
+exec /bin/bash /usr/local/share/asl-cli/asl "$@"
+CLI_EOF
+    chmod 755 "$DEBIANPATH/usr/local/bin/asl-cli" 2>/dev/null || asl_exec "chmod 755 '$DEBIANPATH/usr/local/bin/asl-cli'"
+
     # Verify deployed app compiles
     if asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; python3 -m py_compile /usr/local/bin/asl-control-center" 2>/dev/null; then
         echo "[✓] Deployed app passed syntax check."
@@ -118,6 +141,11 @@ uninstall_asl_hub_deb() {
             rm -f "$desk" 2>/dev/null || asl_exec "rm -f '$desk'" && echo "[✓] Removed $desk" || echo "[!] Failed to remove $desk"
         fi
     done
+
+    # Remove the deployed ASL CLI
+    rm -f "$DEBIANPATH/usr/local/bin/asl-cli" 2>/dev/null || asl_exec "rm -f '$DEBIANPATH/usr/local/bin/asl-cli'" || true
+    rm -rf "$DEBIANPATH/usr/local/share/asl-cli" 2>/dev/null || asl_exec "rm -rf '$DEBIANPATH/usr/local/share/asl-cli'" || true
+    echo "[✓] Removed deployed ASL CLI."
 
     # Remove config state (Termux-side, no root needed)
     local conf_dir="${HOME}/.config"

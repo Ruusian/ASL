@@ -10,6 +10,20 @@
 
 Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** transforms your Android smartphone or tablet into a full Linux workstation and gaming environment, supporting **Root (`su`)**, **Shizuku (`rish`)**, and **PRoot (Zero-Root)** environments.
 
+> [!WARNING]
+> **Development fork / nightly build:** This repository is a **fork of
+> [Ruusian/ASL](https://github.com/Ruusian/ASL)**, the main ASL project
+> created by **Abhik Sarkar (Ruusian)**.
+>
+> This fork exists so contributors can work on the project and prepare
+> updates for the main ASL project. Anyone is welcome to **install and test
+> this build**, but please treat it as a **nightly development release**:
+> it is continuously being worked on, may change frequently, and can
+> contain unfinished or experimental features.
+>
+> For a more stable experience, use the main ASL project. If you find a bug
+> or want to help, contributions and feedback are appreciated.
+
 ---
 
 ```text

@@ -588,7 +588,11 @@ class ASLHubWindow(Gtk.Window):
     # ── Helpers ──────────────────────────────────────────────────────────
 
     def asl_cmd(self, subcmd):
-        return ["/bin/bash", "-c", f"asl {subcmd}"]
+        # Prefer the ASL CLI wrapper deployed by asl-hub-installer.sh. The
+        # bare `asl` on PATH inside the chroot is the wine shim and would
+        # forward control commands to wine instead of ASL.
+        cli = shutil.which("asl-cli") or shutil.which("asl") or "/usr/local/bin/asl-cli"
+        return ["/bin/bash", "-c", f"{cli} {subcmd}"]
 
     def add_button(self, grid, col, row, width, label, cmd_args, confirm=None):
         btn = Gtk.Button(label=label)

@@ -46,6 +46,15 @@ asl_security_status() {
 
 asl_security_install() {
     local preset="${1:-basic}"
+    case "$preset" in
+        basic|network|audit|full|nmap|wireshark|tshark) ;;
+        *)
+            if [[ ! "$preset" =~ ^[A-Za-z0-9][A-Za-z0-9+.-]*$ ]]; then
+                echo "[!] Invalid package name: $preset"
+                return 1
+            fi
+            ;;
+    esac
     ensure_chroot_mounted || return 1
     echo "[*] Installing defensive security toolsuite preset: $preset..."
 

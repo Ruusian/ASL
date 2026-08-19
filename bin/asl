@@ -304,7 +304,7 @@ asl_cpu_temp_c() {
         [ -d "$zone" ] || continue
         type=$(cat "$zone/type" 2>/dev/null | tr '[:upper:]' '[:lower:]')
         case "$type" in
-            *cpu*|*cpus*) ;;
+            *cpu*) ;;
             *) continue ;;
         esac
         raw=$(cat "$zone/temp" 2>/dev/null | tr -d '[:space:]')
@@ -359,7 +359,11 @@ asl_remote_details() {
     local user pass host_ip
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
     user=$(whoami 2>/dev/null || echo "user")
-    pass=$(cat "$HOME/.asl/remote_password" 2>/dev/null || echo "1011")
+    if [ -f "$HOME/.asl/remote_password" ]; then
+        pass="configured"
+    else
+        pass="not configured"
+    fi
     host_ip=$(asl_host_ip)
 
     if pgrep -f "sshd" >/dev/null 2>&1; then
@@ -707,7 +711,7 @@ dashboard() {
                 echo "  5) Tailscale Up / Down"
                 echo "  6) LAN SSH Server Start / Stop"
                 echo "  7) Auto-Connect Daemon Start / Stop"
-                echo "  8) Change Remote SSH Password (default: 1011)"
+                echo "  8) Configure Remote SSH Password (optional)"
                 echo "  9) Show Connection Info & Status"
                 read -r -p "Select action [1-9]: " r_act
                 case "$r_act" in
@@ -1110,17 +1114,17 @@ case "${1:-}" in
         case "$RES" in
             720p)
                 pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
-                termux-x11 :0 -geometry 1280x720 +iglx -ac >/dev/null 2>&1 &
+                termux-x11 :0 -geometry 1280x720 +iglx -nolisten tcp >/dev/null 2>&1 &
                 echo "[✓] Termux:X11 display resolution set to 1280x720."
                 ;;
             1080p)
                 pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
-                termux-x11 :0 -geometry 1920x1080 +iglx -ac >/dev/null 2>&1 &
+                termux-x11 :0 -geometry 1920x1080 +iglx -nolisten tcp >/dev/null 2>&1 &
                 echo "[✓] Termux:X11 display resolution set to 1920x1080."
                 ;;
             native)
                 pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
-                termux-x11 :0 +iglx -ac >/dev/null 2>&1 &
+                termux-x11 :0 +iglx -nolisten tcp >/dev/null 2>&1 &
                 echo "[✓] Termux:X11 display resolution set to native."
                 ;;
             status|"")

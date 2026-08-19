@@ -235,12 +235,16 @@ echo "  ✓ No hardcoded secrets found"
 echo ""
 echo "18. Testing for TODO/FIXME/HACK comments..."
 todo_count=0
-for f in $(find "$ASL_DIR" -name "*.sh" -o -name "*.py" | grep -v '.git/' | grep -v 'tests/'); do
+while IFS= read -r -d '' f; do
     count=$(grep -ciE '\b(TODO|FIXME|HACK)\b' "$f" 2>/dev/null || true)
     count=$(echo "$count" | tr -dc '0-9')
     count=${count:-0}
     todo_count=$((todo_count + count))
-done
+done < <(find "$ASL_DIR" \
+    -path "$ASL_DIR/.git" -prune -o \
+    -path "$ASL_DIR/tests" -prune -o \
+    -path "$ASL_DIR/.venv" -prune -o \
+    \( -name '*.sh' -o -name '*.py' \) -type f -print0)
 if [ "$todo_count" -gt 0 ]; then
     FAIL=$((FAIL + 1))
     echo "  ✗ Found $todo_count TODO/FIXME/HACK comments"

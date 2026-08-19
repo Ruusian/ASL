@@ -75,11 +75,11 @@ host_pkill() {
 read_state() {
     [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ] || return 1
     [ "$(stat -c %U "$STATE_FILE" 2>/dev/null)" = "$(id -un)" ] || return 1
-    unset DISPLAY_ID X11_PID X11_START SESSION_PID SESSION_START PULSE_PID PULSE_START PULSE_OWNED SOCAT_PID SOCAT_START
+    unset DISPLAY_ID X11_PID X11_START SESSION_PID SESSION_START PULSE_PID PULSE_START PULSE_OWNED SOCAT_PID SOCAT_START LAUNCHER_PID VIRGL_PID VIRGL_START VIRGL_OWNED
     local key value
     while IFS='=' read -r -u 3 key value; do
         case "$key" in
-            DISPLAY_ID|X11_PID|X11_START|SESSION_PID|SESSION_START|PULSE_PID|PULSE_START|PULSE_OWNED|SOCAT_PID|SOCAT_START)
+            DISPLAY_ID|X11_PID|X11_START|SESSION_PID|SESSION_START|PULSE_PID|PULSE_START|PULSE_OWNED|SOCAT_PID|SOCAT_START|LAUNCHER_PID|VIRGL_PID|VIRGL_START|VIRGL_OWNED)
                 printf -v "$key" '%s' "$value"
                 ;;
             *) return 1 ;;
@@ -89,6 +89,7 @@ read_state() {
     [[ "${X11_PID:-}" =~ ^[0-9]+$ && "${X11_START:-}" =~ ^[0-9]+$ ]] || return 1
     [[ "${SESSION_PID:-}" =~ ^[0-9]+$ && "${SESSION_START:-}" =~ ^[0-9]+$ ]] || return 1
     [[ "${PULSE_OWNED:-0}" =~ ^[01]$ ]] || return 1
+    [[ "${VIRGL_OWNED:-0}" =~ ^[01]$ ]] || return 1
 }
 
 write_state() {
@@ -100,6 +101,8 @@ write_state() {
         printf 'SESSION_PID=%s\nSESSION_START=%s\n' "$SESSION_PID" "$SESSION_START"
         printf 'PULSE_OWNED=%s\nPULSE_PID=%s\nPULSE_START=%s\n' "$PULSE_OWNED" "$PULSE_PID" "$PULSE_START"
         printf 'SOCAT_PID=%s\nSOCAT_START=%s\n' "$SOCAT_PID" "$SOCAT_START"
+        printf 'LAUNCHER_PID=%s\n' "${LAUNCHER_PID:-}"
+        printf 'VIRGL_OWNED=%s\nVIRGL_PID=%s\nVIRGL_START=%s\n' "${VIRGL_OWNED:-0}" "${VIRGL_PID:-}" "${VIRGL_START:-}"
     } > "$tmp" && mv -f "$tmp" "$STATE_FILE"
 }
 
@@ -217,7 +220,7 @@ start_desktop() {
         termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp -auth "$xauth_file" >/dev/null 2>&1 &
         sleep 1
     fi
-    X11_PID=$(pgrep -f "termux-x11.*:[0-9]" | head -n1 || true)
+    X11_PID=$(pgrep -n -f "termux-x11.*:0" || pgrep -f "termux-x11.*:[0-9]" | head -n1 || true)
     local _i
     X11_START=
     for _i in 1 2 3; do
@@ -254,6 +257,10 @@ start_desktop() {
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
     [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
     local asl_target_user="${ASL_USER:-root}"
+    if [[ ! "$asl_target_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+        echo "Error: Invalid ASL_USER value: $asl_target_user" >&2
+        return 1
+    fi
     local target_home="/root"
     local target_uid=0
     if [ "$asl_target_user" != "root" ]; then
@@ -349,22 +356,28 @@ fi
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
     cp -f "$launcher_script" "$termux_tmp/asl-start-xfce.sh" 2>/dev/null || true
+    LAUNCHER_PID=
     case "${ASL_EXEC_MODE:-root}" in
         proot|shizuku)
             asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+            LAUNCHER_PID=$!
             ;;
         root|*)
             if [ "$asl_target_user" = "root" ]; then
                 if asl_chroot_exec "test -x /usr/bin/setpriv" 2>/dev/null; then
                     asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                    LAUNCHER_PID=$!
                 else
                     asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                    LAUNCHER_PID=$!
                 fi
             else
                 if asl_chroot_exec "test -x /usr/bin/setpriv" 2>/dev/null; then
                     asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid='$asl_target_user' --regid='$asl_target_user' --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                    LAUNCHER_PID=$!
                 else
                     asl_chroot_exec "su - '$asl_target_user' -s /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                    LAUNCHER_PID=$!
                 fi
             fi
             ;;
@@ -405,16 +418,16 @@ stop_desktop() {
     echo "[*] Stopping ASL-managed desktop..."
     # Wine shutdown can block indefinitely under Box64. Terminate only
     # processes actually rooted in this chroot, then continue cleanup.
-    chroot_pkill TERM '\b(wine|wine64|wineserver|box64)\b'
+    chroot_pkill TERM '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64)([^A-Za-z0-9_]|$)'
     sleep 1
-    chroot_pkill 9 '\b(wine|wine64|wineserver|box64)\b'
-    chroot_pkill TERM '\b(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query|picom)\b'
+    chroot_pkill 9 '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64)([^A-Za-z0-9_]|$)'
+    chroot_pkill TERM '(^|[^A-Za-z0-9_])(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query|picom)([^A-Za-z0-9_]|$)'
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then asl_exec "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
-    chroot_pkill TERM '\b(asl-start-xfce|dbus-run-session|dbus-daemon)\b'
-    chroot_pkill 9 '\b(asl-start-xfce|dbus-run-session|sleep)\b'
+    chroot_pkill TERM '(^|[^A-Za-z0-9_])(asl-start-xfce|dbus-run-session|dbus-daemon)([^A-Za-z0-9_]|$)'
+    chroot_pkill 9 '(^|[^A-Za-z0-9_])(asl-start-xfce|dbus-run-session|sleep)([^A-Za-z0-9_]|$)'
     if process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || failed=1; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || failed=1; fi
@@ -431,11 +444,11 @@ stop_desktop() {
 force_stop_desktop() {
     echo "[*] Force-stopping all GUI, X11, GPU, Wine, Box64, and audio processes..."
     # Do not invoke wineserver -k: it may block indefinitely under Box64.
-    chroot_pkill TERM '\b(wine|wine64|wineserver|box64)\b'
+    chroot_pkill TERM '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64)([^A-Za-z0-9_]|$)'
     sleep 1
-    chroot_pkill 9 '\b(wine|wine64|wineserver|box64|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|xfconf-query|picom|dbus-daemon|dbus-launch|x11vnc)\b'
-    chroot_pkill 9 '\b(asl-start-xfce)\b'
-    host_pkill 9 '\b(termux-x11|virgl_test_server_android|pulseaudio|socat)\b'
+    chroot_pkill 9 '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|xfconf-query|picom|dbus-daemon|dbus-launch|x11vnc)([^A-Za-z0-9_]|$)'
+    chroot_pkill 9 '(^|[^A-Za-z0-9_])(asl-start-xfce)([^A-Za-z0-9_]|$)'
+    host_pkill 9 '(^|[^A-Za-z0-9_])(termux-x11|virgl_test_server_android|pulseaudio|socat)([^A-Za-z0-9_]|$)'
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$DEBIANPATH/tmp/.X11-vnc" "$DEBIANPATH/tmp/.vnc"/*.pid "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
     sleep 1

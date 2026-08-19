@@ -2,6 +2,13 @@
 
 All notable changes to the ASL (Android Subsystem for Linux) project are documented in this file.
 
+## [Unreleased] - Development Fork
+
+This repository is a continuously updated nightly development fork of
+[Ruusian/ASL](https://github.com/Ruusian5/ASL), maintained by **Abhik Sarkar**.
+Users can install and test it, but changes may be frequent and stability is not
+guaranteed while new features, fixes, and project updates are being developed.
+
 ## [1.5] - 2026-08-17
 
 ### 🚀 Architecture, Robustness & User Experience Enhancements

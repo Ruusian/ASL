@@ -52,11 +52,11 @@ ensure_host_sshd() {
     if [ ! -f "$PREFIX/etc/ssh/ssh_host_ed25519_key" ]; then
         ssh-keygen -A >/dev/null 2>&1 || return 1
     fi
-    if ! pgrep -f "sshd.*8022\|sshd" >/dev/null 2>&1; then
+    if ! pgrep -f "sshd -p 8022" >/dev/null 2>&1 && ! su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1; then
         echo "[*] Starting Termux host SSH daemon on port 8022..."
         sshd -p 8022 -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no 2>/dev/null || return 1
     fi
-    pgrep -f "sshd.*8022" >/dev/null 2>&1 || return 1
+    pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1 || return 1
 }
 
 # --- 1. Fixed Password Management -------------------------------------------
@@ -102,11 +102,11 @@ lan_control() {
             echo "    Authentication:  SSH key only"
             ;;
         stop)
-            pkill -f "sshd" 2>/dev/null || true
+            pkill -f "sshd -p 8022" 2>/dev/null || true
             echo "[✓] LAN SSH Server stopped."
             ;;
         status|"")
-            if pgrep -f "sshd" >/dev/null 2>&1; then
+            if pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1; then
                 echo "LAN SSH:      RUNNING (port 8022)"
                 echo "    Connect:  ssh -p 8022 $(whoami)@$(lan_host_ip)"
                 echo "    Authentication: SSH key only"
@@ -338,11 +338,38 @@ tailscale_control() {
             ensure_tailscaled
             echo "[*] Connecting to Tailscale network..."
             local arg="${2:-}"
-            if [[ "$arg" =~ ^tskey- ]]; then
-                su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET up --authkey=$arg --accept-routes --accept-dns=false" || return 1
-            else
-                su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET up ${*:2} --accept-routes --accept-dns=false" || return 1
+            local ts_flags="--accept-routes --accept-dns=false"
+            if [ -n "$arg" ]; then
+                if [[ "$arg" =~ ^tskey-[A-Za-z0-9_-]+$ ]]; then
+                    ts_flags="--authkey=$arg --accept-routes --accept-dns=false"
+                else
+                    echo "Error: Invalid auth key format. Expected 'tskey-...'."
+                    return 1
+                fi
             fi
+            local extra=""
+            shift 2 2>/dev/null || true
+            for f in "$@"; do
+                case "$f" in
+                    --accept-routes|--accept-dns|--shields-up|--ssh|--exit-node-allow-lan-access|--snat-subnet-routes)
+                        extra="$extra $f"
+                        ;;
+                    --exit-node=*|--hostname=*|--advertise-routes=*|--advertise-exit-node=*|--login-server=*)
+                        local val="${f#*=}"
+                        if [[ "$val" =~ ^[A-Za-z0-9.:/_-]+$ ]]; then
+                            extra="$extra $f"
+                        else
+                            echo "Error: Unsafe value in tailscale flag: $f"
+                            return 1
+                        fi
+                        ;;
+                    *)
+                        echo "Error: Unsupported or unsafe tailscale flag: $f"
+                        return 1
+                        ;;
+                esac
+            done
+            su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket='$TS_SOCKET' up $ts_flags $extra" || return 1
             echo "[✓] Tailscale active."
             ;;
         stop|down)
@@ -465,21 +492,38 @@ key_control() {
                 return 1
             fi
             echo "[*] Fetching SSH public keys for GitHub user '$gh_user'..."
-            local fetched_keys
-            fetched_keys=$(curl -s "https://github.com/${gh_user}.keys")
-            if [ -n "$fetched_keys" ] && ! echo "$fetched_keys" | grep -q "Not Found"; then
+            local fetched_keys valid_keys invalid_count
+            fetched_keys=$(curl -fsSL --max-time 20 --connect-timeout 10 "https://github.com/${gh_user}.keys" 2>/dev/null || true)
+            if [ -n "$fetched_keys" ] && [ "${#fetched_keys}" -le 65536 ]; then
+                valid_keys=""
+                invalid_count=0
+                while IFS= read -r line; do
+                    if printf '%s\n' "$line" | grep -qE '^(ssh-(rsa|ed25519|ecdsa)|ecdsa-sha2-)[[:space:]]+[A-Za-z0-9+/]+=*([[:space:]]+[^[:space:]]+)?$'; then
+                        valid_keys="${valid_keys}${line}"$'\n'
+                    else
+                        invalid_count=$((invalid_count + 1))
+                    fi
+                done <<< "$fetched_keys"
+                if [ -z "$valid_keys" ]; then
+                    echo "Error: No valid SSH keys found for GitHub user '$gh_user'."
+                    return 1
+                fi
+                if [ "$invalid_count" -gt 0 ]; then
+                    echo "[!] Skipped $invalid_count invalid line(s) from the fetched key list."
+                fi
                 mkdir -p "$HOME/.ssh"
-                echo "$fetched_keys" >> "$key_file"
+                chmod 700 "$HOME/.ssh"
+                printf '%s' "$valid_keys" >> "$key_file"
                 chmod 600 "$key_file"
                 if is_mounted; then
                     asl_chroot_exec "mkdir -p /root/.ssh && chmod 700 /root/.ssh" 2>/dev/null || true
                     local fetched_b64
-                    fetched_b64=$(printf '%s\n' "$fetched_keys" | base64 | tr -d '\n')
+                    fetched_b64=$(printf '%s' "$valid_keys" | base64 | tr -d '\n')
                     asl_exec "printf '%s' '$fetched_b64' | base64 -d >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || return 1
                 fi
                 echo "[✓] Successfully imported SSH key(s) from GitHub user '$gh_user'."
             else
-                echo "Error: Could not fetch SSH keys for GitHub user '$gh_user'."
+                echo "Error: Could not fetch SSH keys for GitHub user '$gh_user' (empty, timed out, or oversized response)."
                 return 1
             fi
             ;;
@@ -513,7 +557,9 @@ is_online() {
 
 autoconnect_daemon() {
     echo $$ > "$AUTOCONNECT_PID" 2>/dev/null || true
-    local script_path="$0"
+    # SCRIPT_DIR is defined at the top of this file; the daemon is spawned
+    # via `bash -c` where $0 is "bash", so capture the real path explicitly.
+    local script_path="$SCRIPT_DIR/desktop/remote.sh"
 
     while [ -f "$AUTOCONNECT_STATE" ]; do
         # 1. Host SSH Server Health Check
@@ -541,7 +587,7 @@ autoconnect_daemon() {
         fi
 
         # Rotate log file if > 100KB to prevent high disk usage
-        if [ -f "$AUTOCONNECT_LOG" ] && [ $(wc -c < "$AUTOCONNECT_LOG" 2>/dev/null || echo 0) -gt 102400 ]; then
+        if [ -f "$AUTOCONNECT_LOG" ] && [ "$(wc -c < "$AUTOCONNECT_LOG" 2>/dev/null || echo 0)" -gt 102400 ]; then
             tail -n 200 "$AUTOCONNECT_LOG" > "$AUTOCONNECT_LOG.tmp" 2>/dev/null && mv "$AUTOCONNECT_LOG.tmp" "$AUTOCONNECT_LOG" 2>/dev/null || true
         fi
 
@@ -560,7 +606,7 @@ autoconnect_control() {
             else
                 echo "[*] Starting ASL Seamless Remote Auto-Connect Daemon..."
                 touch "$AUTOCONNECT_STATE"
-                nohup bash -c "source \"$0\"; autoconnect_daemon" > "$AUTOCONNECT_LOG" 2>&1 &
+                nohup bash -c "source \"$SCRIPT_DIR/desktop/remote.sh\"; autoconnect_daemon" > "$AUTOCONNECT_LOG" 2>&1 &
                 echo $! > "$AUTOCONNECT_PID" 2>/dev/null || true
                 echo "[✓] Auto-Connect daemon active. Free tunnels (Serveo, Tailscale, Ngrok) will auto-restart on network drop."
             fi

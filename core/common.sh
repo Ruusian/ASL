@@ -33,6 +33,15 @@ asl_detect_mode() {
 ASL_EXEC_MODE=$(asl_detect_mode)
 export ASL_EXEC_MODE
 
+# Self-contained mode: when the ASL CLI is deployed inside the chroot (e.g. by
+# asl-hub-installer.sh), commands target the current rootfs directly instead of
+# re-entering the chroot. DEBIANPATH is the chroot's own root.
+if [ "${ASL_CHROOT_SELF:-0}" = "1" ]; then
+    ASL_EXEC_MODE="direct"
+    DEBIANPATH="/"
+fi
+export ASL_EXEC_MODE DEBIANPATH
+
 # Default DEBIANPATH fallback based on execution mode
 if [ -z "${DEBIANPATH:-}" ] || [ "$DEBIANPATH" = "/data/local/tmp/chrootDebian" ]; then
     if [ "$ASL_EXEC_MODE" = "proot" ]; then
@@ -46,6 +55,9 @@ export DEBIANPATH
 asl_exec() {
     local cmd="$1"
     case "$ASL_EXEC_MODE" in
+        direct)
+            bash -c "$cmd"
+            ;;
         root)
             if [[ "$cmd" == *$'\n'* ]]; then
                 local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
@@ -99,6 +111,9 @@ asl_exec() {
 asl_chroot_exec() {
     local cmd="$1"
     case "$ASL_EXEC_MODE" in
+        direct)
+            bash -c "$cmd"
+            ;;
         root)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
                 find "$DEBIANPATH/tmp" -maxdepth 1 -name '.asl_chroot_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
@@ -176,9 +191,11 @@ is_mounted() {
             su -c "awk -v target='$target' '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
             ;;
         shizuku)
-            rish -c "awk -v target='$target' '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null || \
-            awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null || \
-            proot-distro login asl-debian -- true 2>/dev/null
+            # Read-only status check: never start the container as a side effect.
+            if rish -c "awk -v target='$target' '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null; then
+                return 0
+            fi
+            awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null
             ;;
         proot|*)
             pgrep -f "proot.*(asl-debian|$target)" >/dev/null 2>&1

@@ -31,7 +31,14 @@ if [ ! -d "$DEBIANPATH" ]; then
 fi
 
 echo -e "${GREEN}[*] Ensuring chroot is unmounted before archiving...${RESET}"
-bash "$SCRIPT_DIR/core/stop-chroot.sh" >/dev/null 2>&1 || true
+if ! bash "$SCRIPT_DIR/core/stop-chroot.sh" >/dev/null 2>&1; then
+    echo -e "${RED}[!] Failed to stop the chroot; refusing to archive a live rootfs.${RESET}"
+    exit 1
+fi
+if is_mounted "$DEBIANPATH"; then
+    echo -e "${RED}[!] Mounts remain below $DEBIANPATH; refusing to create a release archive.${RESET}"
+    exit 1
+fi
 
 echo -e "${GREEN}[*] Packaging modded rootfs into $OUTPUT_TAR...${RESET}"
 # Secrets & machine identity are excluded so a published release tarball never

@@ -67,8 +67,11 @@ asl_gamepad_sync() {
             if ! grep -q -F ' $DEBIANPATH/dev/input ' /proc/mounts; then
                 mount --bind /dev/input '$DEBIANPATH/dev/input' || true
             fi
-            chmod 666 /dev/input/event* /dev/input/js* /dev/uinput 2>/dev/null || true
-            chmod 666 '$DEBIANPATH/dev/input/event*' '$DEBIANPATH/dev/input/js*' '$DEBIANPATH/dev/uinput' 2>/dev/null || true
+            # Match the gid-1003/0660 scheme used by mount-chroot.sh instead of
+            # making input nodes world-writable (0666 permits input injection).
+            chgrp 1003 /dev/input/event* /dev/input/js* /dev/uinput 2>/dev/null || true
+            chmod 0660 /dev/input/event* /dev/input/js* /dev/uinput 2>/dev/null || true
+            chmod 0660 '$DEBIANPATH'/dev/input/event* '$DEBIANPATH'/dev/input/js* 2>/dev/null || true
         " 2>/dev/null || true
     fi
 

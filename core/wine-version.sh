@@ -82,28 +82,30 @@ asl_wine_version_install() {
                 else
                     DL_CMD=\"curl -s -L -o\"
                 fi
-                echo \"[*] Fetching latest Proton-GE release metadata...\"
-                PROTON_URL=\"https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton8-26/GE-Proton8-26.tar.gz\"
                 if [ ! -x /opt/proton-ge/bin/wine ]; then
-                    echo \"[*] Downloading GE-Proton release archive...\"
-                    \$DL_CMD /tmp/proton-ge.tar.gz \"\$PROTON_URL\" || {
-                        echo \"[!] Download failed. Creating fallback GE runner layout from system Wine...\" >&2
-                        ln -sf /usr/bin/wine64 /opt/proton-ge/bin/wine
-                        ln -sf /usr/bin/wine64 /opt/proton-ge/bin/wine64
-                        ln -sf /usr/bin/wineserver /opt/proton-ge/bin/wineserver
-                    }
-                    if [ -s /tmp/proton-ge.tar.gz ]; then
-                        tar -xzf /tmp/proton-ge.tar.gz -C /opt/proton-ge --strip-components=1 2>/dev/null || true
-                        rm -f /tmp/proton-ge.tar.gz
-                    else
+                    echo \"[*] Fetching latest Proton-GE release metadata...\"
+                    LATEST_TAG=\$(curl -fsSL --connect-timeout 15 --max-time 30 https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest 2>/dev/null | grep -m1 '\"tag_name\"' | cut -d'\"' -f4 || true)
+                    [ -n \"\$LATEST_TAG\" ] || LATEST_TAG=GE-Proton8-26
+                    PROTON_URL=\"https://github.com/GloriousEggroll/proton-ge-custom/releases/download/\${LATEST_TAG}/\${LATEST_TAG}.tar.gz\"
+                    echo \"[*] Downloading \$LATEST_TAG release archive...\"
+                    if ! \$DL_CMD /tmp/proton-ge.tar.gz \"\$PROTON_URL\" --max-time 600 --retry 2 2>/dev/null || [ ! -s /tmp/proton-ge.tar.gz ]; then
                         rm -f /tmp/proton-ge.tar.gz 2>/dev/null || true
+                        echo \"[!] FAILED: Proton-GE download failed. Aborting; no fallback engine was created.\" >&2
+                        exit 1
+                    fi
+                    if ! tar -xzf /tmp/proton-ge.tar.gz -C /opt/proton-ge --strip-components=1 2>/dev/null; then
+                        rm -f /tmp/proton-ge.tar.gz 2>/dev/null || true
+                        echo \"[!] FAILED: Proton-GE archive could not be extracted. Aborting.\" >&2
+                        exit 1
+                    fi
+                    rm -f /tmp/proton-ge.tar.gz 2>/dev/null || true
+                    if [ ! -x /opt/proton-ge/bin/wine ]; then
+                        echo \"[!] FAILED: Proton-GE archive did not contain a valid wine binary. Aborting.\" >&2
+                        exit 1
                     fi
                 fi
-                [ -x /opt/proton-ge/bin/wine ] || ln -sf /usr/bin/wine64 /opt/proton-ge/bin/wine
-                [ -x /opt/proton-ge/bin/wine64 ] || ln -sf /usr/bin/wine64 /opt/proton-ge/bin/wine64
-                [ -x /opt/proton-ge/bin/wineserver ] || ln -sf /usr/bin/wineserver /opt/proton-ge/bin/wineserver
                 echo \"[✓] Proton-GE environment structure created in /opt/proton-ge.\"
-            "
+            " || { echo "[!] Proton-GE installation FAILED."; return 1; }
             echo "[✓] Proton-GE installed successfully."
             ;;
         system-wine)

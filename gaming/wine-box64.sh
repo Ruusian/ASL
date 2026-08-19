@@ -40,7 +40,11 @@ build_gaming_env_exports() {
     fi
 
     snippet=$(cat << EOF
-if [ -d /opt/wine-x64/bin ]; then
+if [ -f /etc/asl_wine_version.conf ] && grep -q '^proton-ge' /etc/asl_wine_version.conf 2>/dev/null; then
+    export PATH=/opt/proton-ge/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+    [ -x /opt/proton-ge/bin/wineserver ] && export WINESERVER=/opt/proton-ge/bin/wineserver
+    [ -x /opt/proton-ge/bin/wine ] && export WINELOADER=/opt/proton-ge/bin/wine
+elif [ -d /opt/wine-x64/bin ]; then
     export PATH=/usr/local/bin:/opt/wine-x64/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
     [ -x /opt/wine-x64/bin/wineserver-wrapper ] && export WINESERVER=/opt/wine-x64/bin/wineserver-wrapper
     [ -x /usr/local/bin/wine64 ] && export WINELOADER=/usr/local/bin/wine64
@@ -50,7 +54,7 @@ fi
 export DISPLAY=:0
 export TMPDIR=/tmp
 export WINEARCH=win64
-export WINEPREFIX="\\${WINEPREFIX:-\\$([ -d /root/.wine-x64 ] && echo /root/.wine-x64 || echo /root/.wine)}"
+export WINEPREFIX="\${WINEPREFIX:-\$([ -d /root/.wine-x64 ] && echo /root/.wine-x64 || echo /root/.wine)}"
 export XDG_RUNTIME_DIR=/run/user/0
 export SDL_GAMECONTROLLERCONFIG_FILE=/etc/gamecontrollerdb.txt
 export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1
@@ -245,7 +249,8 @@ setup_gaming() {
         CODENAME=\$(. /etc/os-release 2>/dev/null; printf %s \"\$VERSION_CODENAME\")
         [ -n \"\$CODENAME\" ] || CODENAME=trixie
         if [ -f /etc/debian_version ]; then
-            echo \"deb http://deb.debian.org/debian \$CODENAME main contrib non-free non-free-firmware\" > /etc/apt/sources.list
+            mkdir -p /etc/apt/sources.list.d
+            echo \"deb https://deb.debian.org/debian \$CODENAME main contrib non-free non-free-firmware\" > /etc/apt/sources.list.d/asl-debian.sources
         fi
         if ! apt-get update; then
             echo \"[!] apt-get update failed. Check network access inside the chroot.\"
@@ -336,7 +341,9 @@ run_desktop_shortcuts() {
         if [ -n "$app_name" ]; then
             echo "[*] Launching $app_name..."
             ENV_EXPORTS=$(build_gaming_env_exports)
-            asl_chroot_exec "TARGET=\"$app_name\"; $ENV_EXPORTS
+            local name_b64
+            name_b64=$(printf '%s' "$app_name" | base64 | tr -d '\n')
+            asl_chroot_exec "TARGET=\"\$(printf '%s' '$name_b64' | base64 -d)\"; $ENV_EXPORTS
                 if [[ \"\$TARGET\" == *.desktop ]] && [ ! -f \"\$TARGET\" ]; then
                     if [ -f \"/usr/share/applications/\$TARGET\" ]; then
                         TARGET=\"/usr/share/applications/\$TARGET\"
@@ -485,9 +492,11 @@ run_wine_exe() {
     fi
 
     local host_path="$EXE_PATH"
+    local exe_b64
+    exe_b64=$(printf '%s' "$EXE_PATH" | base64 | tr -d '\n')
     if [[ "$host_path" == "$DEBIANPATH"* ]]; then
         host_path="$EXE_PATH"
-    elif [ ! -e "$host_path" ] && asl_chroot_exec "test -f '$EXE_PATH'" 2>/dev/null; then
+    elif [ ! -e "$host_path" ] && asl_chroot_exec "test -f \"\$(printf '%s' '$exe_b64' | base64 -d)\"" 2>/dev/null; then
         host_path="$DEBIANPATH$EXE_PATH"
     fi
 
@@ -510,10 +519,11 @@ run_wine_exe() {
     ncpu=$(nproc 2>/dev/null || echo 8)
     mask="0-$((ncpu - 1))"
     echo "[*] Executing $EXE_PATH ($APP_NAME) with Box64 + Wine64..."
-    export TARGET_EXE="$internal_exe"
-    export TARGET_NAME="$SAFE_APP_NAME"
+    local exe_b64 name_b64
+    exe_b64=$(printf '%s' "$internal_exe" | base64 | tr -d '\n')
+    name_b64=$(printf '%s' "$SAFE_APP_NAME" | base64 | tr -d '\n')
     ENV_EXPORTS=$(build_gaming_env_exports)
-    asl_chroot_exec "export TARGET_EXE=\"$TARGET_EXE\"; export TARGET_NAME=\"$TARGET_NAME\"; $ENV_EXPORTS
+    asl_chroot_exec "export TARGET_EXE=\"\$(printf '%s' '$exe_b64' | base64 -d)\"; export TARGET_NAME=\"\$(printf '%s' '$name_b64' | base64 -d)\"; $ENV_EXPORTS
         workdir=\$(dirname \"\$TARGET_EXE\")
         [ -d \"\$workdir\" ] && cd \"\$workdir\" 2>/dev/null || true
         wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true

@@ -41,6 +41,12 @@ asl_clean_run() {
     local mode="${1:-all}"
     ensure_chroot_mounted || return 1
     echo "[*] Cleaning ASL storage cache (mode: $mode)..."
+    # If a desktop/X11 session is live, never remove the display socket/lock —
+    # doing so kills the active Termux:X11 session.
+    local x11_active=0
+    if pgrep -f "termux-x11.*:[0-9]" >/dev/null 2>&1 || pgrep -f "Xorg.*:[0-9]" >/dev/null 2>&1; then
+        x11_active=1
+    fi
 
     asl_chroot_exec "
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -52,8 +58,9 @@ asl_clean_run() {
                 ;;
             tmp)
                 echo \"[*] Cleaning /tmp and /var/tmp...\"
-                rm -rf /tmp/* /tmp/.* /tmp/.X11-unix/X* /tmp/.X0-lock /tmp/pulse-* 2>/dev/null || true
-                rm -rf /var/tmp/* 2>/dev/null || true
+                rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+                [ \"$x11_active\" = \"1\" ] || rm -rf /tmp/.X11-unix/X* /tmp/.X0-lock 2>/dev/null || true
+                rm -rf /tmp/pulse-* 2>/dev/null || true
                 ;;
             cache)
                 echo \"[*] Cleaning user build & shader cache (~/.cache & /tmp/.mesa_cache)...\"
@@ -64,7 +71,8 @@ asl_clean_run() {
                 apt-get clean
                 rm -rf /var/lib/apt/lists/*
                 echo \"[*] Cleaning temporary files...\"
-                rm -rf /tmp/* /tmp/.* /var/tmp/* /tmp/.X11-unix/X* /tmp/.X0-lock /tmp/pulse-* 2>/dev/null || true
+                rm -rf /tmp/* /var/tmp/* /tmp/pulse-* 2>/dev/null || true
+                [ \"$x11_active\" = \"1\" ] || rm -rf /tmp/.X11-unix/X* /tmp/.X0-lock 2>/dev/null || true
                 echo \"[*] Cleaning user cache & shader cache...\"
                 rm -rf /root/.cache/* /home/*/.cache/* /tmp/.mesa_cache/* 2>/dev/null || true
                 ;;
