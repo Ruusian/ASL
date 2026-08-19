@@ -1,0 +1,12 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary and state files
+*.log
+*.state
+*.pid
+*.sock
+tmp/
+.DS_Store

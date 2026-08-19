@@ -1,207 +1,83 @@
 #!/bin/bash
-# ASL: Remote Access Bridge (SSH, VNC & Public Internet SSH)
+# ASL: Remote Access Bridge (Serveo, Ngrok Multi-Token, Tailscale & LAN SSH)
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
+CONFIG_DIR="$HOME/.asl"
+mkdir -p "$CONFIG_DIR" "$HOME/.ssh" 2>/dev/null || true
+# Fix ownership if created by root
+if [ -d "$CONFIG_DIR" ] && [ ! -w "$CONFIG_DIR" ]; then
+    su -c "chown $(id -u):$(id -g) '$CONFIG_DIR'" 2>/dev/null || true
 fi
 
-ensure_mounted() {
-    if ! is_mounted; then
-        bash "$SCRIPT_DIR/core/mount-chroot.sh" || exit 1
+PASS_FILE="$CONFIG_DIR/remote_password"
+DEFAULT_PASS="1011"
+
+get_password() {
+    if [ -f "$PASS_FILE" ]; then
+        cat "$PASS_FILE" 2>/dev/null
+    else
+        printf '%s' "$DEFAULT_PASS"
     fi
 }
 
-# Kill only processes whose /proc/<pid>/root resolves to the chroot path.
-# A bare `pkill -f` inside the chroot sees the host's /proc bind mount and
-# can kill unrelated host processes with a matching cmdline.
-kill_chroot() {
-    local sig="$1" pat="$2"
-    asl_exec "
-        for pid in /proc/[0-9]*; do
-            [ -d \"\$pid\" ] || continue
-            [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
-            grep -qE \"$pat\" \"\$pid/comm\" \"\$pid/cmdline\" 2>/dev/null || continue
-            kill $sig \"\${pid#/proc/}\" 2>/dev/null || true
-        done
-    " 2>/dev/null || true
+set_password() {
+    local new_pass="${1:-$DEFAULT_PASS}"
+    if [ -z "$new_pass" ]; then
+        echo "Error: Password cannot be empty."
+        return 1
+    fi
+    printf '%s\n%s\n' "$new_pass" "$new_pass" | passwd >/dev/null 2>&1 || true
+    if is_mounted; then
+        asl_exec "printf '%s\n%s\n' '$new_pass' '$new_pass' | passwd >/dev/null 2>&1" || true
+    fi
+    printf '%s' "$new_pass" > "$PASS_FILE"
+    chmod 600 "$PASS_FILE"
+    echo "[✓] ASL Remote SSH password successfully updated to: $new_pass"
 }
 
-# Kill only processes whose /proc/<pid>/root resolves to "/" (the host root,
-# i.e. Termux/Android), never processes living inside the chroot. Used to
-# stop the Termux host sshd without touching the chroot's sshd (port 2222).
-#
-# Match on comm ONLY, not cmdline: the su wrapper's cmdline contains the
-# literal pattern (it is passed as an argument), so a cmdline match TERMs our
-# own wrapper shell before it ever reaches the daemon (observed: "Terminated"
-# + the sshd surviving). The chroot killer can use cmdline safely because its
-# $DEBIANPATH root guard filters out every host-side wrapper.
-kill_host() {
-    local sig="$1" pat="$2"
-    asl_exec "
-        for pid in /proc/[0-9]*; do
-            [ -d \"\$pid\" ] || continue
-            [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"/\" ] || continue
-            grep -qE \"$pat\" \"\$pid/comm\" 2>/dev/null || continue
-            kill $sig \"\${pid#/proc/}\" 2>/dev/null || true
-        done
-    " 2>/dev/null || true
+ensure_host_sshd() {
+    local pass
+    pass=$(get_password)
+    # Ensure password set
+    printf '%s\n%s\n' "$pass" "$pass" | passwd >/dev/null 2>&1 || true
+
+    mkdir -p "$PREFIX/etc/ssh"
+    if [ ! -f "$PREFIX/etc/ssh/ssh_host_ed25519_key" ]; then
+        ssh-keygen -A >/dev/null 2>&1 || true
+    fi
+    if ! pgrep -f "sshd.*8022\|sshd" >/dev/null 2>&1; then
+        echo "[*] Starting Termux host SSH daemon on port 8022..."
+        sshd -p 8022 2>/dev/null || sshd 2>/dev/null || true
+    fi
 }
 
-chroot_sshd_running() {
-    is_mounted || return 1
-    asl_exec "
-        for pid in /proc/[0-9]*; do
-            [ -d \"\$pid\" ] || continue
-            [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
-            grep -q '^sshd\$' \"\$pid/comm\" 2>/dev/null && exit 0
-        done
-        exit 1
-    " 2>/dev/null
-}
-
-chroot_vnc_running() {
-    is_mounted || return 1
-    asl_exec "
-        for pid in /proc/[0-9]*; do
-            [ -d \"\$pid\" ] || continue
-            [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] || continue
-            grep -q '^x11vnc\$' \"\$pid/comm\" 2>/dev/null && exit 0
-        done
-        exit 1
-    " 2>/dev/null
-}
-
-ssh_control() {
-    local action="${1:-status}"
+# --- 1. Fixed Password Management -------------------------------------------
+password_control() {
+    local action="${1:-show}"
     case "$action" in
-        start)
-            ensure_mounted
-            echo "[*] Checking SSH server installation..."
-            if ! asl_chroot_exec "/usr/bin/test -x /usr/sbin/sshd" 2>/dev/null; then
-                echo "[*] Installing openssh-server inside Debian chroot..."
-                asl_chroot_exec "/usr/bin/apt-get update && /usr/bin/apt-get install -y openssh-server" || return 1
+        set|change)
+            local new_p="${2:-}"
+            if [ -z "$new_p" ]; then
+                echo "Usage: asl remote password set <new_password>"
+                return 1
             fi
-            asl_chroot_exec "/usr/bin/ssh-keygen -A" 2>/dev/null || true
-            asl_chroot_exec "chmod 600 /etc/ssh/ssh_host_*_key 2>/dev/null || true" 2>/dev/null || true
-            asl_chroot_exec "/bin/mkdir -p /var/run/sshd" 2>/dev/null || true
-            # SSH hardening: root login allowed only via public key
-            # (prohibit-password); password auth is disabled. Passwords over
-            # the network are crackable — use an authorized_keys entry instead.
-            asl_chroot_exec "if grep -qE \"^[#]?PermitRootLogin\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PermitRootLogin.*/PermitRootLogin prohibit-password/\" /etc/ssh/sshd_config; else echo \"PermitRootLogin prohibit-password\" >> /etc/ssh/sshd_config; fi; if grep -qE \"^[#]?PasswordAuthentication\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PasswordAuthentication.*/PasswordAuthentication no/\" /etc/ssh/sshd_config; else echo \"PasswordAuthentication no\" >> /etc/ssh/sshd_config; fi; if grep -qE \"^[#]?PubkeyAuthentication\" /etc/ssh/sshd_config; then sed -i \"s/^[#]*PubkeyAuthentication.*/PubkeyAuthentication yes/\" /etc/ssh/sshd_config; else echo \"PubkeyAuthentication yes\" >> /etc/ssh/sshd_config; fi" 2>/dev/null || true
-            if chroot_sshd_running; then
-                echo "[*] SSH server is already running."
-            else
-                echo "[*] Starting SSH daemon on port 2222..."
-                asl_chroot_exec "if command -v setpriv >/dev/null 2>&1; then /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /usr/sbin/sshd -p 2222; else /usr/sbin/sshd -p 2222; fi" || return 1
-                echo "[✓] SSH server active. Connect via: ssh root@127.0.0.1 -p 2222"
-                echo "    Note: Password auth is DISABLED; root requires a public key."
-                echo "          Add one with: asl exec sh -c 'mkdir -p ~/.ssh && echo YOUR_PUBKEY >> ~/.ssh/authorized_keys'"
-                echo "    Warning: sshd listens on ALL interfaces, not just localhost."
-                echo "             Only use this on a trusted network (or tunnel it via ssh -L)."
-            fi
+            set_password "$new_p"
             ;;
-        stop)
-            if chroot_sshd_running; then
-                kill_chroot TERM 'sshd'
-                echo "[✓] SSH daemon stopped."
-            else
-                echo "[*] SSH server is not running."
-            fi
-            ;;
-        status|"")
-            if chroot_sshd_running; then
-                echo "SSH Server: RUNNING (port 2222)"
-            else
-                echo "SSH Server: STOPPED"
-            fi
+        show|*)
+            echo "Current SSH Remote Password: $(get_password)"
+            echo "Change password using: asl remote password set <new_password>"
             ;;
     esac
 }
 
-vnc_control() {
-    local action="${1:-status}"
-    case "$action" in
-        start)
-            ensure_mounted
-            if ! asl_chroot_exec "/usr/bin/test -x /usr/bin/x11vnc" 2>/dev/null; then
-                echo "[*] Installing x11vnc inside Debian chroot..."
-                asl_chroot_exec "/usr/bin/apt-get update && /usr/bin/apt-get install -y x11vnc" || return 1
-            fi
-            # Clean stale VNC locks before checking process
-            asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
-            if chroot_vnc_running; then
-                echo "[*] VNC server is already running."
-            else
-                PWFILE="/root/.asl-vncpasswd"
-                if ! asl_chroot_exec "test -s '$PWFILE'" 2>/dev/null; then
-                    VNCPW=$(asl_chroot_exec "tr -dc A-Za-z0-9 < /dev/urandom | head -c 12" 2>/dev/null)
-                    [ -n "$VNCPW" ] || VNCPW="asl$(date +%s)"
-                    asl_chroot_exec "/usr/bin/x11vnc -storepasswd \"$VNCPW\" \"$PWFILE\" >/dev/null 2>&1 && chmod 600 \"$PWFILE\"" || return 1
-                    echo "    VNC password set to: $VNCPW (stored at $PWFILE in chroot)"
-                fi
-                local bind_host="127.0.0.1"
-                if [ "${2:-}" = "--public" ] || [ "${2:-}" = "public" ]; then
-                    bind_host="0.0.0.0"
-                    echo "[!] Warning: Binding VNC server to public network interface (0.0.0.0). Enforcing password authentication."
-                fi
-                echo "[*] Starting optimized low-latency x11vnc server on $bind_host:5900..."
-                asl_chroot_exec "export DISPLAY=:0; if command -v setpriv >/dev/null 2>&1; then /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -noxdamage -display :0 -listen $bind_host -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1; else /usr/bin/x11vnc -noshm -noxdamage -ncache 10 -ncache_cr -defer 3 -wait 3 -cursor arrow -repeat -nap -noxrecord -noxdamage -display :0 -listen $bind_host -forever -shared -rfbauth $PWFILE -rfbport 5900 -bg >/dev/null 2>&1; fi" || return 1
-                echo "[✓] VNC server active (low-latency near-native mode). Connect to $bind_host:5900."
-                echo "    To reset the password, run: asl remote vnc clean reset-auth"
-            fi
-            ;;
-        stop)
-            if chroot_vnc_running; then
-                kill_chroot TERM 'x11vnc'
-                sleep 1
-                if chroot_vnc_running; then
-                    kill_chroot 9 'x11vnc'
-                fi
-                asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
-                echo "[✓] VNC server stopped and locks cleaned."
-            else
-                asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc/*.pid" 2>/dev/null || true
-                echo "[*] VNC server is not running."
-            fi
-            ;;
-        clean|reset)
-            echo "[*] Cleaning VNC server state and force-terminating any lingering processes..."
-            if is_mounted; then
-                kill_chroot TERM 'x11vnc'
-                sleep 1
-                kill_chroot 9 'x11vnc'
-                asl_chroot_exec "rm -rf /tmp/.X11-vnc /tmp/.vnc /tmp/.X11-unix/X5900" 2>/dev/null || true
-                if [ "${2:-}" = "reset-auth" ]; then
-                    asl_chroot_exec "rm -f /root/.asl-vncpasswd" 2>/dev/null || true
-                    echo "[✓] VNC authentication credentials reset."
-                fi
-            fi
-            echo "[✓] VNC server state cleaned successfully."
-            ;;
-        status|"")
-            if chroot_vnc_running; then
-                echo "VNC Server: RUNNING (port 5900, low-latency near-native)"
-            else
-                echo "VNC Server: STOPPED"
-            fi
-            ;;
-    esac
-}
-
-# --- LAN SSH (fixed access code, one-line connect) -------------------------
-SSH_PORT=8022
-LAN_DEFAULT_CODE="1234"
-LAN_STATE="$PREFIX/tmp/asl-lan-ssh.state"
-
+# --- 2. LAN SSH Control -----------------------------------------------------
 lan_host_ip() {
     local ip
     ip=$(ip -o -4 addr show 2>/dev/null | awk '$2 != "lo" {sub(/\/.*/, "", $4); print $4; exit}')
@@ -209,262 +85,402 @@ lan_host_ip() {
     printf '%s' "${ip:-127.0.0.1}"
 }
 
-lan_code() {
-    local code="${1:-$LAN_DEFAULT_CODE}"
-    if [ -f "$HOME/.asl/lan_code" ]; then
-        code=$(cat "$HOME/.asl/lan_code" 2>/dev/null)
-    fi
-    printf '%s' "${code:-$LAN_DEFAULT_CODE}"
-}
-
-lan_set_password() {
-    local code="$1"
-    printf '%s\n%s\n' "$code" "$code" | passwd >/dev/null 2>&1 || return 1
-    mkdir -p "$HOME/.asl"
-    printf '%s' "$code" > "$HOME/.asl/lan_code"
-    chmod 600 "$HOME/.asl/lan_code"
-}
-
-lan_sshd_running() {
-    host_sshd_running
-}
-
-lan_start() {
-    local code user host
-    code=$(lan_code)
-    user=$(whoami)
-    host=$(lan_host_ip)
-
-    echo "[*] Provisioning LAN SSH access (fixed code: $code)..."
-    if ! lan_set_password "$code"; then
-        echo "Error: Failed to set the Termux access password."
-        return 1
-    fi
-
-    mkdir -p "$PREFIX/etc/ssh"
-    if [ ! -f "$PREFIX/etc/ssh/ssh_host_ed25519_key" ]; then
-        ssh-keygen -A >/dev/null 2>&1 || true
-    fi
-
-    if lan_sshd_running; then
-        echo "[*] Termux sshd is already running on port $SSH_PORT."
-    else
-        sshd || { echo "Error: sshd failed to start on port $SSH_PORT."; return 1; }
-    fi
-
-    printf '%s %s\n' "$user" "$host" > "$LAN_STATE" 2>/dev/null || true
-
-    echo "[✓] LAN SSH active (Root Access Enabled). Any device on the same network can connect:"
-    echo ""
-    echo "        ssh -p $SSH_PORT root@${host}   (or ${user}@${host})"
-    echo ""
-    echo "    Access code (password): $code"
-    echo "    Root Access:            Run 'su' or 'asl' after login"
-    echo "    Change code later:      asl remote lan code <new-code>"
-}
-
-lan_stop() {
-    if lan_sshd_running; then
-        kill_host TERM '^sshd$'
-        sleep 1
-        if lan_sshd_running; then
-            kill_host 9 '^sshd$'
-        fi
-        rm -f "$LAN_STATE"
-        echo "[✓] LAN SSH daemon stopped."
-    else
-        rm -f "$LAN_STATE"
-        echo "[*] LAN SSH is not running."
-    fi
-}
-
-lan_status() {
-    local user host code
-    user=$(whoami)
-    host=$(lan_host_ip)
-    code=$(lan_code)
-    if lan_sshd_running; then
-        echo "LAN SSH:      RUNNING (port $SSH_PORT, Root Access Enabled)"
-        echo "    Command:  ssh -p $SSH_PORT root@${host}"
-        echo "    Code:     $code"
-    else
-        echo "LAN SSH:      STOPPED"
-        echo "    Start it: asl remote lan start"
-    fi
-}
-
 lan_control() {
     local action="${1:-status}"
     case "$action" in
-        start)  lan_start ;;
-        stop)   lan_stop ;;
-        code)
-            local new_code="${2:-}"
-            if [ -z "$new_code" ]; then
-                echo "Usage: asl remote lan code <new-code>"
-                return 1
-            fi
-            if lan_set_password "$new_code"; then
-                echo "[✓] LAN access code updated to: $new_code"
+        start)
+            ensure_host_sshd
+            local host pass
+            host=$(lan_host_ip)
+            pass=$(get_password)
+            echo "[✓] LAN SSH Server active on port 8022."
+            echo "    Connect command: ssh -p 8022 $(whoami)@$host"
+            echo "    Password:        $pass"
+            ;;
+        stop)
+            pkill -f "sshd" 2>/dev/null || true
+            echo "[✓] LAN SSH Server stopped."
+            ;;
+        status|"")
+            if pgrep -f "sshd" >/dev/null 2>&1; then
+                echo "LAN SSH:      RUNNING (port 8022)"
+                echo "    Connect:  ssh -p 8022 $(whoami)@$(lan_host_ip)"
+                echo "    Password: $(get_password)"
             else
-                echo "Error: Failed to update the access code."
-                return 1
+                echo "LAN SSH:      STOPPED"
             fi
             ;;
-        status|"") lan_status ;;
-        *) echo "Usage: asl remote lan [start|stop|status|code <new-code>]"; return 1 ;;
     esac
 }
 
-# --- Public Internet Remote Access (Pinggy tunnel) -------------------------
+# --- 3. Serveo Tunnel (Fixed SSH Key) ---------------------------------------
+SERVEO_KEY="$HOME/.ssh/id_serveo_asl"
+SERVEO_LOG="$PREFIX/tmp/serveo.log"
+SERVEO_STATE="$PREFIX/tmp/asl-serveo.state"
 
-host_sshd_running() {
-    asl_exec "
-        for pid in /proc/[0-9]*; do
-            [ -d \"\$pid\" ] || continue
-            [ \"\$(readlink \"\$pid/root\" 2>/dev/null)\" = \"/\" ] || continue
-            grep -q '^sshd\$' \"\$pid/comm\" 2>/dev/null && exit 0
-        done
-        exit 1
-    " 2>/dev/null
-}
-
-ensure_host_sshd() {
-    if host_sshd_running; then
-        return 0
-    fi
-    echo "[*] Starting Termux host sshd on port $SSH_PORT..."
-    sshd || { echo "Error: sshd failed to start."; return 1; }
-}
-
-# --- Public Internet Remote Access (Zero-Client Setup) ---------------------
-PUBLIC_LOG="$PREFIX/tmp/pinggy.log"
-PUBLIC_STATE="$PREFIX/tmp/asl-pinggy.state"
-
-process_start_time() {
-    [ -r "/proc/$1/stat" ] || return 1
-    awk '{print $22}' "/proc/$1/stat" 2>/dev/null
-}
-
-public_process_matches() {
-    local pid="$1" expected_start="$2" current_start cmdline
-    [ -n "$pid" ] && [ -n "$expected_start" ] || return 1
-    current_start=$(process_start_time "$pid") || return 1
-    [ "$current_start" = "$expected_start" ] || return 1
-    cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
-    [[ "$cmdline" == *"ssh"* && "$cmdline" == *"tcp@a.pinggy.io"* && "$cmdline" == *"-R 0:localhost:$SSH_PORT"* ]]
-}
-
-public_tunnel_running() {
-    local pid start
-    [ -r "$PUBLIC_STATE" ] || return 1
-    read -r pid start < "$PUBLIC_STATE" || return 1
-    if public_process_matches "$pid" "$start"; then
-        return 0
-    fi
-    rm -f "$PUBLIC_STATE"
-    return 1
-}
-
-public_start() {
-    local pid start
-    ensure_host_sshd || return 1
-    if public_tunnel_running; then
-        echo "[*] Public SSH tunnel is already running."
-    else
-        echo "[*] Starting zero-config Public Internet SSH Tunnel..."
-        rm -f "$PUBLIC_LOG" "$PUBLIC_STATE"
-        nohup ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R "0:localhost:$SSH_PORT" tcp@a.pinggy.io > "$PUBLIC_LOG" 2>&1 &
-        pid=$!
-        start=$(process_start_time "$pid")
-        if [ -z "$start" ]; then
-            echo "Error: Public tunnel failed to start. Log output:"
-            cat "$PUBLIC_LOG" 2>/dev/null
-            return 1
-        fi
-        printf '%s %s\n' "$pid" "$start" > "$PUBLIC_STATE" || { kill -TERM "$pid" 2>/dev/null || true; return 1; }
-        sleep 3
-        if ! public_tunnel_running; then
-            echo "Error: Public tunnel failed to start. Log output:"
-            cat "$PUBLIC_LOG" 2>/dev/null
-            rm -f "$PUBLIC_STATE"
-            return 1
-        fi
-    fi
-
-    local user link port host
-    user=$(whoami)
-    link=$(grep -oE 'tcp://[^[:space:]]+' "$PUBLIC_LOG" 2>/dev/null | tail -1)
-    if [ -n "$link" ]; then
-        host=$(echo "$link" | sed -E 's|tcp://([^:]+):.*|\1|')
-        port=$(echo "$link" | sed -E 's|tcp://[^:]+:([0-9]+)|\1|')
-        echo "[✓] Public Internet SSH active!"
-        echo "    Connect from ANY computer or phone (no app install needed):"
-        echo "        ssh -p $port ${user}@${host}"
-        echo "    Password: Your Termux user password (set via 'passwd')"
-    else
-        echo "[*] Tunnel starting... Run 'asl remote public status' in a moment for connection link."
+ensure_serveo_key() {
+    if [ ! -f "$SERVEO_KEY" ]; then
+        echo "[*] Generating fixed SSH key for Serveo persistent tunnel..."
+        ssh-keygen -t ed25519 -f "$SERVEO_KEY" -N "" -C "asl-serveo" >/dev/null 2>&1
+        chmod 600 "$SERVEO_KEY"
     fi
 }
 
-public_stop() {
-    local pid start
-    if public_tunnel_running; then
-        read -r pid start < "$PUBLIC_STATE"
-        if ! kill -TERM "$pid" 2>/dev/null; then
-            echo "[!] Failed to stop the ASL-owned public tunnel."
-            return 1
-        fi
-        rm -f "$PUBLIC_STATE" "$PUBLIC_LOG"
-        echo "[✓] Public Internet SSH tunnel stopped."
-    else
-        echo "[*] Public tunnel is not running."
-    fi
+serveo_running() {
+    [ -f "$SERVEO_STATE" ] && pgrep -f "serveo.net" >/dev/null 2>&1
 }
 
-public_status() {
-    if public_tunnel_running; then
-        local user link port host
-        user=$(whoami)
-        link=$(grep -oE 'tcp://[^[:space:]]+' "$PUBLIC_LOG" 2>/dev/null | tail -1)
-        echo "Public SSH:   RUNNING"
-        if [ -n "$link" ]; then
-            host=$(echo "$link" | sed -E 's|tcp://([^:]+):.*|\1|')
-            port=$(echo "$link" | sed -E 's|tcp://[^:]+:([0-9]+)|\1|')
-            echo "    Command:  ssh -p $port ${user}@${host}"
-            echo "    Password: Your Termux user password (set via 'passwd')"
-        fi
-    else
-        echo "Public SSH:   STOPPED"
-    fi
-}
-
-public_control() {
+serveo_control() {
     local action="${1:-status}"
     case "$action" in
-        start)  public_start ;;
-        stop)   public_stop ;;
-        status|"") public_status ;;
-        *) echo "Usage: asl remote public [start|stop|status]"; return 1 ;;
+        start)
+            ensure_host_sshd
+            ensure_serveo_key
+            if serveo_running; then
+                echo "[*] Serveo tunnel is already running."
+            else
+                local serveo_alias="asl-$(whoami)"
+                echo "[*] Launching Serveo persistent SSH tunnel on port 8022 (alias: ${serveo_alias})..."
+                rm -f "$SERVEO_LOG"
+                nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=no -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R "${serveo_alias}:22:localhost:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
+                echo $! > "$SERVEO_STATE"
+                sleep 4
+                if ! serveo_running; then
+                    echo "Error: Serveo tunnel failed to connect. Log output:"
+                    cat "$SERVEO_LOG" 2>/dev/null
+                    rm -f "$SERVEO_STATE"
+                    return 1
+                fi
+            fi
+            serveo_status
+            ;;
+        stop)
+            if serveo_running; then
+                local pid
+                pid=$(cat "$SERVEO_STATE" 2>/dev/null)
+                [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || pkill -f "serveo.net" 2>/dev/null || true
+                rm -f "$SERVEO_STATE" "$SERVEO_LOG"
+                echo "[✓] Serveo tunnel stopped."
+            else
+                rm -f "$SERVEO_STATE"
+                echo "[*] Serveo tunnel is not running."
+            fi
+            ;;
+        status|"")
+            serveo_status
+            ;;
     esac
+}
+
+serveo_status() {
+    if serveo_running; then
+        echo "Serveo Tunnel: RUNNING (Persistent Fixed Key)"
+        local s_alias user
+        user=$(whoami 2>/dev/null || echo "user")
+        s_alias="asl-${user}"
+        echo "    Connect:  ssh -J serveo.net ${user}@${s_alias}"
+        echo "    Password: $(get_password)"
+    else
+        echo "Serveo Tunnel: STOPPED"
+    fi
+}
+
+# --- 4. Ngrok Tunnel (Multi-Token Pool & Fallback) ---------------------------
+NGROK_TOKENS_FILE="$CONFIG_DIR/ngrok_tokens.txt"
+NGROK_LOG="$PREFIX/tmp/ngrok.log"
+NGROK_STATE="$PREFIX/tmp/asl-ngrok.state"
+
+ngrok_running() {
+    [ -f "$NGROK_STATE" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1
+}
+
+ngrok_add_token() {
+    local token="$1"
+    if [ -z "$token" ]; then
+        echo "Usage: asl remote ngrok add-token <your_authtoken>"
+        return 1
+    fi
+    mkdir -p "$CONFIG_DIR"
+    if ! grep -qF "$token" "$NGROK_TOKENS_FILE" 2>/dev/null; then
+        echo "$token" >> "$NGROK_TOKENS_FILE"
+        echo "[✓] Added ngrok auth token to token pool."
+    else
+        echo "[*] Token is already in the token pool."
+    fi
+}
+
+ngrok_control() {
+    local action="${1:-status}"
+    case "$action" in
+        add-token|token)
+            ngrok_add_token "${2:-}"
+            ;;
+        start)
+            ensure_host_sshd
+            if ! command -v ngrok >/dev/null 2>&1 && [ ! -x "$PREFIX/bin/ngrok" ]; then
+                echo "Error: ngrok is not installed in Termux."
+                echo "Install ngrok: pkg install ngrok  (or download binary to $PREFIX/bin/ngrok)"
+                return 1
+            fi
+            if ngrok_running; then
+                echo "[*] Ngrok tunnel is already running."
+            else
+                echo "[*] Starting Ngrok TCP tunnel (checking token pool)..."
+                local tokens=()
+                if [ -f "$NGROK_TOKENS_FILE" ]; then
+                    mapfile -t tokens < "$NGROK_TOKENS_FILE"
+                fi
+
+                local started=false
+                if [ ${#tokens[@]} -eq 0 ]; then
+                    # Try starting without explicitly configured token file
+                    rm -f "$NGROK_LOG"
+                    nohup ngrok tcp 8022 --log=stdout > "$NGROK_LOG" 2>&1 &
+                    echo $! > "$NGROK_STATE"
+                    sleep 3
+                    if ngrok_running; then started=true; fi
+                else
+                    for tok in "${tokens[@]}"; do
+                        [ -n "$tok" ] || continue
+                        echo "[*] Trying ngrok auth token: ${tok:0:6}..."
+                        ngrok config add-authtoken "$tok" >/dev/null 2>&1 || true
+                        rm -f "$NGROK_LOG"
+                        nohup ngrok tcp 8022 --log=stdout > "$NGROK_LOG" 2>&1 &
+                        echo $! > "$NGROK_STATE"
+                        sleep 3
+                        if ngrok_running && ! grep -qE "ERR_NGROK_108|ERR_NGROK_4018|authentication failed" "$NGROK_LOG" 2>/dev/null; then
+                            echo "[✓] Successfully connected using token ${tok:0:6}..."
+                            started=true
+                            break
+                        else
+                            echo "[!] Token ${tok:0:6}... failed or reached quota limit. Trying next token in pool..."
+                            pkill -f "ngrok.*tcp" 2>/dev/null || true
+                            rm -f "$NGROK_STATE"
+                        fi
+                    done
+                fi
+
+                if [ "$started" = false ]; then
+                    echo "Error: All ngrok tokens failed or quota reached."
+                    echo "Add a new token with: asl remote ngrok add-token <token>"
+                    rm -f "$NGROK_STATE"
+                    return 1
+                fi
+            fi
+            ngrok_status
+            ;;
+        stop)
+            if ngrok_running; then
+                local pid
+                pid=$(cat "$NGROK_STATE" 2>/dev/null)
+                [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || pkill -f "ngrok.*tcp" 2>/dev/null || true
+                rm -f "$NGROK_STATE" "$NGROK_LOG"
+                echo "[✓] Ngrok tunnel stopped."
+            else
+                rm -f "$NGROK_STATE"
+                echo "[*] Ngrok tunnel is not running."
+            fi
+            ;;
+        status|"")
+            ngrok_status
+            ;;
+    esac
+}
+
+ngrok_status() {
+    if ngrok_running; then
+        echo "Ngrok Tunnel: RUNNING (Multi-Token Pool)"
+        local url
+        url=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | grep -oE 'tcp://[^"]+' | head -1)
+        if [ -n "$url" ]; then
+            local host port
+            host=$(echo "$url" | sed -E 's|tcp://([^:]+):.*|\1|')
+            port=$(echo "$url" | sed -E 's|tcp://[^:]+:([0-9]+)|\1|')
+            echo "    URL:      $url"
+            echo "    Connect:  ssh -p $port $(whoami)@$host"
+            echo "    Password: $(get_password)"
+        else
+            echo "    (Fetching connection info... run 'asl remote ngrok status')"
+        fi
+    else
+        echo "Ngrok Tunnel: STOPPED"
+    fi
+}
+
+# --- 5. Tailscale Support ---------------------------------------------------
+TS_SOCKET="$CONFIG_DIR/tailscaled.sock"
+TS_STATE="$CONFIG_DIR/tailscaled.state"
+TS_LOG="$CONFIG_DIR/ts.log"
+
+ensure_tailscaled() {
+    if ! pgrep -f "tailscaled" >/dev/null 2>&1 && ! su -c "pgrep -f tailscaled" >/dev/null 2>&1; then
+        echo "[*] Starting tailscaled daemon..."
+        rm -f "$TS_SOCKET"
+        su -c "PATH=$PREFIX/bin:\$PATH nohup tailscaled --state='$TS_STATE' --socket='$TS_SOCKET' --tun=userspace-networking > '$TS_LOG' 2>&1 &" || true
+        sleep 2
+    fi
+}
+
+tailscale_control() {
+    local action="${1:-status}"
+    case "$action" in
+        start|up)
+            if ! command -v tailscale >/dev/null 2>&1 && [ ! -x "$PREFIX/bin/tailscale" ]; then
+                echo "Error: tailscale CLI is not installed."
+                return 1
+            fi
+            ensure_tailscaled
+            echo "[*] Connecting to Tailscale network..."
+            local arg="${2:-}"
+            if [[ "$arg" =~ ^tskey- ]]; then
+                su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET up --authkey=$arg --accept-routes --accept-dns=false" || return 1
+            else
+                su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET up ${*:2} --accept-routes --accept-dns=false" || return 1
+            fi
+            echo "[✓] Tailscale active."
+            ;;
+        stop|down)
+            if command -v tailscale >/dev/null 2>&1 || [ -x "$PREFIX/bin/tailscale" ]; then
+                su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET down" 2>/dev/null || true
+                pkill -f "tailscaled" 2>/dev/null || true
+                echo "[✓] Tailscale disconnected."
+            fi
+            ;;
+        status|"")
+            if su -c "pgrep -f tailscaled" >/dev/null 2>&1 || pgrep -f "tailscaled" >/dev/null 2>&1; then
+                local ts_ip
+                ts_ip=$(su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET ip -4" 2>/dev/null | tr -d '[:space:]')
+                if [ -n "$ts_ip" ]; then
+                    echo "Tailscale:    RUNNING"
+                    echo "    Connect:  ssh -p 8022 $(whoami)@$ts_ip"
+                    echo "    Password: $(get_password)"
+                    return 0
+                fi
+            fi
+            echo "Tailscale:    STOPPED / Not Configured"
+            ;;
+    esac
+}
+
+# --- 6. Seamless Auto-Connect Daemon & Fallback Engine -----------------------
+AUTOCONNECT_STATE="$PREFIX/tmp/asl-autoconnect.state"
+AUTOCONNECT_LOG="$PREFIX/tmp/asl-autoconnect.log"
+AUTOCONNECT_PID="$PREFIX/tmp/asl-autoconnect.pid"
+
+is_online() {
+    ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 || curl -s --connect-timeout 2 -I https://1.1.1.1 >/dev/null 2>&1
+}
+
+autoconnect_daemon() {
+    echo $$ > "$AUTOCONNECT_PID" 2>/dev/null || true
+    local script_path="$0"
+
+    while [ -f "$AUTOCONNECT_STATE" ]; do
+        # 1. Host SSH Server Health Check
+        ensure_host_sshd
+
+        # Check network connectivity before attempting remote tunnels
+        if is_online; then
+            # 2. Serveo Tunnel (Free persistent SSH jump host)
+            if ! serveo_running; then
+                echo "[Autoconnect $(date +%H:%M:%S)] Serveo tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
+                bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
+            fi
+
+            # 3. Tailscale Daemon & Mesh Network Health
+            if [ -f "$TS_STATE" ] && ! pgrep -f "tailscaled" >/dev/null 2>&1 && ! su -c "pgrep -f tailscaled" >/dev/null 2>&1; then
+                echo "[Autoconnect $(date +%H:%M:%S)] Tailscale daemon dropped. Restarting..." >> "$AUTOCONNECT_LOG"
+                ensure_tailscaled
+            fi
+
+            # 4. Ngrok Tunnel (Multi-token pool auto-recovery)
+            if [ -f "$NGROK_TOKENS_FILE" ] && [ -s "$NGROK_TOKENS_FILE" ] && ! ngrok_running; then
+                echo "[Autoconnect $(date +%H:%M:%S)] Ngrok tunnel offline. Re-establishing from pool..." >> "$AUTOCONNECT_LOG"
+                bash "$script_path" ngrok start >> "$AUTOCONNECT_LOG" 2>&1 || true
+            fi
+        fi
+
+        # Rotate log file if > 100KB to prevent high disk usage
+        if [ -f "$AUTOCONNECT_LOG" ] && [ $(wc -c < "$AUTOCONNECT_LOG" 2>/dev/null || echo 0) -gt 102400 ]; then
+            tail -n 200 "$AUTOCONNECT_LOG" > "$AUTOCONNECT_LOG.tmp" 2>/dev/null && mv "$AUTOCONNECT_LOG.tmp" "$AUTOCONNECT_LOG" 2>/dev/null || true
+        fi
+
+        sleep 15
+    done
+
+    rm -f "$AUTOCONNECT_PID" 2>/dev/null || true
+}
+
+autoconnect_control() {
+    local action="${1:-status}"
+    case "$action" in
+        start)
+            if [ -f "$AUTOCONNECT_STATE" ] && { pgrep -f "autoconnect_daemon" >/dev/null 2>&1 || [ -f "$AUTOCONNECT_PID" ]; }; then
+                echo "[*] Auto-Connect daemon is already running."
+            else
+                echo "[*] Starting ASL Seamless Remote Auto-Connect Daemon..."
+                touch "$AUTOCONNECT_STATE"
+                nohup bash -c "source \"$0\"; autoconnect_daemon" > "$AUTOCONNECT_LOG" 2>&1 &
+                echo $! > "$AUTOCONNECT_PID" 2>/dev/null || true
+                echo "[✓] Auto-Connect daemon active. Free tunnels (Serveo, Tailscale, Ngrok) will auto-restart on network drop."
+            fi
+            ;;
+        stop)
+            rm -f "$AUTOCONNECT_STATE" "$AUTOCONNECT_PID"
+            pkill -f "autoconnect_daemon" 2>/dev/null || true
+            echo "[✓] Auto-Connect daemon stopped."
+            ;;
+        status|"")
+            if [ -f "$AUTOCONNECT_STATE" ] && pgrep -f "autoconnect_daemon" >/dev/null 2>&1; then
+                echo "Auto-Connect Daemon: ACTIVE (Monitoring SSH, Serveo, Tailscale & Ngrok)"
+            else
+                echo "Auto-Connect Daemon: INACTIVE"
+            fi
+            ;;
+    esac
+}
+
+# --- 7. Start All Remote Services ------------------------------------------
+start_all() {
+    echo "[*] Initializing ASL Remote Bridge Services..."
+    lan_control start
+    echo ""
+    serveo_control start
+    echo ""
+    ngrok_control start || true
+    echo ""
+    autoconnect_control start
+    echo ""
+    echo "[✓] All remote connection bridges initialized!"
 }
 
 TARGET="${1:-status}"
 shift || true
 
 case "$TARGET" in
-    ssh) ssh_control "$@" ;;
-    vnc) vnc_control "$@" ;;
+    all|start-all) start_all ;;
+    password|pass) password_control "$@" ;;
     lan) lan_control "$@" ;;
-    public) public_control "$@" ;;
+    serveo) serveo_control "$@" ;;
+    ngrok) ngrok_control "$@" ;;
+    tailscale) tailscale_control "$@" ;;
+    autoconnect) autoconnect_control "$@" ;;
     status|"")
-        lan_status
-        ssh_control status
-        vnc_control status
-        public_control status
+        echo "=== ASL Remote Bridge Status ==="
+        echo "Remote Password: $(get_password)"
+        echo ""
+        lan_control status
+        echo ""
+        serveo_control status
+        echo ""
+        ngrok_control status
+        echo ""
+        tailscale_control status
+        echo ""
+        autoconnect_control status
         ;;
     *)
-        echo "Usage: asl remote [lan|ssh|vnc|public] [start|stop|status]"
+        echo "Usage: asl remote [all|password|lan|serveo|ngrok|tailscale|autoconnect] [start|stop|status]"
         exit 1
         ;;
 esac
