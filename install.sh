@@ -24,7 +24,8 @@ if [ -d "$TARGET_DIR/.git" ]; then
     esac
 else
     echo -e "\033[0;32m[*] Cloning ASL repository to $TARGET_DIR...\033[0m"
-    if ! git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null; then
+    if ! git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null && \
+       ! git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null; then
         echo -e "\033[0;31m[!] Failed to clone ASL repository. Check your internet connection.\033[0m"
         exit 1
     fi
@@ -164,6 +165,10 @@ case "$ACTIVE_MODE" in
         ;;
     proot|*)
         ACTIVE_MODE="proot"
+        if [ "$DEBIANPATH" = "/data/local/tmp/chrootDebian" ]; then
+            DEBIANPATH="$HOME/.asl/chrootDebian"
+            export DEBIANPATH
+        fi
         echo -e "${YELLOW}[✓] Execution Mode: PROOT User-space Emulation (Non-Rooted / No Shizuku)${RESET}"
         ;;
 esac
@@ -193,7 +198,7 @@ fi
 # Re-verify Repository Clone now that git is installed
 if [ ! -d "$TARGET_DIR/.git" ]; then
     echo -e "${GREEN}[*] Provisioning ASL repository to $TARGET_DIR...${RESET}"
-    git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null || {
+    (git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null || git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null) || {
         echo -e "${RED}[!] Failed to clone the ASL repository.${RESET}"
         exit 1
     }
@@ -312,17 +317,19 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
 
     if [ "$DISTRO_TYPE" != "skip" ]; then
         if [ "$IS_MODDED" = "true" ]; then
-            RELEASE_URL="https://github.com/Ruusian5/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
+            RELEASE_URL="https://github.com/Ruusian/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
+            RELEASE_URL_ALT="https://github.com/Ruusian5/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
             TEMP_TAR="$PREFIX/tmp/asl-modded-temp.tar.xz"
             echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
             echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
 
-            if (curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_TAR" "$RELEASE_URL") && [ -s "$TEMP_TAR" ]; then
+            if (curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_TAR" "$RELEASE_URL" || curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o "$TEMP_TAR" "$RELEASE_URL_ALT" || wget -q --timeout=15 --tries=2 -O "$TEMP_TAR" "$RELEASE_URL_ALT") && [ -s "$TEMP_TAR" ]; then
                 echo -e "${GREEN}[*] Verifying downloaded archive checksum...${RESET}"
-                SHA256SUMS_URL="https://github.com/Ruusian5/ASL/releases/latest/download/SHA256SUMS"
+                SHA256SUMS_URL="https://github.com/Ruusian/ASL/releases/latest/download/SHA256SUMS"
+                SHA256SUMS_URL_ALT="https://github.com/Ruusian5/ASL/releases/latest/download/SHA256SUMS"
                 TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
                 EXPECTED=""
-                if ! (curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL"); then
+                if ! (curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL" || curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL_ALT" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL_ALT"); then
                     echo -e "${YELLOW}[!] Could not download SHA256SUMS (HTTP rate limit or release asset unavailable). Falling back to Debian base...${RESET}"
                     rm -f "$TEMP_TAR" "$TEMP_SUMS"
                     IS_MODDED=false
@@ -346,7 +353,11 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                         echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
                         echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
                         ensure_chroot_unmounted_for_replace || exit 1
-                        if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar --no-same-owner --no-same-permissions -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
+                        local tar_flags="--no-same-owner --no-same-permissions"
+                        if [ "${ASL_EXEC_MODE:-root}" = "root" ] || [ "${ASL_EXEC_MODE:-root}" = "shizuku" ]; then
+                            tar_flags="--numeric-owner"
+                        fi
+                        if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar $tar_flags -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
                             echo -e "${YELLOW}[!] Failed to extract modded rootfs. Falling back to Debian base...${RESET}"
                             rm -f "$TEMP_TAR"
                             IS_MODDED=false
@@ -357,7 +368,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                             cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.sh"
 # ASL Subsystem proot-distro container definition
 DISTRO_NAME="ASL Debian Subsystem"
-TARBALL_URL=""
+TARBALL_URL="https://github.com/Ruusian/ASL"
 ROOTFS_DIR="$DEBIANPATH"
 EOF
                             cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
@@ -366,7 +377,7 @@ DISTRO_NAME="ASL Debian Subsystem"
 ROOTFS_DIR="$DEBIANPATH"
 EOF
                             # Configure DNS & hosts & APT performance
-                            asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
+                            asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
                             asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
                             echo -e "${GREEN}[✓] ASL Exclusive Debian Modded Rootfs provisioned successfully!${RESET}"
                         fi
@@ -402,7 +413,7 @@ EOF
                 cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.sh"
 # ASL Subsystem proot-distro container definition
 DISTRO_NAME="ASL Debian Subsystem"
-TARBALL_URL=""
+TARBALL_URL="https://github.com/Ruusian/ASL"
 ROOTFS_DIR="$DEBIANPATH"
 EOF
                 cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
@@ -412,7 +423,7 @@ ROOTFS_DIR="$DEBIANPATH"
 EOF
 
                 # Configure DNS & hosts & APT performance
-                asl_chroot_exec 'echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
+                asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
                 echo -e "${GREEN}[✓] Debian base rootfs provisioned successfully.${RESET}"
             else
                 echo -e "${RED}[!] Error: Failed to locate extracted rootfs for $IMAGE_REF.${RESET}"
