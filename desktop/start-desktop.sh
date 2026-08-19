@@ -212,8 +212,8 @@ start_desktop() {
     local real_src real_dst
     real_src=$(readlink -f "$xauth_file" 2>/dev/null || echo "$xauth_file")
     real_dst=$(readlink -f "$DEBIANPATH/tmp/.Xauthority" 2>/dev/null || echo "$DEBIANPATH/tmp/.Xauthority")
-    if [ "$real_src" != "$real_dst" ]; then
-        if ! asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp '$xauth_file' '$DEBIANPATH/tmp/.Xauthority' && chmod 600 '$DEBIANPATH/tmp/.Xauthority'" 2>/dev/null; then
+    if [ "$real_src" != "$real_dst" ] && ! [ "$xauth_file" -ef "$DEBIANPATH/tmp/.Xauthority" ]; then
+        if ! asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp -f '$xauth_file' '$DEBIANPATH/tmp/.Xauthority' && chmod 600 '$DEBIANPATH/tmp/.Xauthority'" 2>/dev/null; then
             echo "[!] Failed to install the X11 authentication cookie in the chroot."
             cleanup_started
             return 1
