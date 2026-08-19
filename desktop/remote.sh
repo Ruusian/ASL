@@ -56,9 +56,13 @@ ensure_host_sshd() {
     if [ ! -f "$PREFIX/etc/ssh/ssh_host_ed25519_key" ]; then
         ssh-keygen -A >/dev/null 2>&1 || return 1
     fi
+    local pass_opts="-o PasswordAuthentication=no -o KbdInteractiveAuthentication=no"
+    if [ -s "$PASS_FILE" ]; then
+        pass_opts="-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes"
+    fi
     if ! pgrep -f "sshd -p 8022" >/dev/null 2>&1 && ! su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1; then
         echo "[*] Starting Termux host SSH daemon on port 8022..."
-        sshd -p 8022 -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no 2>/dev/null || return 1
+        sshd -p 8022 $pass_opts 2>/dev/null || return 1
     fi
     pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1 || return 1
 }
@@ -303,6 +307,10 @@ ngrok_control() {
             rm -f "$NGROK_TOKENS_FILE" "$NGROK_EXHAUSTED_FILE"
             echo "[✓] Cleared ngrok token pool."
             ;;
+        reset-exhausted|reset)
+            rm -f "$NGROK_EXHAUSTED_FILE"
+            echo "[✓] Reset quota-exhausted status for all Ngrok tokens."
+            ;;
         rotate)
             echo "[*] Rotating Ngrok auth token..."
             pkill -f "ngrok.*tcp" 2>/dev/null || true
@@ -497,7 +505,10 @@ AUTOCONNECT_LOG="$PREFIX/tmp/asl-autoconnect.log"
 AUTOCONNECT_PID="$PREFIX/tmp/asl-autoconnect.pid"
 
 is_online() {
-    ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 || curl -s --connect-timeout 2 -I https://1.1.1.1 >/dev/null 2>&1
+    ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 || \
+    ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1 || \
+    ping -c 1 -W 2 9.9.9.9 >/dev/null 2>&1 || \
+    curl -s --connect-timeout 2 -I https://1.1.1.1 >/dev/null 2>&1
 }
 
 autoconnect_daemon() {
