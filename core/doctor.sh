@@ -2,7 +2,7 @@
 # Non-mutating environment diagnostics for ASL.
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi

@@ -147,7 +147,7 @@ asl_exec "
     exit 1
 }
 
-if ! is_mounted; then
+if ! is_mounted "$DEBIANPATH/proc"; then
     echo "[!] Chroot mount verification failed - /proc not mounted."
     echo "    Verify: grep $DEBIANPATH /proc/mounts"
     exit 1

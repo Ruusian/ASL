@@ -6,7 +6,7 @@
 # Each test suite sets its own shell options.
 set -u
 
-MOCK_ROOT="${MOCK_ROOT:-/tmp/asl-mock}"
+MOCK_ROOT="${MOCK_ROOT:-${TMPDIR:-/data/data/com.termux/files/usr/tmp}/asl-mock-$UID}"
 export MOCK_ROOT
 
 setup_mock_env() {

@@ -27,7 +27,8 @@ run_suite() {
 
     SUITES_RUN=$((SUITES_RUN + 1))
     local exit_code=0
-    bash "$SCRIPT_DIR/$script" 2>&1 | tee "/tmp/asl-test-$script.log" || exit_code=$?
+    local log_file="${TMPDIR:-/data/data/com.termux/files/usr/tmp}/asl-test-$script.log"
+    bash "$SCRIPT_DIR/$script" 2>&1 | tee "$log_file" || exit_code=$?
 
     if [ "$exit_code" -eq 0 ]; then
         SUITES_PASSED=$((SUITES_PASSED + 1))
@@ -35,9 +36,9 @@ run_suite() {
 
     # Parse results from the log
     local pass fail skip
-    pass=$(grep -oP '\d+ passed' "/tmp/asl-test-$script.log" 2>/dev/null | grep -oP '\d+' || echo "0")
-    fail=$(grep -oP '\d+ failed' "/tmp/asl-test-$script.log" 2>/dev/null | grep -oP '\d+' || echo "0")
-    skip=$(grep -oP '\d+ skipped' "/tmp/asl-test-$script.log" 2>/dev/null | grep -oP '\d+' || echo "0")
+    pass=$(awk '/[0-9]+ passed/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1) ~ /^passed/) print $i}' "$log_file" 2>/dev/null | tail -n 1 || echo "0")
+    fail=$(awk '/[0-9]+ failed/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1) ~ /^failed/) print $i}' "$log_file" 2>/dev/null | tail -n 1 || echo "0")
+    skip=$(awk '/[0-9]+ skipped/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1) ~ /^skipped/) print $i}' "$log_file" 2>/dev/null | tail -n 1 || echo "0")
 
     TOTAL_PASS=$((TOTAL_PASS + ${pass:-0}))
     TOTAL_FAIL=$((TOTAL_FAIL + ${fail:-0}))

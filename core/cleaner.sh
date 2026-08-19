@@ -62,8 +62,7 @@ asl_clean_run() {
             tmp)
                 echo \"[*] Cleaning /tmp and /var/tmp...\"
                 rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
-                [ \"$x11_active\" = \"1\" ] || rm -rf /tmp/.X11-unix/X* /tmp/.X0-lock 2>/dev/null || true
-                rm -rf /tmp/pulse-* 2>/dev/null || true
+                [ \"$x11_active\" = \"1\" ] || rm -rf /tmp/.X11-unix/X* /tmp/.X0-lock /tmp/pulse-* 2>/dev/null || true
                 ;;
             cache)
                 echo \"[*] Cleaning user build & shader cache (~/.cache & /tmp/.mesa_cache)...\"
@@ -74,8 +73,8 @@ asl_clean_run() {
                 apt-get clean
                 rm -rf /var/lib/apt/lists/*
                 echo \"[*] Cleaning temporary files...\"
-                rm -rf /tmp/* /var/tmp/* /tmp/pulse-* 2>/dev/null || true
-                [ \"$x11_active\" = \"1\" ] || rm -rf /tmp/.X11-unix/X* /tmp/.X0-lock 2>/dev/null || true
+                rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+                [ \"$x11_active\" = \"1\" ] || rm -rf /tmp/.X11-unix/X* /tmp/.X0-lock /tmp/pulse-* 2>/dev/null || true
                 echo \"[*] Cleaning user cache & shader cache...\"
                 rm -rf /root/.cache/* /home/*/.cache/* /tmp/.mesa_cache/* 2>/dev/null || true
                 ;;

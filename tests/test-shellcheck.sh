@@ -29,6 +29,15 @@ mapfile -t SCRIPTS < <(find "$SCRIPT_DIR" -name "*.sh" -type f | grep -v '.git/'
 echo "Found ${#SCRIPTS[@]} scripts to lint"
 echo ""
 
+if ! command -v shellcheck >/dev/null 2>&1; then
+    echo "[!] shellcheck is not installed. Skipping ShellCheck linting."
+    echo "    To install: pkg install shellcheck (or apt install shellcheck)"
+    echo ""
+    for script in "${SCRIPTS[@]}"; do
+        rel="${script#$SCRIPT_DIR/}"
+        log_skip "$rel" "shellcheck not installed"
+    done
+else
 for script in "${SCRIPTS[@]}"; do
     rel="${script#$SCRIPT_DIR/}"
 
@@ -83,6 +92,7 @@ for script in "${SCRIPTS[@]}"; do
         log_fail "$rel" "${first_err} (exit=$sc_exit)"
     fi
 done
+fi
 
 echo ""
 echo "============================================================"
