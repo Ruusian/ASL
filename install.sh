@@ -66,7 +66,6 @@ CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 RESET='\033[0m'
 
-SELECTED_DISTRO="debian"
 DISTRO_TYPE="${TYPE:-auto}" # modded, standard, ubuntu, arch, alpine, fedora, kali, or auto
 EXEC_MODE_ARG="${MODE:-auto}" # root, shizuku, proot, or auto
 

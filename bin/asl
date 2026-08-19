@@ -23,20 +23,19 @@ if [ ${#FILTERED_ARGS[@]} -gt 0 ]; then
 else
     set --
 fi
+export AUTO_CONFIRM
 
 if [ "${NO_COLOR:-}" = "" ]; then
     C_RESET=$'\033[0m'
     C_BOLD=$'\033[1m'
     C_CYAN=$'\033[36m'
-    C_BLUE=$'\033[34m'
     C_GREEN=$'\033[32m'
     C_YELLOW=$'\033[33m'
     C_RED=$'\033[31m'
-    C_PURPLE=$'\033[35m'
     C_DIM=$'\033[2m'
     C_SHADOW=$'\033[90m'
 else
-    C_RESET='' C_BOLD='' C_CYAN='' C_BLUE='' C_GREEN='' C_YELLOW='' C_RED='' C_PURPLE='' C_DIM='' C_SHADOW=''
+    C_RESET='' C_BOLD='' C_CYAN='' C_GREEN='' C_YELLOW='' C_RED='' C_DIM='' C_SHADOW=''
 fi
 
 status_label() {
@@ -73,12 +72,23 @@ fi
 
 run_in_chroot() {
     local command_text="$*"
-    local command_b64 max_encoded_size
+    local command_b64 timeout_cmd=""
 
     # Validate command size to prevent truncation or argument limit issues
     if [ ${#command_text} -gt 40000 ]; then
         echo "[!] Error: Command is too large (${#command_text} chars; max ~40000 recommended)."
         return 1
+    fi
+
+    # Optional command timeout (seconds) so a hung chroot command cannot
+    # block the console forever. Disabled unless ASL_CMD_TIMEOUT is set and
+    # a `timeout` binary is available.
+    if [ -n "${ASL_CMD_TIMEOUT:-}" ] && [[ "$ASL_CMD_TIMEOUT" =~ ^[0-9]+$ ]] && [ "$ASL_CMD_TIMEOUT" -gt 0 ]; then
+        if command -v timeout >/dev/null 2>&1; then
+            timeout_cmd="timeout --kill-after=15 --signal=TERM ${ASL_CMD_TIMEOUT} "
+        elif [ -x /data/data/com.termux/files/usr/bin/timeout ]; then
+            timeout_cmd="/data/data/com.termux/files/usr/bin/timeout --kill-after=15 --signal=TERM ${ASL_CMD_TIMEOUT} "
+        fi
     fi
 
     command_b64=$(printf '%s' "$command_text" | base64 | tr -d '\n')
@@ -91,18 +101,30 @@ run_in_chroot() {
     case "${ASL_EXEC_MODE:-root}" in
         shizuku)
             if rish -c "id" >/dev/null 2>&1; then
-                rish -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" 2>/dev/null || \
+                rish -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" 2>/dev/null || \
                 proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
             else
                 proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
             fi
             ;;
         proot)
-            proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
+            proot-distro login asl-debian -- /bin/bash -c "${timeout_cmd}printf '%s' '$command_b64' | base64 -d | /bin/bash"
             ;;
         root|*)
-            asl_exec "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --noprofile --norc -c \"printf \\\"%s\\\" \\\"$command_b64\\\" | /usr/bin/base64 -d | /bin/bash\"; else printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash; fi'" || return $?
+            asl_exec "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --noprofile --norc -c \"${timeout_cmd}printf \\\"%s\\\" \\\"$command_b64\\\" | /usr/bin/base64 -d | /bin/bash\"; else ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash; fi'" || return $?
             ;;
+    esac
+}
+
+confirm_action() {
+    local prompt="${1:-Are you sure?}" reply
+    if [ "${AUTO_CONFIRM:-0}" = 1 ]; then
+        return 0
+    fi
+    read -r -p "$prompt [y/N]: " reply
+    case "$reply" in
+        [yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
     esac
 }
 
@@ -424,7 +446,6 @@ overview() {
     desktop_state=${desktop_state#Desktop: }
     desktop_state=${desktop_state% }
     desktop_status=${desktop_state%% *}
-    desktop_detail=${desktop_state#"$desktop_status"}
     source "$ASL_DIR/core/gpu-profile.sh"
     asl_gpu_cached
 
@@ -654,8 +675,7 @@ dashboard() {
         case "$choice" in
             1|s|S) bash "$REAL_SCRIPT" start; pause_dashboard ;;
             2|x|X)
-                read -r -p "Stop all chroot processes and unmount Debian? [y/N]: " confirm
-                if [[ "$confirm" =~ ^[Yy]$ ]]; then bash "$REAL_SCRIPT" stop; fi
+                if confirm_action "Stop all chroot processes and unmount Debian?"; then bash "$REAL_SCRIPT" stop; fi
                 pause_dashboard ;;
             3) bash "$REAL_SCRIPT" shell ;;
             4)
@@ -912,6 +932,10 @@ case "${1:-}" in
         bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         ;;
     stop)
+        if ! confirm_action "Stop desktop and unmount the Debian chroot?"; then
+            echo "[*] Cancelled."
+            exit 0
+        fi
         bash "$ASL_DIR/desktop/start-desktop.sh" stop \
             || echo "[!] Desktop shutdown reported an error; continuing to unmount chroot."
         bash "$ASL_DIR/core/stop-chroot.sh"
@@ -1114,17 +1138,17 @@ case "${1:-}" in
         case "$RES" in
             720p)
                 pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
-                termux-x11 :0 -geometry 1280x720 +iglx -nolisten tcp >/dev/null 2>&1 &
+                termux-x11 :0 -geometry 1280x720 +iglx -nolisten tcp -ac >/dev/null 2>&1 &
                 echo "[✓] Termux:X11 display resolution set to 1280x720."
                 ;;
             1080p)
                 pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
-                termux-x11 :0 -geometry 1920x1080 +iglx -nolisten tcp >/dev/null 2>&1 &
+                termux-x11 :0 -geometry 1920x1080 +iglx -nolisten tcp -ac >/dev/null 2>&1 &
                 echo "[✓] Termux:X11 display resolution set to 1920x1080."
                 ;;
             native)
                 pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
-                termux-x11 :0 +iglx -nolisten tcp >/dev/null 2>&1 &
+                termux-x11 :0 +iglx -nolisten tcp -ac >/dev/null 2>&1 &
                 echo "[✓] Termux:X11 display resolution set to native."
                 ;;
             status|"")
@@ -1210,6 +1234,10 @@ case "${1:-}" in
         if [ -z "$RESTORE_FILE" ] || [ ! -f "$RESTORE_FILE" ]; then
             echo "Error: Valid archive file required. Usage: asl restore <path/to/backup.tar.gz>"
             exit 1
+        fi
+        if ! confirm_action "Restore Debian root from '$RESTORE_FILE'? This replaces the current chroot."; then
+            echo "[*] Cancelled."
+            exit 0
         fi
         BASE64_BIN=$(command -v base64) || {
             echo "Error: base64 is required to restore an archive."

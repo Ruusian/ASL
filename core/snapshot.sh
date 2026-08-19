@@ -8,7 +8,7 @@ if [ -f "$SCRIPT_DIR/common.sh" ]; then
 elif [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
-SNAPSHOT_DIR="/data/local/tmp/.asl-snapshots"
+SNAPSHOT_DIR="${ASL_SNAPSHOT_DIR:-/data/local/tmp/.asl-snapshots}"
 
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
     echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
@@ -209,6 +209,13 @@ import_snapshot() {
     esac
     file_q=$(printf '%q' "$file")
     target_q=$(printf '%q' "$target")
+    # Reject archives that attempt path traversal or absolute paths so a
+    # malicious tar cannot write outside the snapshot directory.
+    if asl_exec "tar $comp_flag -tf $file_q 2>/dev/null" | grep -qE '(^|/)\.\.(/|$)|^/'; then
+        echo "[!] Import failed: archive contains unsafe paths (absolute or ../ traversal)."
+        asl_exec "rm -rf '$target'" 2>/dev/null
+        return 1
+    fi
     if asl_exec "tar $comp_flag -xf $file_q -C $target_q"; then
         echo "[✓] Snapshot '$name' imported successfully."
     else

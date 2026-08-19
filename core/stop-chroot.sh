@@ -37,6 +37,18 @@ echo "[*] Stopping Linux chroot environment at $DEBIANPATH..."
 STOP_SCRIPT=$(cat << STOP_EOF
 mount --make-rprivate "$DEBIANPATH" 2>/dev/null || true
 
+# Restore original /dev/input ownership and modes changed at mount time.
+INPUT_PERMS_BACKUP="$DEBIANPATH/.asl_input_perms"
+if [ -f "\$INPUT_PERMS_BACKUP" ]; then
+    while read -r dev owner mode; do
+        [ -n "\$dev" ] || continue
+        [ -e "\$dev" ] || continue
+        [ -n "\$owner" ] && chown "\$owner" "\$dev" 2>/dev/null || true
+        [ -n "\$mode" ] && chmod "\$mode" "\$dev" 2>/dev/null || true
+    done < "\$INPUT_PERMS_BACKUP"
+    rm -f "\$INPUT_PERMS_BACKUP" 2>/dev/null || true
+fi
+
 chroot_pkill() {
     sig="\$1"
     for pid in \$(pgrep -f 'wine|wine64|wineserver|box64' 2>/dev/null || true); do
@@ -50,7 +62,9 @@ sleep 1
 chroot_pkill KILL
 
 pids=""
-for pid in \$(pgrep -u root 2>/dev/null || true); do
+for pid_dir in /proc/[0-9]*; do
+    pid=\$(basename "\$pid_dir")
+    [ "\$pid" = "\$\$" ] && continue
     if [ "\$(readlink /proc/\$pid/root 2>/dev/null)" = "$DEBIANPATH" ]; then
         pids="\$pids \$pid"
     fi

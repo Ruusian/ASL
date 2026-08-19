@@ -430,12 +430,20 @@ show_gaming_menu() {
 run_wine_desktop() {
     if ! check_emulation_available; then return 1; fi
     ensure_wine_desktop_launchers || return 1
-    RES="${1:-1280x720}"
+    local RES="${1:-1280x720}"
     asl_gpu_apply
     local ncpu mask
     ncpu=$(nproc 2>/dev/null || echo 8)
     mask="0-$((ncpu - 1))"
     echo "[*] Launching Full-Screen Windows Explorer Desktop..."
+    if command -v termux-x11 >/dev/null 2>&1 && ! pgrep -f "termux-x11.*:[0-9]" >/dev/null 2>&1; then
+        local geometry=""
+        case "$RES" in
+            720p|1280x720) geometry="-geometry 1280x720" ;;
+            1080p|1920x1080) geometry="-geometry 1920x1080" ;;
+        esac
+        termux-x11 :0 $geometry +iglx -nolisten tcp -ac >/dev/null 2>&1 &
+    fi
     ENV_EXPORTS=$(build_gaming_env_exports)
     asl_chroot_exec "$ENV_EXPORTS
         wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true

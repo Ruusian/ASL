@@ -327,6 +327,146 @@ else
     ERRORS+=("python app missing")
 fi
 
+# ---- Test 16: Injection hardening (tailscale authkey validation) ----
+echo ""
+echo "16. Testing remote.sh tailscale authkey validation..."
+if [ -f "$ASL_DIR/desktop/remote.sh" ] && grep -qE "tskey-\[A-Za-z0-9_-\]" "$ASL_DIR/desktop/remote.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ remote.sh validates tailscale authkey format"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ remote.sh missing tailscale authkey format validation"
+    ERRORS+=("tailscale authkey validation")
+fi
+
+# ---- Test 17: ASL_USER validation ----
+echo ""
+echo "17. Testing ASL_USER regex validation in start-desktop.sh..."
+if grep -qE '\[a-z_\]\[a-z0-9_-\]\{0,31\}' "$ASL_DIR/desktop/start-desktop.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ start-desktop.sh validates ASL_USER"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ start-desktop.sh missing ASL_USER validation"
+    ERRORS+=("ASL_USER validation")
+fi
+
+# ---- Test 18: sanitize_hud_value function exists ----
+echo ""
+echo "18. Testing hud.sh sanitize_hud_value..."
+if [ -f "$ASL_DIR/core/hud.sh" ] && grep -q "sanitize_hud_value()" "$ASL_DIR/core/hud.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ hud.sh sanitizes HUD values"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ hud.sh missing sanitize_hud_value"
+    ERRORS+=("hud sanitize")
+fi
+
+# ---- Test 19: snapshot.sh rejects tar traversal ----
+echo ""
+echo "19. Testing snapshot.sh path traversal guard..."
+if [ -f "$ASL_DIR/core/snapshot.sh" ] && grep -qE "\.\.\(/\|\$\)|traversal|unsafe" "$ASL_DIR/core/snapshot.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ snapshot.sh guards against archive path traversal"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ snapshot.sh missing tar traversal guard"
+    ERRORS+=("snapshot traversal")
+fi
+
+# ---- Test 20: gamepad.sh avoids world-writable input ----
+echo ""
+echo "20. Testing gamepad.sh device permissions..."
+if [ -f "$ASL_DIR/core/gamepad.sh" ] && grep -qE "chmod 660|chmod 0660|chgrp" "$ASL_DIR/core/gamepad.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ gamepad.sh uses restricted device permissions"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ gamepad.sh may use world-writable device perms"
+    ERRORS+=("gamepad perms")
+fi
+if [ -f "$ASL_DIR/core/gamepad.sh" ] && ! grep -qE "chmod 666 /dev/input" "$ASL_DIR/core/gamepad.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ gamepad.sh does not make /dev/input world-writable"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ gamepad.sh still makes /dev/input world-writable"
+    ERRORS+=("gamepad 666")
+fi
+
+# ---- Test 21: cleaner.sh protects active X11 socket ----
+echo ""
+echo "21. Testing cleaner.sh X11 socket protection..."
+if [ -f "$ASL_DIR/core/cleaner.sh" ] && grep -q "x11_active" "$ASL_DIR/core/cleaner.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ cleaner.sh guards against removing active X11 sockets"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ cleaner.sh missing X11 socket guard"
+    ERRORS+=("cleaner X11")
+fi
+
+# ---- Test 22: theme.sh honors ASL_USER ----
+echo ""
+echo "22. Testing theme.sh ASL_USER support..."
+if [ -f "$ASL_DIR/desktop/theme.sh" ] && grep -q "ASL_USER" "$ASL_DIR/desktop/theme.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ theme.sh honors ASL_USER"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ theme.sh ignores ASL_USER"
+    ERRORS+=("theme ASL_USER")
+fi
+
+# ---- Test 23: wine-version.sh fails loudly on download failure ----
+echo ""
+echo "23. Testing wine-version.sh download failure handling..."
+if [ -f "$ASL_DIR/core/wine-version.sh" ] && grep -qE "Download failed|FAILED" "$ASL_DIR/core/wine-version.sh" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ wine-version.sh fails loudly on download failure"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ wine-version.sh may report false success"
+    ERRORS+=("wine-version false success")
+fi
+
+# ---- Test 24: bin/asl exports AUTO_CONFIRM ----
+echo ""
+echo "24. Testing bin/asl AUTO_CONFIRM handling..."
+if grep -q "export AUTO_CONFIRM" "$ASL_DIR/bin/asl" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ bin/asl exports AUTO_CONFIRM"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ bin/asl does not export AUTO_CONFIRM"
+    ERRORS+=("AUTO_CONFIRM export")
+fi
+
+# ---- Test 25: bin/asl supports ASL_CMD_TIMEOUT ----
+echo ""
+echo "25. Testing bin/asl command timeouts..."
+if grep -q "ASL_CMD_TIMEOUT" "$ASL_DIR/bin/asl" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ bin/asl supports ASL_CMD_TIMEOUT"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ bin/asl missing ASL_CMD_TIMEOUT support"
+    ERRORS+=("ASL_CMD_TIMEOUT")
+fi
+
+# ---- Test 26: termux-x11 launched with -ac ----
+echo ""
+echo "26. Testing termux-x11 -ac flag..."
+if grep -q "termux-x11 .*-ac" "$ASL_DIR/bin/asl" 2>/dev/null; then
+    PASS=$((PASS + 1))
+    echo "  ✓ bin/asl launches termux-x11 with -ac"
+else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ bin/asl termux-x11 missing -ac"
+    ERRORS+=("termux-x11 -ac")
+fi
+
 # ---- Summary ----
 echo ""
 echo "============================================================"

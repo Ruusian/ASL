@@ -158,6 +158,8 @@ cleanup_started() {
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ -n "${X11_PID:-}" ] && process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || true; fi
     if [ "${PULSE_OWNED:-0}" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || true; fi
+    if [ -n "${VIRGL_OWNED:-0}" ] && [ "${VIRGL_OWNED:-0}" = 1 ] && [ -n "${VIRGL_PID:-}" ] && process_matches "$VIRGL_PID" "virgl_test_server" "$VIRGL_START"; then kill -TERM "$VIRGL_PID" 2>/dev/null || true; fi
+    if [ -n "${LAUNCHER_PID:-}" ]; then kill -TERM "$LAUNCHER_PID" 2>/dev/null || true; fi
     rm -f /tmp/.X11-unix/X0 /tmp/.X0-lock "$DEBIANPATH/tmp/.X11-unix/X0" "$DEBIANPATH/tmp/.X0-lock" 2>/dev/null || true
 }
 
@@ -431,6 +433,8 @@ stop_desktop() {
     if process_matches "$X11_PID" "termux-x11" "$X11_START"; then kill -TERM "$X11_PID" 2>/dev/null || failed=1; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
     if [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then kill -TERM "$PULSE_PID" 2>/dev/null || failed=1; fi
+    if [ "${VIRGL_OWNED:-0}" = 1 ] && [ -n "${VIRGL_PID:-}" ] && process_matches "$VIRGL_PID" "virgl_test_server" "$VIRGL_START"; then kill -TERM "$VIRGL_PID" 2>/dev/null || true; fi
+    if [ -n "${LAUNCHER_PID:-}" ]; then kill -TERM "$LAUNCHER_PID" 2>/dev/null || true; fi
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$DEBIANPATH/tmp/.X11-vnc" "$DEBIANPATH/tmp/.vnc"/*.pid 2>/dev/null || true
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi

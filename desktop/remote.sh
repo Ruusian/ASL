@@ -11,6 +11,7 @@ fi
 
 CONFIG_DIR="$HOME/.asl"
 mkdir -p "$CONFIG_DIR" "$HOME/.ssh" 2>/dev/null || true
+chmod 700 "$CONFIG_DIR" "$HOME/.ssh" 2>/dev/null || true
 # Fix ownership if created by root
 if [ -d "$CONFIG_DIR" ] && [ ! -w "$CONFIG_DIR" ]; then
     su -c "chown $(id -u):$(id -g) '$CONFIG_DIR'" 2>/dev/null || true
@@ -95,7 +96,7 @@ lan_control() {
     case "$action" in
         start)
             ensure_host_sshd || { echo "Error: Failed to start host SSH in key-only mode."; return 1; }
-            local host pass
+            local host
             host=$(lan_host_ip)
             echo "[✓] LAN SSH Server active on port 8022."
             echo "    Connect command: ssh -p 8022 $(whoami)@$host"
@@ -131,7 +132,8 @@ ensure_serveo_key() {
 }
 
 serveo_running() {
-    [ -f "$SERVEO_STATE" ] && pgrep -f "serveo.net" >/dev/null 2>&1
+    [ -f "$SERVEO_STATE" ] && pgrep -f "serveo.net" >/dev/null 2>&1 && \
+        ! grep -qE "remote port forwarding failed|Permission denied|Connection closed" "$SERVEO_LOG" 2>/dev/null
 }
 
 serveo_control() {
@@ -196,16 +198,32 @@ NGROK_LOG="$PREFIX/tmp/ngrok.log"
 NGROK_STATE="$PREFIX/tmp/asl-ngrok.state"
 
 ngrok_running() {
-    [ -f "$NGROK_STATE" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1
+    [ -f "$NGROK_STATE" ] || return 1
+    pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || return 1
+    # Verify the tunnel is genuinely registered via ngrok's local API, rather
+    # than only trusting that a process is alive (avoids false "running").
+    grep -qE '"public_url"\s*:\s*"tcp://' <(curl -s --max-time 3 http://127.0.0.1:4040/api/tunnels 2>/dev/null)
+}
+
+ngrok_wait_registered() {
+    local tries=0
+    while [ "$tries" -lt 6 ]; do
+        if ngrok_running; then return 0; fi
+        if grep -qE "ERR_NGROK|authentication failed|Error:" "$NGROK_LOG" 2>/dev/null; then return 1; fi
+        sleep 1
+        tries=$((tries + 1))
+    done
+    return 1
 }
 
 ngrok_add_token() {
     local token="$1"
-    if [ -z "$token" ]; then
-        echo "Usage: asl remote ngrok add-token <your_authtoken>"
+    if [ -z "$token" ] || [[ "$token" =~ [^A-Za-z0-9_] ]]; then
+        echo "Error: Token must be non-empty and contain only letters, digits, or underscores."
         return 1
     fi
     mkdir -p "$CONFIG_DIR"
+    chmod 700 "$CONFIG_DIR"
     if ! grep -qF "$token" "$NGROK_TOKENS_FILE" 2>/dev/null; then
         echo "$token" >> "$NGROK_TOKENS_FILE"
         chmod 600 "$NGROK_TOKENS_FILE"
@@ -243,8 +261,7 @@ ngrok_control() {
                     rm -f "$NGROK_LOG"
                     nohup ngrok tcp 8022 --log=stdout > "$NGROK_LOG" 2>&1 &
                     echo $! > "$NGROK_STATE"
-                    sleep 3
-                    if ngrok_running; then started=true; fi
+                    if ngrok_wait_registered; then started=true; fi
                 else
                     for tok in "${tokens[@]}"; do
                         [ -n "$tok" ] || continue
@@ -253,8 +270,7 @@ ngrok_control() {
                         rm -f "$NGROK_LOG"
                         nohup ngrok tcp 8022 --log=stdout > "$NGROK_LOG" 2>&1 &
                         echo $! > "$NGROK_STATE"
-                        sleep 3
-                        if ngrok_running && ! grep -qE "ERR_NGROK_108|ERR_NGROK_4018|authentication failed" "$NGROK_LOG" 2>/dev/null; then
+                        if ngrok_wait_registered; then
                             echo "[✓] Successfully connected using token ${tok:0:6}..."
                             started=true
                             break

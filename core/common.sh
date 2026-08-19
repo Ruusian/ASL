@@ -63,9 +63,10 @@ asl_exec() {
                 local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
                 mkdir -p "$tmp_dir" 2>/dev/null || true
                 find "$tmp_dir" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
-                local tmpf="$tmp_dir/.asl_cmd_$$.sh"
+                local tmpf
+                tmpf=$(mktemp "$tmp_dir/.asl_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$tmp_dir/.asl_cmd_$$_$RANDOM.sh"
                 printf '%s\n' "$cmd" > "$tmpf"
-                chmod 755 "$tmpf" 2>/dev/null || true
+                chmod 700 "$tmpf" 2>/dev/null || true
                 su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
                 local res=$?
                 rm -f "$tmpf" 2>/dev/null || true
@@ -79,9 +80,10 @@ asl_exec() {
                 local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
                 mkdir -p "$tmp_dir" 2>/dev/null || true
                 find "$tmp_dir" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
-                local tmpf="$tmp_dir/.asl_cmd_$$.sh"
+                local tmpf
+                tmpf=$(mktemp "$tmp_dir/.asl_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$tmp_dir/.asl_cmd_$$_$RANDOM.sh"
                 printf '%s\n' "$cmd" > "$tmpf"
-                chmod 755 "$tmpf" 2>/dev/null || true
+                chmod 700 "$tmpf" 2>/dev/null || true
                 if command -v rish >/dev/null 2>&1; then
                     rish -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
                 elif command -v shizuku-exec >/dev/null 2>&1; then
@@ -116,13 +118,16 @@ asl_chroot_exec() {
             ;;
         root)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
+                mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || asl_exec "mkdir -p '$DEBIANPATH/tmp'"
                 find "$DEBIANPATH/tmp" -maxdepth 1 -name '.asl_chroot_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
-                local tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$.sh"
+                local tmpf tmpbase
+                tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
+                tmpbase=${tmpf##*/}
                 printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || asl_exec "cat << 'ASLEOF' > '$tmpf'
 $cmd
 ASLEOF"
-                chmod 755 "$tmpf" 2>/dev/null || asl_exec "chmod 755 '$tmpf'"
-                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -l /tmp/.asl_chroot_cmd_$$.sh"
+                chmod 700 "$tmpf" 2>/dev/null || asl_exec "chmod 700 '$tmpf'"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -l /tmp/$tmpbase"
                 local res=$?
                 rm -f "$tmpf" 2>/dev/null || asl_exec "rm -f '$tmpf'"
                 return $res
@@ -132,11 +137,14 @@ ASLEOF"
             ;;
         shizuku)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                local tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$.sh"
+                mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || true
+                local tmpf tmpbase
+                tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
+                tmpbase=${tmpf##*/}
                 printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || true
-                chmod 755 "$tmpf" 2>/dev/null || true
-                rish -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash /tmp/.asl_chroot_cmd_$$.sh" 2>/dev/null || \
-                proot-distro login asl-debian -- /bin/bash /tmp/.asl_chroot_cmd_$$.sh
+                chmod 700 "$tmpf" 2>/dev/null || true
+                rish -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash /tmp/$tmpbase" 2>/dev/null || \
+                proot-distro login asl-debian -- /bin/bash /tmp/$tmpbase
                 local res=$?
                 rm -f "$tmpf" 2>/dev/null || true
                 return $res
@@ -147,11 +155,14 @@ ASLEOF"
             ;;
         proot|*)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                local tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$.sh"
+                mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || true
+                local tmpf tmpbase
+                tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
+                tmpbase=${tmpf##*/}
                 printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || true
-                chmod 755 "$tmpf" 2>/dev/null || true
-                proot-distro login asl-debian -- /bin/bash /tmp/.asl_chroot_cmd_$$.sh 2>/dev/null || \
-                proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash /tmp/.asl_chroot_cmd_$$.sh
+                chmod 700 "$tmpf" 2>/dev/null || true
+                proot-distro login asl-debian -- /bin/bash /tmp/$tmpbase 2>/dev/null || \
+                proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash /tmp/$tmpbase
                 local res=$?
                 rm -f "$tmpf" 2>/dev/null || true
                 return $res

@@ -78,9 +78,14 @@ asl_exec "
     domount_bind /dev \"$DEBIANPATH/dev\"
     # Android's graphics group (GID 1003) owns /dev/input nodes; grant that
     # group rw access for the chroot instead of making devices world-writable
-    # (0666 lets any host or chroot process inject input events).
+    # (0666 lets any host or chroot process inject input events). Original
+    # ownership/modes are recorded so stop-chroot.sh can restore them.
+    INPUT_PERMS_BACKUP=\"$DEBIANPATH/.asl_input_perms\"
+    : > \"\$INPUT_PERMS_BACKUP\"
+    chmod 600 \"\$INPUT_PERMS_BACKUP\" 2>/dev/null || true
     for dev in /dev/input/event* /dev/input/js* /dev/input/mouse* /dev/input/mice; do
         [ -e \"\$dev\" ] || continue
+        printf '%s %s %s\\n' \"\$dev\" \"\$(stat -c '%u:%g' \"\$dev\" 2>/dev/null)\" \"\$(stat -c '%a' \"\$dev\" 2>/dev/null)\" >> \"\$INPUT_PERMS_BACKUP\"
         chgrp 1003 \"\$dev\" 2>/dev/null || true
         chmod 0660 \"\$dev\" 2>/dev/null || true
     done

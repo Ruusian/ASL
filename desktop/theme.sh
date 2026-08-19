@@ -39,28 +39,41 @@ set_xfce_theme() {
         echo "[!] Mount the Debian chroot before applying desktop themes."
         return 1
     fi
+    local target_user="${ASL_USER:-root}"
+    if [[ ! "$target_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+        echo "[!] Invalid ASL_USER value: $target_user" >&2
+        return 1
+    fi
+    if [ "$target_user" != "root" ]; then
+        target_home="/home/$target_user"
+    else
+        target_home="/root"
+    fi
     local dbus_env
     dbus_env=$(get_dbus_env)
 
-    update_xml_property "$DEBIANPATH/root/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" "ThemeName" "$gtk_theme"
-    update_xml_property "$DEBIANPATH/root/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" "IconThemeName" "$icon_theme"
-    update_xml_property "$DEBIANPATH/root/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" "CursorThemeName" "$cursor_theme"
-    update_xml_property "$DEBIANPATH/root/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" "theme" "$gtk_theme"
+    update_xml_property "$DEBIANPATH$target_home/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" "ThemeName" "$gtk_theme"
+    update_xml_property "$DEBIANPATH$target_home/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" "IconThemeName" "$icon_theme"
+    update_xml_property "$DEBIANPATH$target_home/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" "CursorThemeName" "$cursor_theme"
+    update_xml_property "$DEBIANPATH$target_home/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" "theme" "$gtk_theme"
 
     asl_chroot_exec "
-        mkdir -p /root/.config/gtk-3.0
-        cat << 'GTK3EOF' > /root/.config/gtk-3.0/settings.ini
+        mkdir -p '$target_home/.config/gtk-3.0'
+        cat << 'GTK3EOF' > '$target_home/.config/gtk-3.0/settings.ini'
 [Settings]
 gtk-theme-name=$gtk_theme
 gtk-icon-theme-name=$icon_theme
 gtk-cursor-theme-name=$cursor_theme
 GTK3EOF
-        cat << 'GTK2EOF' > /root/.gtkrc-2.0
+        cat << 'GTK2EOF' > '$target_home/.gtkrc-2.0'
 gtk-theme-name=\"$gtk_theme\"
 gtk-icon-theme-name=\"$icon_theme\"
 gtk-cursor-theme-name=\"$cursor_theme\"
 GTK2EOF
-        fc-cache -fv /usr/share/fonts /root/.local/share/fonts 2>/dev/null || true
+        if [ \"$target_user\" != \"root\" ]; then
+            chown -R \"$target_user:$target_user\" \"$target_home/.config/gtk-3.0\" \"$target_home/.gtkrc-2.0\" 2>/dev/null || true
+        fi
+        fc-cache -fv /usr/share/fonts \"$target_home/.local/share/fonts\" 2>/dev/null || true
     " 2>/dev/null || true
 
     if [ -n "$dbus_env" ]; then
@@ -137,7 +150,16 @@ case "${1:-status}" in
                 current=$(asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export DISPLAY=:0; $dbus_env timeout -k 1s 2 xfconf-query -c xsettings -p /Net/ThemeName 2>/dev/null" 2>/dev/null)
             fi
             if [ -z "$current" ]; then
-                current=$(asl_exec "sed -n -E 's/.*<property name=\"ThemeName\" type=\"string\" value=\"([^\"]*)\".*/\1/p' '$DEBIANPATH/root/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml'" 2>/dev/null | head -n1)
+                target_user="${ASL_USER:-root}"
+                target_home=""
+                if [[ "$target_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+                    if [ "$target_user" != "root" ]; then
+                        target_home="/home/$target_user"
+                    else
+                        target_home="/root"
+                    fi
+                    current=$(asl_exec "sed -n -E 's/.*<property name=\"ThemeName\" type=\"string\" value=\"([^\"]*)\".*/\1/p' '$DEBIANPATH$target_home/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml'" 2>/dev/null | head -n1)
+                fi
             fi
             echo "Current Desktop Theme: ${current:-Unknown}"
         else
