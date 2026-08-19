@@ -341,9 +341,14 @@ ensure_tailscaled() {
     if ! pgrep -f "tailscaled" >/dev/null 2>&1 && ! su -c "pgrep -f tailscaled" >/dev/null 2>&1; then
         echo "[*] Starting tailscaled daemon..."
         rm -f "$TS_SOCKET"
-        su -c "PATH=$PREFIX/bin:\$PATH nohup tailscaled --state='$TS_STATE' --socket='$TS_SOCKET' --tun=userspace-networking > '$TS_LOG' 2>&1 &" || true
+        if command -v su >/dev/null 2>&1 && su -c "id" >/dev/null 2>&1; then
+            su -c "PATH=$PREFIX/bin:\$PATH nohup tailscaled --state='$TS_STATE' --socket='$TS_SOCKET' --tun=userspace-networking > '$TS_LOG' 2>&1 &" || true
+        else
+            nohup tailscaled --state="$TS_STATE" --socket="$TS_SOCKET" --tun=userspace-networking > "$TS_LOG" 2>&1 &
+        fi
         sleep 2
     fi
+    [ -S "$TS_SOCKET" ] && (chmod 666 "$TS_SOCKET" 2>/dev/null || su -c "chmod 666 '$TS_SOCKET'" 2>/dev/null || true)
 }
 
 tailscale_control() {
@@ -388,20 +393,24 @@ tailscale_control() {
                         ;;
                 esac
             done
-            su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket='$TS_SOCKET' up $ts_flags $extra" || return 1
+            if command -v su >/dev/null 2>&1 && su -c "id" >/dev/null 2>&1; then
+                su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket='$TS_SOCKET' up $ts_flags $extra" || tailscale --socket="$TS_SOCKET" up $ts_flags $extra || return 1
+            else
+                tailscale --socket="$TS_SOCKET" up $ts_flags $extra || return 1
+            fi
             echo "[✓] Tailscale active."
             ;;
         stop|down)
             if command -v tailscale >/dev/null 2>&1 || [ -x "$PREFIX/bin/tailscale" ]; then
-                su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET down" 2>/dev/null || true
-                pkill -f "tailscaled" 2>/dev/null || true
+                tailscale --socket="$TS_SOCKET" down 2>/dev/null || su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET down" 2>/dev/null || true
+                pkill -f "tailscaled" 2>/dev/null || su -c "pkill -f tailscaled" 2>/dev/null || true
                 echo "[✓] Tailscale disconnected."
             fi
             ;;
         status|"")
-            if su -c "pgrep -f tailscaled" >/dev/null 2>&1 || pgrep -f "tailscaled" >/dev/null 2>&1; then
+            if pgrep -f "tailscaled" >/dev/null 2>&1 || su -c "pgrep -f tailscaled" >/dev/null 2>&1; then
                 local ts_ip
-                ts_ip=$(su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET ip -4" 2>/dev/null | tr -d '[:space:]')
+                ts_ip=$(tailscale --socket="$TS_SOCKET" ip -4 2>/dev/null || su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET ip -4" 2>/dev/null | tr -d '[:space:]')
                 if [ -n "$ts_ip" ]; then
                     echo "Tailscale:    RUNNING"
                     echo "    Connect:  ssh -p 8022 $(whoami)@$ts_ip"
@@ -414,82 +423,10 @@ tailscale_control() {
     esac
 }
 
-# --- 6. Direct Chroot SSH Server (Port 2222) ----------------------------------
-chroot_ssh_running() {
-    is_mounted && asl_chroot_exec "pgrep -f 'sshd.*2222|sshd' >/dev/null 2>&1"
-}
-
-chroot_ssh_control() {
-    local action="${1:-status}"
-    case "$action" in
-        start)
-            if ! is_mounted; then
-                echo "Error: Debian chroot is not mounted. Run 'asl start' first."
-                return 1
-            fi
-            echo "[*] Configuring and starting key-only OpenSSH server inside Debian chroot (port 2222)..."
-            if ! asl_chroot_exec "test -s /root/.ssh/authorized_keys"; then
-                echo "Error: Add an SSH public key first: asl remote keys add \"<public-key>\""
-                return 1
-            fi
-            if ! asl_chroot_exec "
-                export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-                mkdir -p /var/run/sshd /root/.ssh
-                chmod 700 /root/.ssh
-                [ -f /etc/ssh/ssh_host_ed25519_key ] || ssh-keygen -A
-                # SECURITY NOTE: the chroot SSH bridge (port 2222) permits root
-                # login via authorized keys by design. Combined with a configured
-                # password this is a privileged remote entry point — only enable
-                # on trusted networks and prefer key-based auth (PasswordAuthentication no).
-                if grep -qE '^#?PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null; then
-                    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
-                else
-                    echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config
-                fi
-                if grep -qE '^#?PasswordAuthentication' /etc/ssh/sshd_config 2>/dev/null; then
-                    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-                else
-                    echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config
-                fi
-                if grep -qE '^#?Port' /etc/ssh/sshd_config 2>/dev/null; then
-                    sed -i 's/^#\?Port.*/Port 2222/' /etc/ssh/sshd_config
-                else
-                    echo 'Port 2222' >> /etc/ssh/sshd_config
-                fi
-                /usr/sbin/sshd -t -f /etc/ssh/sshd_config
-                pgrep -f 'sshd.*2222' >/dev/null 2>&1 || /usr/sbin/sshd -p 2222
-            " 2>/dev/null; then
-                echo "Error: Failed to configure or start chroot SSH."
-                return 1
-            fi
-            chroot_ssh_running || { echo "Error: Chroot SSH did not remain running."; return 1; }
-            echo "[✓] Direct Chroot SSH Server active on port 2222."
-            echo "    Connect command: ssh -p 2222 root@$(lan_host_ip)"
-            echo "    Authentication:  SSH key only"
-            ;;
-        stop)
-            if is_mounted; then
-                asl_chroot_exec "pkill -f 'sshd.*2222' 2>/dev/null || true" 2>/dev/null || true
-                echo "[✓] Chroot SSH Server stopped."
-            fi
-            ;;
-        status|"")
-            if chroot_ssh_running; then
-                echo "Chroot SSH:   RUNNING (port 2222)"
-                echo "    Connect:  ssh -p 2222 root@$(lan_host_ip)"
-                echo "    Authentication: SSH key only"
-            else
-                echo "Chroot SSH:   STOPPED"
-            fi
-            ;;
-    esac
-}
-
-# --- 7. SSH Public Key Authorization Management -----------------------------
+# --- 6. SSH Public Key Authorization Management -----------------------------
 key_control() {
     local action="${1:-list}"
     local key_file="$HOME/.ssh/authorized_keys"
-    local chroot_key_file="$DEBIANPATH/root/.ssh/authorized_keys"
     case "$action" in
         add)
             local key="${2:-}"
@@ -500,13 +437,7 @@ key_control() {
             mkdir -p "$HOME/.ssh"
             echo "$key" >> "$key_file"
             chmod 600 "$key_file"
-            if is_mounted; then
-                asl_chroot_exec "mkdir -p /root/.ssh && chmod 700 /root/.ssh" 2>/dev/null || true
-                local key_b64
-                key_b64=$(printf '%s\n' "$key" | base64 | tr -d '\n')
-                asl_exec "printf '%s' '$key_b64' | base64 -d >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || return 1
-            fi
-            echo "[✓] SSH Public Key added successfully to host & chroot."
+            echo "[✓] SSH Public Key added successfully to host."
             ;;
         import-github|github)
             local gh_user="$2"
@@ -538,12 +469,6 @@ key_control() {
                 chmod 700 "$HOME/.ssh"
                 printf '%s' "$valid_keys" >> "$key_file"
                 chmod 600 "$key_file"
-                if is_mounted; then
-                    asl_chroot_exec "mkdir -p /root/.ssh && chmod 700 /root/.ssh" 2>/dev/null || true
-                    local fetched_b64
-                    fetched_b64=$(printf '%s' "$valid_keys" | base64 | tr -d '\n')
-                    asl_exec "printf '%s' '$fetched_b64' | base64 -d >> '$chroot_key_file' && chmod 600 '$chroot_key_file'" 2>/dev/null || return 1
-                fi
                 echo "[✓] Successfully imported SSH key(s) from GitHub user '$gh_user'."
             else
                 echo "Error: Could not fetch SSH keys for GitHub user '$gh_user' (empty, timed out, or oversized response)."
@@ -560,7 +485,6 @@ key_control() {
             ;;
         clear|purge)
             rm -f "$key_file"
-            [ -f "$chroot_key_file" ] && asl_exec "rm -f '$chroot_key_file'" 2>/dev/null || true
             echo "[✓] Authorized SSH keys cleared."
             ;;
         *)
@@ -654,10 +578,6 @@ start_all() {
     echo "[*] Initializing ASL Remote Bridge Services..."
     lan_control start
     echo ""
-    if is_mounted; then
-        chroot_ssh_control start || true
-        echo ""
-    fi
     serveo_control start
     echo ""
     ngrok_control start || true
@@ -674,7 +594,6 @@ case "$TARGET" in
     all|start-all) start_all ;;
     password|pass) password_control "$@" ;;
     lan) lan_control "$@" ;;
-    chroot) chroot_ssh_control "$@" ;;
     key|keys|pubkey) key_control "$@" ;;
     serveo) serveo_control "$@" ;;
     ngrok) ngrok_control "$@" ;;
@@ -690,8 +609,6 @@ case "$TARGET" in
         echo ""
         lan_control status
         echo ""
-        chroot_ssh_control status
-        echo ""
         serveo_control status
         echo ""
         ngrok_control status
@@ -701,7 +618,7 @@ case "$TARGET" in
         autoconnect_control status
         ;;
     *)
-        echo "Usage: asl remote [all|password|lan|chroot|keys|serveo|ngrok|tailscale|autoconnect] [start|stop|status]"
+        echo "Usage: asl remote [all|password|lan|keys|serveo|ngrok|tailscale|autoconnect] [start|stop|status]"
         exit 1
         ;;
 esac

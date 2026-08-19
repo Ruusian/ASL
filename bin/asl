@@ -441,7 +441,6 @@ asl_gpu_cached() {
 asl_remote_summary() {
     local active=()
     if pgrep -f "sshd" >/dev/null 2>&1; then active+=("LAN:8022"); fi
-    if is_mounted && asl_chroot_exec "pgrep -f 'sshd.*2222|sshd' >/dev/null 2>&1" 2>/dev/null; then active+=("Chroot:2222"); fi
     if [ -f "$PREFIX/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then active+=("Serveo"); fi
     if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then active+=("Ngrok"); fi
     if su -c "pgrep -f tailscaled" >/dev/null 2>&1 || pgrep -f "tailscaled" >/dev/null 2>&1; then active+=("Tailscale"); fi
@@ -467,9 +466,6 @@ asl_remote_details() {
     if pgrep -f "sshd" >/dev/null 2>&1; then
         details+=("  • LAN SSH (Host):   ssh -p 8022 ${user}@${host_ip}")
     fi
-    if is_mounted && asl_chroot_exec "pgrep -f 'sshd.*2222|sshd' >/dev/null 2>&1" 2>/dev/null; then
-        details+=("  • Chroot SSH (Root): ssh -p 2222 root@${host_ip}")
-    fi
     if [ -f "$prefix/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
         local s_alias="asl-${user}"
         details+=("  • Serveo Tunnel:    ssh -J serveo.net ${user}@${s_alias}")
@@ -487,7 +483,7 @@ asl_remote_details() {
     fi
     if su -c "pgrep -f tailscaled" >/dev/null 2>&1 || pgrep -f "tailscaled" >/dev/null 2>&1; then
         local ts_ip
-        ts_ip=$(su -c "PATH=$prefix/bin:\$PATH tailscale --socket=$HOME/.asl/tailscaled.sock ip -4" 2>/dev/null | tr -d '[:space:]')
+        ts_ip=$(tailscale --socket="$HOME/.asl/tailscaled.sock" ip -4 2>/dev/null || su -c "PATH=$prefix/bin:\$PATH tailscale --socket=$HOME/.asl/tailscaled.sock ip -4" 2>/dev/null | tr -d '[:space:]')
         if [ -n "$ts_ip" ]; then
             details+=("  • Tailscale Mesh:   ssh -p 8022 ${user}@${ts_ip}")
         fi
