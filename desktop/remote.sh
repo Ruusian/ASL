@@ -136,7 +136,7 @@ ensure_serveo_key() {
 
 serveo_running() {
     [ -f "$SERVEO_STATE" ] && pgrep -f "serveo.net" >/dev/null 2>&1 && \
-        ! grep -qE "remote port forwarding failed|Permission denied|Connection closed" "$SERVEO_LOG" 2>/dev/null
+        ! grep -qE "remote port forwarding failed|Permission denied|Connection closed|Connection refused|Host key verification failed|kex_exchange_identification" "$SERVEO_LOG" 2>/dev/null
 }
 
 serveo_control() {
@@ -145,20 +145,22 @@ serveo_control() {
         start)
             ensure_host_sshd
             ensure_serveo_key
+            touch "$SERVEO_STATE"
             if serveo_running; then
                 echo "[*] Serveo tunnel is already running."
             else
+                pkill -f "serveo.net" 2>/dev/null || true
+                sleep 1
                 local serveo_alias
                 serveo_alias="asl-$(whoami)"
                 echo "[*] Launching Serveo persistent SSH tunnel on port 8022 (alias: ${serveo_alias})..."
                 rm -f "$SERVEO_LOG"
-                nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R "${serveo_alias}:22:localhost:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
+                nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=15 -R "${serveo_alias}:22:localhost:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
                 echo $! > "$SERVEO_STATE"
                 sleep 4
                 if ! serveo_running; then
                     echo "Error: Serveo tunnel failed to connect. Log output:"
                     cat "$SERVEO_LOG" 2>/dev/null
-                    rm -f "$SERVEO_STATE"
                     return 1
                 fi
             fi
@@ -508,8 +510,7 @@ is_online() {
 
 autoconnect_daemon() {
     echo $$ > "$AUTOCONNECT_PID" 2>/dev/null || true
-    # SCRIPT_DIR is defined at the top of this file; the daemon is spawned
-    # via `bash -c` where $0 is "bash", so capture the real path explicitly.
+    termux-wake-lock 2>/dev/null || true
     local script_path="$SCRIPT_DIR/desktop/remote.sh"
 
     while [ -f "$AUTOCONNECT_STATE" ]; do
@@ -519,7 +520,7 @@ autoconnect_daemon() {
         # Check network connectivity before attempting remote tunnels
         if is_online; then
             # 2. Serveo Tunnel (Free persistent SSH jump host)
-            if ! serveo_running; then
+            if [ -f "$SERVEO_STATE" ] && ! serveo_running; then
                 echo "[Autoconnect $(date +%H:%M:%S)] Serveo tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
                 bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi
@@ -552,24 +553,26 @@ autoconnect_control() {
     local action="${1:-status}"
     case "$action" in
         start)
-            if [ -f "$AUTOCONNECT_STATE" ] && { pgrep -f "autoconnect_daemon" >/dev/null 2>&1 || [ -f "$AUTOCONNECT_PID" ]; }; then
+            if [ -f "$AUTOCONNECT_STATE" ] && { pgrep -f "autoconnect-daemon" >/dev/null 2>&1 || pgrep -f "autoconnect_daemon" >/dev/null 2>&1 || [ -f "$AUTOCONNECT_PID" ]; }; then
                 echo "[*] Auto-Connect daemon is already running."
             else
                 echo "[*] Starting ASL Seamless Remote Auto-Connect Daemon..."
                 touch "$AUTOCONNECT_STATE"
-                nohup bash -c "source \"$SCRIPT_DIR/desktop/remote.sh\"; autoconnect_daemon" > "$AUTOCONNECT_LOG" 2>&1 &
+                termux-wake-lock 2>/dev/null || true
+                nohup bash "$SCRIPT_DIR/desktop/remote.sh" autoconnect-daemon > "$AUTOCONNECT_LOG" 2>&1 &
                 echo $! > "$AUTOCONNECT_PID" 2>/dev/null || true
-                echo "[✓] Auto-Connect daemon active. Free tunnels (Serveo, Tailscale, Ngrok) will auto-restart on network drop."
+                echo "[✓] Auto-Connect daemon active (Wake-lock engaged). Free tunnels (Serveo, Tailscale, Ngrok) will auto-restart on network drop."
             fi
             ;;
         stop)
             rm -f "$AUTOCONNECT_STATE" "$AUTOCONNECT_PID"
-            pkill -f "autoconnect_daemon" 2>/dev/null || true
+            pkill -f "autoconnect-daemon" 2>/dev/null || pkill -f "autoconnect_daemon" 2>/dev/null || true
+            termux-wake-unlock 2>/dev/null || true
             echo "[✓] Auto-Connect daemon stopped."
             ;;
         status|"")
-            if [ -f "$AUTOCONNECT_STATE" ] && pgrep -f "autoconnect_daemon" >/dev/null 2>&1; then
-                echo "Auto-Connect Daemon: ACTIVE (Monitoring SSH, Serveo, Tailscale & Ngrok)"
+            if [ -f "$AUTOCONNECT_STATE" ] && { pgrep -f "autoconnect-daemon" >/dev/null 2>&1 || pgrep -f "autoconnect_daemon" >/dev/null 2>&1; }; then
+                echo "Auto-Connect Daemon: ACTIVE (Monitoring SSH, Serveo, Tailscale & Ngrok with Wake-Lock)"
             else
                 echo "Auto-Connect Daemon: INACTIVE"
             fi
@@ -591,38 +594,41 @@ start_all() {
     echo "[✓] All remote connection bridges initialized!"
 }
 
-TARGET="${1:-status}"
-shift || true
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    TARGET="${1:-status}"
+    shift || true
 
-case "$TARGET" in
-    all|start-all) start_all ;;
-    password|pass) password_control "$@" ;;
-    lan) lan_control "$@" ;;
-    key|keys|pubkey) key_control "$@" ;;
-    serveo) serveo_control "$@" ;;
-    ngrok) ngrok_control "$@" ;;
-    tailscale) tailscale_control "$@" ;;
-    autoconnect) autoconnect_control "$@" ;;
-    status|"")
-        echo "=== ASL Remote Bridge Status ==="
-        if [ -n "$(get_password)" ]; then
-            echo "Remote password: configured"
-        else
-            echo "Remote password: not configured"
-        fi
-        echo ""
-        lan_control status
-        echo ""
-        serveo_control status
-        echo ""
-        ngrok_control status
-        echo ""
-        tailscale_control status
-        echo ""
-        autoconnect_control status
-        ;;
-    *)
-        echo "Usage: asl remote [all|password|lan|keys|serveo|ngrok|tailscale|autoconnect] [start|stop|status]"
-        exit 1
-        ;;
-esac
+    case "$TARGET" in
+        all|start-all) start_all ;;
+        password|pass) password_control "$@" ;;
+        lan) lan_control "$@" ;;
+        key|keys|pubkey) key_control "$@" ;;
+        serveo) serveo_control "$@" ;;
+        ngrok) ngrok_control "$@" ;;
+        tailscale) tailscale_control "$@" ;;
+        autoconnect) autoconnect_control "$@" ;;
+        autoconnect-daemon) autoconnect_daemon ;;
+        status|"")
+            echo "=== ASL Remote Bridge Status ==="
+            if [ -n "$(get_password)" ]; then
+                echo "Remote password: configured"
+            else
+                echo "Remote password: not configured"
+            fi
+            echo ""
+            lan_control status
+            echo ""
+            serveo_control status
+            echo ""
+            ngrok_control status
+            echo ""
+            tailscale_control status
+            echo ""
+            autoconnect_control status
+            ;;
+        *)
+            echo "Usage: asl remote [all|password|lan|keys|serveo|ngrok|tailscale|autoconnect] [start|stop|status]"
+            exit 1
+            ;;
+    esac
+fi
