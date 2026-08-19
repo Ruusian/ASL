@@ -76,6 +76,17 @@ EOF
     printf '%s' "${snippet/@GPU_VARS@/$gpu_vars}"
 }
 
+# Write the gaming env snippet to a file inside the chroot and return its
+# in-chroot path. Callers source this file instead of executing the snippet
+# text via command substitution (avoids eval-by-substitution fragility).
+asl_gaming_env_prep() {
+    local f="$DEBIANPATH/tmp/.asl_gaming_env.sh"
+    mkdir -p "$(dirname "$f")" 2>/dev/null || true
+    build_gaming_env_exports > "$f" 2>/dev/null
+    chmod 600 "$f" 2>/dev/null || true
+    printf '%s' "/tmp/.asl_gaming_env.sh"
+}
+
 ensure_wine_desktop_launchers() {
     local env_exports launcher_b64 setup_script script_b64
     env_exports=$(build_gaming_env_exports)
@@ -284,8 +295,8 @@ EOF_DXVK
     fi
     ensure_wine_desktop_launchers || return 1
     echo "[*] Setting up Wine win64 prefix..."
-    ENV_EXPORTS=$(build_gaming_env_exports)
-    if ! asl_chroot_exec "$ENV_EXPORTS
+    asl_gaming_env_prep
+    if ! asl_chroot_exec "source /tmp/.asl_gaming_env.sh
         wineboot -u
     "; then
         echo "[!] Wine win64 prefix initialization failed."
@@ -301,8 +312,8 @@ run_gpu_benchmark() {
     echo "=========================================="
     asl_gpu_report
     echo ""
-    ENV_EXPORTS=$(build_gaming_env_exports)
-    asl_chroot_exec "$ENV_EXPORTS
+    asl_gaming_env_prep
+    asl_chroot_exec "source /tmp/.asl_gaming_env.sh
         echo \"[*] Checking OpenGL / Mesa Information (glxinfo)...\"
         if command -v glxinfo >/dev/null 2>&1; then
             glxinfo -B 2>/dev/null || echo \"glxinfo failed to connect to DISPLAY :0\"
@@ -340,10 +351,10 @@ run_desktop_shortcuts() {
         read -r app_name
         if [ -n "$app_name" ]; then
             echo "[*] Launching $app_name..."
-            ENV_EXPORTS=$(build_gaming_env_exports)
+            asl_gaming_env_prep
             local name_b64
             name_b64=$(printf '%s' "$app_name" | base64 | tr -d '\n')
-            asl_chroot_exec "TARGET=\"\$(printf '%s' '$name_b64' | base64 -d)\"; $ENV_EXPORTS
+            asl_chroot_exec "TARGET=\"\$(printf '%s' '$name_b64' | base64 -d)\"; source /tmp/.asl_gaming_env.sh
                 if [[ \"\$TARGET\" == *.desktop ]] && [ ! -f \"\$TARGET\" ]; then
                     if [ -f \"/usr/share/applications/\$TARGET\" ]; then
                         TARGET=\"/usr/share/applications/\$TARGET\"
@@ -444,8 +455,8 @@ run_wine_desktop() {
         esac
         termux-x11 :0 $geometry +iglx -nolisten tcp -ac >/dev/null 2>&1 &
     fi
-    ENV_EXPORTS=$(build_gaming_env_exports)
-    asl_chroot_exec "$ENV_EXPORTS
+    asl_gaming_env_prep
+    asl_chroot_exec "source /tmp/.asl_gaming_env.sh
         wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true
         nohup taskset -c $mask wine64 explorer >/tmp/wine_desktop.log 2>&1 &
         sleep 1
@@ -457,8 +468,8 @@ run_winefile() {
     if ! check_emulation_available; then return 1; fi
     asl_gpu_apply
     echo "[*] Opening Wine File Manager..."
-    ENV_EXPORTS=$(build_gaming_env_exports)
-    asl_chroot_exec "$ENV_EXPORTS wine64 winefile"
+    asl_gaming_env_prep
+    asl_chroot_exec "source /tmp/.asl_gaming_env.sh; wine64 winefile"
 }
 
 run_gui_picker() {
@@ -530,8 +541,8 @@ run_wine_exe() {
     local exe_b64 name_b64
     exe_b64=$(printf '%s' "$internal_exe" | base64 | tr -d '\n')
     name_b64=$(printf '%s' "$SAFE_APP_NAME" | base64 | tr -d '\n')
-    ENV_EXPORTS=$(build_gaming_env_exports)
-    asl_chroot_exec "export TARGET_EXE=\"\$(printf '%s' '$exe_b64' | base64 -d)\"; export TARGET_NAME=\"\$(printf '%s' '$name_b64' | base64 -d)\"; $ENV_EXPORTS
+    asl_gaming_env_prep
+    asl_chroot_exec "export TARGET_EXE=\"\$(printf '%s' '$exe_b64' | base64 -d)\"; export TARGET_NAME=\"\$(printf '%s' '$name_b64' | base64 -d)\"; source /tmp/.asl_gaming_env.sh
         workdir=\$(dirname \"\$TARGET_EXE\")
         [ -d \"\$workdir\" ] && cd \"\$workdir\" 2>/dev/null || true
         wineserver-wrapper -k 2>/dev/null || wineserver -k 2>/dev/null || true
@@ -544,16 +555,16 @@ run_winecfg() {
     if ! check_emulation_available; then return 1; fi
     asl_gpu_apply
     echo "[*] Opening Wine Configuration..."
-    ENV_EXPORTS=$(build_gaming_env_exports)
-    asl_chroot_exec "$ENV_EXPORTS winecfg"
+    asl_gaming_env_prep
+    asl_chroot_exec "source /tmp/.asl_gaming_env.sh; winecfg"
 }
 
 run_winetricks() {
     if ! check_emulation_available; then return 1; fi
     asl_gpu_apply
     echo "[*] Launching Winetricks..."
-    ENV_EXPORTS=$(build_gaming_env_exports)
-    asl_chroot_exec "$ENV_EXPORTS winetricks"
+    asl_gaming_env_prep
+    asl_chroot_exec "source /tmp/.asl_gaming_env.sh; winetricks"
 }
 
 if [ "${BASH_SOURCE[0]}" != "$0" ]; then

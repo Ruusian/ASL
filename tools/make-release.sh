@@ -50,6 +50,8 @@ asl_exec "PATH=\"$PREFIX/bin:\$PATH\" tar \
     --exclude='./root/.asl-*' --exclude='./etc/ssh/ssh_host_*' --exclude='./root/.bash_history' \
     --exclude='./var/cache/apt/*' --exclude='./etc/shadow' --exclude='./etc/shadow-' \
     --exclude='./root/.wine-x64' --exclude='./root/.local' --exclude='./root/.cache' \
+    --exclude='./root/.ssh' --exclude='./home/*/.ssh' --exclude='./root/.config' \
+    --exclude='./root/.netrc' --exclude='./root/.aws' --exclude='./root/.gnupg' \
     -cJf '$OUTPUT_TAR' -C '$DEBIANPATH' ."
 
 echo -e "${GREEN}[✓] Archive created: $OUTPUT_TAR ($(du -h "$OUTPUT_TAR" 2>/dev/null | cut -f1 || true))${RESET}"

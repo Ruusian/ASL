@@ -25,7 +25,7 @@ asl_dev_suite_status() {
 
     check_pkg() {
         local name="$1" cmd="$2"
-        if asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; command -v $cmd >/dev/null 2>&1" 2>/dev/null; then
+        if asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; command -v \"$cmd\" >/dev/null 2>&1" 2>/dev/null; then
             printf "  %-12s : INSTALLED\n" "$name"
         else
             printf "  %-12s : NOT INSTALLED\n" "$name"

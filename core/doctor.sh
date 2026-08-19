@@ -3,10 +3,10 @@
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/common.sh" ]; then
-    source "$SCRIPT_DIR/common.sh"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
 fi
-source "$SCRIPT_DIR/gpu-profile.sh"
+source "$SCRIPT_DIR/core/gpu-profile.sh"
 
 fail=0
 check() {
