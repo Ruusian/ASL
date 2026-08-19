@@ -209,7 +209,10 @@ is_mounted() {
             awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null
             ;;
         proot|*)
-            pgrep -f "proot.*(asl-debian|$target)" >/dev/null 2>&1
+            # Match a running PRoot whose command line references this rootfs
+            # (via -r) or the asl-debian proot-distro container.
+            pgrep -f "proot.*-r ['\"]?$target" >/dev/null 2>&1 || \
+                pgrep -f "proot-distro.*asl-debian" >/dev/null 2>&1
             ;;
     esac
 }

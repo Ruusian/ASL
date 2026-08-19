@@ -43,7 +43,10 @@ set_password() {
             return 1
         fi
     fi
-    printf '%s' "$new_pass" > "$PASS_FILE"
+    # Store only a non-reversible hash so the "configured" status survives
+    # without keeping the cleartext password on disk (chroot OS passwd is the
+    # real credential store).
+    printf '%s' "$new_pass" | sha256sum 2>/dev/null | cut -d' ' -f1 > "$PASS_FILE" || : > "$PASS_FILE"
     chmod 600 "$PASS_FILE"
     echo "[✓] ASL Remote SSH password updated."
 }
@@ -434,6 +437,10 @@ chroot_ssh_control() {
                 mkdir -p /var/run/sshd /root/.ssh
                 chmod 700 /root/.ssh
                 [ -f /etc/ssh/ssh_host_ed25519_key ] || ssh-keygen -A
+                # SECURITY NOTE: the chroot SSH bridge (port 2222) permits root
+                # login via authorized keys by design. Combined with a configured
+                # password this is a privileged remote entry point — only enable
+                # on trusted networks and prefer key-based auth (PasswordAuthentication no).
                 if grep -qE '^#?PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null; then
                     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
                 else
