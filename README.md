@@ -55,36 +55,36 @@ Install or update **ASL** with a single command inside Termux:
 
 ```bash
 # Recommended (Fast CDN Mirror - bypasses GitHub raw 429 rate limits):
-curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian5/ASL@master/install.sh | bash
+curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian/ASL@master/install.sh | bash
 
 # Alternative direct GitHub link:
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash
 ```
 
 > ⚠️ **Trust note:** Piping a remote script into `bash` executes it with your current
 > privileges. Review [`install.sh`](install.sh) before running — it installs Termux
 > packages, requires root (`su`), and downloads a prebuilt rootfs (checksum-verified
 > for the modded edition; see the `SHA256SUMS` sidecar). For an auditable install,
-> clone the repo first: `git clone https://github.com/Ruusian5/ASL && cd ASL && bash install.sh`.
+> clone the repo first: `git clone https://github.com/Ruusian/ASL && cd ASL && bash install.sh`.
 
 ### 🐧 Distro & Image Options
 Select your preferred Linux distribution interactively during setup (Debian Modded, Debian Trixie, Ubuntu 24.04, Arch Linux, Alpine, or Kali Linux), or pass non-interactive flags:
 
 ```bash
 # ASL Modded Rootfs (Pre-configured Turnip Vulkan, Box64, Wine64, XFCE Desktop & ASL Hub):
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --modded
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --modded
 
 # Standard Clean Debian Trixie Base:
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --debian
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --debian
 
 # Ubuntu 24.04 LTS Base:
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --ubuntu
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --ubuntu
 
 # Arch Linux Base:
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --arch
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --arch
 
 # Kali Linux Base:
-curl -fsSL https://raw.githubusercontent.com/Ruusian5/ASL/master/install.sh | bash -s -- --kali
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --kali
 ```
 
 ### ⚡ Execution Modes (Root / Shizuku / PRoot)
