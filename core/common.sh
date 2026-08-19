@@ -127,12 +127,12 @@ asl_chroot_exec() {
 $cmd
 ASLEOF"
                 chmod 700 "$tmpf" 2>/dev/null || asl_exec "chmod 700 '$tmpf'"
-                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -l /tmp/$tmpbase"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env -u PREFIX -u TERMUX_VERSION -u TERMUX_APP_PID -u TERMUX_MAIN_PACKAGE_NAME PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -l /tmp/$tmpbase"
                 local res=$?
                 rm -f "$tmpf" 2>/dev/null || asl_exec "rm -f '$tmpf'"
                 return $res
             else
-                su -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -l -c '$cmd'"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env -u PREFIX -u TERMUX_VERSION -u TERMUX_APP_PID -u TERMUX_MAIN_PACKAGE_NAME PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -l -c '$cmd'"
             fi
             ;;
         shizuku)

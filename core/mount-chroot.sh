@@ -26,6 +26,9 @@ translate_pkgs() {
             libffi) args+=("libffi-dev") ;;
             openssl) args+=("libssl-dev" "openssl") ;;
             clang|gcc) args+=("build-essential" "clang") ;;
+            rust) args+=("rustc" "cargo") ;;
+            pkg-config) args+=("pkg-config") ;;
+            ca-certificates) args+=("ca-certificates") ;;
             *) args+=("$arg") ;;
         esac
     done
@@ -207,6 +210,9 @@ translate_pkgs() {
             libffi) args+=(\"libffi-dev\") ;;
             openssl) args+=(\"libssl-dev\" \"openssl\") ;;
             clang|gcc) args+=(\"build-essential\" \"clang\") ;;
+            rust) args+=(\"rustc\" \"cargo\") ;;
+            pkg-config) args+=(\"pkg-config\") ;;
+            ca-certificates) args+=(\"ca-certificates\") ;;
             *) args+=(\"\$arg\") ;;
         esac
     done
