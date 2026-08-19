@@ -209,10 +209,15 @@ start_desktop() {
         return 1
     fi
     chmod 600 "$xauth_file"
-    if ! asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp '$xauth_file' '$DEBIANPATH/tmp/.Xauthority' && chmod 600 '$DEBIANPATH/tmp/.Xauthority'" 2>/dev/null; then
-        echo "[!] Failed to install the X11 authentication cookie in the chroot."
-        cleanup_started
-        return 1
+    local real_src real_dst
+    real_src=$(readlink -f "$xauth_file" 2>/dev/null || echo "$xauth_file")
+    real_dst=$(readlink -f "$DEBIANPATH/tmp/.Xauthority" 2>/dev/null || echo "$DEBIANPATH/tmp/.Xauthority")
+    if [ "$real_src" != "$real_dst" ]; then
+        if ! asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp '$xauth_file' '$DEBIANPATH/tmp/.Xauthority' && chmod 600 '$DEBIANPATH/tmp/.Xauthority'" 2>/dev/null; then
+            echo "[!] Failed to install the X11 authentication cookie in the chroot."
+            cleanup_started
+            return 1
+        fi
     fi
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
         rm -f "/data/data/com.termux/files/usr/tmp/.X11-unix/X0" "/data/data/com.termux/files/usr/tmp/.X0-lock" 2>/dev/null || true

@@ -15,7 +15,7 @@ if [ -d "$TARGET_DIR/.git" ]; then
     # to avoid pulling code from a hijacked or mistyped remote.
     origin_url=$(git config --get remote.origin.url 2>/dev/null || echo "")
     case "$origin_url" in
-        https://github.com/Ruusian5/ASL.git|https://github.com/Ruusian/ASL.git|git@github.com:Ruusian5/ASL.git|git@github.com:Ruusian/ASL.git)
+        *github.com/Ruusian5/ASL*|*github.com/Ruusian/ASL*)
             git pull origin master 2>/dev/null || true
             ;;
         *)
@@ -45,7 +45,7 @@ export DEBIANPATH
 asl_validate_debianpath() {
     local p="$1"
     case "$p" in
-        /|/data|/data/*|/sdcard|/sdcard/*|/system|/system/*|/vendor|/vendor/*)
+        /|/data|/data/|/sdcard|/sdcard/|/system|/system/|/vendor|/vendor/)
             echo -e "\033[0;31m[!] Refusing unsafe DEBIANPATH: $p${RESET}" >&2
             return 1
             ;;
