@@ -1212,7 +1212,7 @@ case "${1:-}" in
                 ;;
             root|*)
                 if [ "$TARGET_USER" = "root" ]; then
-                    exec su -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; unset PREFIX TERMUX_VERSION TERMUX_APP_PID TERMUX_MAIN_PACKAGE_NAME; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --login; else exec /bin/bash --login; fi'"
+                    exec su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash --login"
                 fi
                 if [[ ! "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
                     echo "Error: Invalid Debian username."
@@ -1222,7 +1222,7 @@ case "${1:-}" in
                     echo "Error: User '$TARGET_USER' does not exist in Debian chroot."
                     exit 1
                 fi
-                exec su -c "chroot '$DEBIANPATH' /bin/su -l '$TARGET_USER'"
+                exec su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/home/$TARGET_USER USER=$TARGET_USER LOGNAME=$TARGET_USER PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/su -l '$TARGET_USER'"
                 ;;
         esac
         ;;
