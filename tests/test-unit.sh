@@ -327,16 +327,16 @@ else
     ERRORS+=("python app missing")
 fi
 
-# ---- Test 16: Injection hardening (tailscale authkey validation) ----
+# ---- Test 16: Injection hardening (ngrok token validation) ----
 echo ""
-echo "16. Testing remote.sh tailscale authkey validation..."
-if [ -f "$ASL_DIR/desktop/remote.sh" ] && grep -qE "tskey-\[A-Za-z0-9_-\]" "$ASL_DIR/desktop/remote.sh" 2>/dev/null; then
+echo "16. Testing remote.sh ngrok token validation..."
+if [ -f "$ASL_DIR/desktop/remote.sh" ] && grep -qE "A-Za-z0-9_\.-" "$ASL_DIR/desktop/remote.sh" 2>/dev/null; then
     PASS=$((PASS + 1))
-    echo "  ✓ remote.sh validates tailscale authkey format"
+    echo "  ✓ remote.sh validates ngrok token format"
 else
     FAIL=$((FAIL + 1))
-    echo "  ✗ remote.sh missing tailscale authkey format validation"
-    ERRORS+=("tailscale authkey validation")
+    echo "  ✗ remote.sh missing ngrok token format validation"
+    ERRORS+=("ngrok token validation")
 fi
 
 # ---- Test 17: ASL_USER validation ----

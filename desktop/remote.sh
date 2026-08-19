@@ -197,16 +197,19 @@ serveo_status() {
     fi
 }
 
-# --- 4. Ngrok Tunnel (Multi-Token Pool & Fallback) ---------------------------
+# --- 4. Ngrok Tunnel (Multi-Token Pool, Quota Auto-Rotation & Serveo Backup) ---
 NGROK_TOKENS_FILE="$CONFIG_DIR/ngrok_tokens.txt"
+NGROK_EXHAUSTED_FILE="$CONFIG_DIR/ngrok_exhausted.txt"
 NGROK_LOG="$PREFIX/tmp/ngrok.log"
 NGROK_STATE="$PREFIX/tmp/asl-ngrok.state"
+NGROK_CURR_TOKEN="$PREFIX/tmp/asl-ngrok-current.token"
 
 ngrok_running() {
     [ -f "$NGROK_STATE" ] || return 1
     pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || return 1
-    # Verify the tunnel is genuinely registered via ngrok's local API, rather
-    # than only trusting that a process is alive (avoids false "running").
+    if grep -qE "ERR_NGROK|quota|rate limit|too many connections|session closed|authentication failed" "$NGROK_LOG" 2>/dev/null; then
+        return 1
+    fi
     grep -qE '"public_url"\s*:\s*"tcp://' <(curl -s --max-time 3 http://127.0.0.1:4040/api/tunnels 2>/dev/null)
 }
 
@@ -214,17 +217,27 @@ ngrok_wait_registered() {
     local tries=0
     while [ "$tries" -lt 6 ]; do
         if ngrok_running; then return 0; fi
-        if grep -qE "ERR_NGROK|authentication failed|Error:" "$NGROK_LOG" 2>/dev/null; then return 1; fi
+        if grep -qE "ERR_NGROK|authentication failed|quota|rate limit|Error:" "$NGROK_LOG" 2>/dev/null; then return 1; fi
         sleep 1
         tries=$((tries + 1))
     done
     return 1
 }
 
+mark_ngrok_token_exhausted() {
+    local tok="$1"
+    [ -n "$tok" ] || return 0
+    mkdir -p "$CONFIG_DIR"
+    if ! grep -qF "$tok" "$NGROK_EXHAUSTED_FILE" 2>/dev/null; then
+        echo "$tok" >> "$NGROK_EXHAUSTED_FILE"
+        chmod 600 "$NGROK_EXHAUSTED_FILE" 2>/dev/null || true
+    fi
+}
+
 ngrok_add_token() {
     local token="$1"
-    if [ -z "$token" ] || [[ "$token" =~ [^A-Za-z0-9_] ]]; then
-        echo "Error: Token must be non-empty and contain only letters, digits, or underscores."
+    if [ -z "$token" ] || [[ ! "$token" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        echo "Error: Token must be non-empty and contain valid characters (letters, digits, underscores, dashes, dots)."
         return 1
     fi
     mkdir -p "$CONFIG_DIR"
@@ -238,11 +251,68 @@ ngrok_add_token() {
     fi
 }
 
+ngrok_remove_token() {
+    local token="$1"
+    if [ -z "$token" ]; then
+        echo "Usage: asl remote ngrok remove-token <token>"
+        return 1
+    fi
+    if [ -f "$NGROK_TOKENS_FILE" ]; then
+        grep -vF "$token" "$NGROK_TOKENS_FILE" > "$NGROK_TOKENS_FILE.tmp" 2>/dev/null || true
+        mv "$NGROK_TOKENS_FILE.tmp" "$NGROK_TOKENS_FILE" 2>/dev/null || true
+        echo "[✓] Removed ngrok token from pool."
+    fi
+}
+
+ngrok_list_tokens() {
+    echo "=== Registered Ngrok Token Pool ==="
+    if [ -f "$NGROK_TOKENS_FILE" ] && [ -s "$NGROK_TOKENS_FILE" ]; then
+        local count=0
+        while IFS= read -r tok || [ -n "$tok" ]; do
+            [ -n "$tok" ] || continue
+            count=$((count + 1))
+            local status="ACTIVE"
+            if grep -qF "$tok" "$NGROK_EXHAUSTED_FILE" 2>/dev/null; then
+                status="EXHAUSTED / RATE-LIMITED"
+            fi
+            local len=${#tok}
+            local masked="$tok"
+            if [ "$len" -gt 10 ]; then
+                masked="${tok:0:6}...${tok: -4}"
+            fi
+            echo "  $count. $masked  [$status]"
+        done < "$NGROK_TOKENS_FILE"
+    else
+        echo "(No ngrok auth tokens registered yet. Add using 'asl remote ngrok add-token <token>')"
+    fi
+}
+
 ngrok_control() {
     local action="${1:-status}"
     case "$action" in
-        add-token|token)
+        add-token|token|add)
             ngrok_add_token "${2:-}"
+            ;;
+        remove-token|rm-token|remove)
+            ngrok_remove_token "${2:-}"
+            ;;
+        list-tokens|tokens|list)
+            ngrok_list_tokens
+            ;;
+        clear-tokens|clear)
+            rm -f "$NGROK_TOKENS_FILE" "$NGROK_EXHAUSTED_FILE"
+            echo "[✓] Cleared ngrok token pool."
+            ;;
+        rotate)
+            echo "[*] Rotating Ngrok auth token..."
+            pkill -f "ngrok.*tcp" 2>/dev/null || true
+            rm -f "$NGROK_STATE" "$NGROK_LOG"
+            local curr_tok
+            curr_tok=$(cat "$NGROK_CURR_TOKEN" 2>/dev/null || true)
+            if [ -n "$curr_tok" ]; then
+                mark_ngrok_token_exhausted "$curr_tok"
+            fi
+            ngrok_control start
             ;;
         start)
             ensure_host_sshd
@@ -251,10 +321,11 @@ ngrok_control() {
                 echo "Install ngrok: pkg install ngrok  (or download binary to $PREFIX/bin/ngrok)"
                 return 1
             fi
+            touch "$NGROK_STATE"
             if ngrok_running; then
                 echo "[*] Ngrok tunnel is already running."
             else
-                echo "[*] Starting Ngrok TCP tunnel (checking token pool)..."
+                pkill -f "ngrok.*tcp" 2>/dev/null || true
                 local tokens=()
                 if [ -f "$NGROK_TOKENS_FILE" ]; then
                     mapfile -t tokens < "$NGROK_TOKENS_FILE"
@@ -262,15 +333,31 @@ ngrok_control() {
 
                 local started=false
                 if [ ${#tokens[@]} -eq 0 ]; then
-                    # Try starting without explicitly configured token file
                     rm -f "$NGROK_LOG"
                     nohup ngrok tcp 8022 --log=stdout > "$NGROK_LOG" 2>&1 &
                     echo $! > "$NGROK_STATE"
                     if ngrok_wait_registered; then started=true; fi
                 else
+                    local unexhausted_count=0
                     for tok in "${tokens[@]}"; do
                         [ -n "$tok" ] || continue
+                        if ! grep -qF "$tok" "$NGROK_EXHAUSTED_FILE" 2>/dev/null; then
+                            unexhausted_count=$((unexhausted_count + 1))
+                        fi
+                    done
+                    if [ "$unexhausted_count" -eq 0 ]; then
+                        echo "[!] All tokens in pool were marked quota-exhausted; resetting pool exhaustion log for fresh attempt..."
+                        rm -f "$NGROK_EXHAUSTED_FILE"
+                    fi
+
+                    for tok in "${tokens[@]}"; do
+                        [ -n "$tok" ] || continue
+                        if grep -qF "$tok" "$NGROK_EXHAUSTED_FILE" 2>/dev/null; then
+                            echo "[*] Skipping quota-exhausted token ${tok:0:6}..."
+                            continue
+                        fi
                         echo "[*] Trying ngrok auth token: ${tok:0:6}..."
+                        echo "$tok" > "$NGROK_CURR_TOKEN"
                         ngrok config add-authtoken "$tok" >/dev/null 2>&1 || true
                         rm -f "$NGROK_LOG"
                         nohup ngrok tcp 8022 --log=stdout > "$NGROK_LOG" 2>&1 &
@@ -280,9 +367,9 @@ ngrok_control() {
                             started=true
                             break
                         else
-                            echo "[!] Token ${tok:0:6}... failed or reached quota limit. Trying next token in pool..."
+                            echo "[!] Token ${tok:0:6}... failed or reached quota limit. Marking exhausted and trying next token..."
+                            mark_ngrok_token_exhausted "$tok"
                             pkill -f "ngrok.*tcp" 2>/dev/null || true
-                            rm -f "$NGROK_STATE"
                         fi
                     done
                 fi
@@ -301,10 +388,10 @@ ngrok_control() {
                 local pid
                 pid=$(cat "$NGROK_STATE" 2>/dev/null)
                 [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || pkill -f "ngrok.*tcp" 2>/dev/null || true
-                rm -f "$NGROK_STATE" "$NGROK_LOG"
+                rm -f "$NGROK_STATE" "$NGROK_LOG" "$NGROK_CURR_TOKEN"
                 echo "[✓] Ngrok tunnel stopped."
             else
-                rm -f "$NGROK_STATE"
+                rm -f "$NGROK_STATE" "$NGROK_CURR_TOKEN"
                 echo "[*] Ngrok tunnel is not running."
             fi
             ;;
@@ -316,7 +403,7 @@ ngrok_control() {
 
 ngrok_status() {
     if ngrok_running; then
-        echo "Ngrok Tunnel: RUNNING (Multi-Token Pool)"
+        echo "Ngrok Tunnel: RUNNING (Multi-Token Pool & Auto-Rotation)"
         local url
         url=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | grep -oE 'tcp://[^"]+' | head -1)
         if [ -n "$url" ]; then
@@ -334,102 +421,7 @@ ngrok_status() {
     fi
 }
 
-# --- 5. Tailscale Support ---------------------------------------------------
-TS_SOCKET="$CONFIG_DIR/tailscaled.sock"
-TS_STATE="$CONFIG_DIR/tailscaled.state"
-TS_STATEDIR="$CONFIG_DIR/tailscaled_state"
-TS_LOG="$CONFIG_DIR/ts.log"
-
-ensure_tailscaled() {
-    if ! pgrep -f "tailscaled" >/dev/null 2>&1 && ! su -c "pgrep -f tailscaled" >/dev/null 2>&1; then
-        echo "[*] Starting tailscaled daemon..."
-        rm -f "$TS_SOCKET"
-        mkdir -p "$TS_STATEDIR"
-        chmod 700 "$TS_STATEDIR" 2>/dev/null || true
-        if command -v su >/dev/null 2>&1 && su -c "id" >/dev/null 2>&1; then
-            su -c "PATH=$PREFIX/bin:\$PATH nohup tailscaled --statedir='$TS_STATEDIR' --state='$TS_STATE' --socket='$TS_SOCKET' --tun=userspace-networking > '$TS_LOG' 2>&1 &" || true
-        else
-            nohup tailscaled --statedir="$TS_STATEDIR" --state="$TS_STATE" --socket="$TS_SOCKET" --tun=userspace-networking > "$TS_LOG" 2>&1 &
-        fi
-        sleep 2
-    fi
-    [ -S "$TS_SOCKET" ] && (chmod 666 "$TS_SOCKET" 2>/dev/null || su -c "chmod 666 '$TS_SOCKET'" 2>/dev/null || true)
-}
-
-tailscale_control() {
-    local action="${1:-status}"
-    case "$action" in
-        start|up)
-            if ! command -v tailscale >/dev/null 2>&1 && [ ! -x "$PREFIX/bin/tailscale" ]; then
-                echo "Error: tailscale CLI is not installed."
-                return 1
-            fi
-            ensure_tailscaled
-            echo "[*] Connecting to Tailscale network..."
-            local arg="${2:-}"
-            local ts_flags="--reset --accept-routes --accept-dns=false --ssh"
-            if [ -n "$arg" ]; then
-                if [[ "$arg" =~ ^tskey-[A-Za-z0-9_-]+$ ]]; then
-                    ts_flags="--reset --authkey=$arg --accept-routes --accept-dns=false --ssh"
-                else
-                    echo "Error: Invalid auth key format. Expected 'tskey-...'."
-                    return 1
-                fi
-            fi
-            local extra=""
-            shift 2 2>/dev/null || true
-            for f in "$@"; do
-                case "$f" in
-                    --accept-routes|--accept-dns|--shields-up|--ssh|--exit-node-allow-lan-access|--snat-subnet-routes)
-                        extra="$extra $f"
-                        ;;
-                    --exit-node=*|--hostname=*|--advertise-routes=*|--advertise-exit-node=*|--login-server=*)
-                        local val="${f#*=}"
-                        if [[ "$val" =~ ^[A-Za-z0-9.:/_-]+$ ]]; then
-                            extra="$extra $f"
-                        else
-                            echo "Error: Unsafe value in tailscale flag: $f"
-                            return 1
-                        fi
-                        ;;
-                    *)
-                        echo "Error: Unsupported or unsafe tailscale flag: $f"
-                        return 1
-                        ;;
-                esac
-            done
-            if command -v su >/dev/null 2>&1 && su -c "id" >/dev/null 2>&1; then
-                su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket='$TS_SOCKET' up $ts_flags $extra" || tailscale --socket="$TS_SOCKET" up $ts_flags $extra || return 1
-            else
-                tailscale --socket="$TS_SOCKET" up $ts_flags $extra || return 1
-            fi
-            echo "[✓] Tailscale active."
-            ;;
-        stop|down)
-            if command -v tailscale >/dev/null 2>&1 || [ -x "$PREFIX/bin/tailscale" ]; then
-                tailscale --socket="$TS_SOCKET" down 2>/dev/null || su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET down" 2>/dev/null || true
-                pkill -f "tailscaled" 2>/dev/null || su -c "pkill -f tailscaled" 2>/dev/null || true
-                echo "[✓] Tailscale disconnected."
-            fi
-            ;;
-        status|"")
-            if pgrep -f "tailscaled" >/dev/null 2>&1 || su -c "pgrep -f tailscaled" >/dev/null 2>&1; then
-                local ts_ip
-                ts_ip=$(tailscale --socket="$TS_SOCKET" ip -4 2>/dev/null || su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET ip -4" 2>/dev/null | tr -d '[:space:]')
-                if [ -n "$ts_ip" ]; then
-                    echo "Tailscale:    RUNNING"
-                    echo "    IP:       $ts_ip"
-                    echo "    Connect:  ssh -p 8022 $(whoami)@$ts_ip (Host SSH)"
-                    echo "              ssh $(whoami)@$ts_ip (Tailscale SSH)"
-                    return 0
-                fi
-            fi
-            echo "Tailscale:    STOPPED / Not Configured"
-            ;;
-    esac
-}
-
-# --- 6. SSH Public Key Authorization Management -----------------------------
+# --- 5. SSH Public Key Authorization Management -----------------------------
 key_control() {
     local action="${1:-list}"
     local key_file="$HOME/.ssh/authorized_keys"
@@ -499,7 +491,7 @@ key_control() {
     esac
 }
 
-# --- 8. Seamless Auto-Connect Daemon & Fallback Engine -----------------------
+# --- 6. Seamless Auto-Connect Daemon & Fallback Engine -----------------------
 AUTOCONNECT_STATE="$PREFIX/tmp/asl-autoconnect.state"
 AUTOCONNECT_LOG="$PREFIX/tmp/asl-autoconnect.log"
 AUTOCONNECT_PID="$PREFIX/tmp/asl-autoconnect.pid"
@@ -520,21 +512,23 @@ autoconnect_daemon() {
         # Check network connectivity before attempting remote tunnels
         if is_online; then
             # 2. Serveo Tunnel (Free persistent SSH jump host)
-            if [ -f "$SERVEO_STATE" ] && ! serveo_running; then
-                echo "[Autoconnect $(date +%H:%M:%S)] Serveo tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
-                bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
+            local serveo_up=false
+            if [ -f "$SERVEO_STATE" ]; then
+                if serveo_running; then
+                    serveo_up=true
+                else
+                    echo "[Autoconnect $(date +%H:%M:%S)] Serveo tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
+                    bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
+                    serveo_running && serveo_up=true
+                fi
             fi
 
-            # 3. Tailscale Daemon & Mesh Network Health
-            if [ -f "$TS_STATE" ] && ! pgrep -f "tailscaled" >/dev/null 2>&1 && ! su -c "pgrep -f tailscaled" >/dev/null 2>&1; then
-                echo "[Autoconnect $(date +%H:%M:%S)] Tailscale daemon dropped. Restarting..." >> "$AUTOCONNECT_LOG"
-                ensure_tailscaled
-            fi
-
-            # 4. Ngrok Tunnel (Multi-token pool auto-recovery)
-            if [ -f "$NGROK_TOKENS_FILE" ] && [ -s "$NGROK_TOKENS_FILE" ] && ! ngrok_running; then
-                echo "[Autoconnect $(date +%H:%M:%S)] Ngrok tunnel offline. Re-establishing from pool..." >> "$AUTOCONNECT_LOG"
-                bash "$script_path" ngrok start >> "$AUTOCONNECT_LOG" 2>&1 || true
+            # 3. Ngrok Backup for Serveo (Auto-Rotate on quota exhaust)
+            if [ "$serveo_up" = false ] || [ -f "$NGROK_STATE" ] || { [ -f "$NGROK_TOKENS_FILE" ] && [ -s "$NGROK_TOKENS_FILE" ]; }; then
+                if ! ngrok_running; then
+                    echo "[Autoconnect $(date +%H:%M:%S)] Ngrok tunnel offline (Serveo backup/active). Starting/rotating token pool..." >> "$AUTOCONNECT_LOG"
+                    bash "$script_path" ngrok start >> "$AUTOCONNECT_LOG" 2>&1 || true
+                fi
             fi
         fi
 
@@ -561,7 +555,7 @@ autoconnect_control() {
                 termux-wake-lock 2>/dev/null || true
                 nohup bash "$SCRIPT_DIR/desktop/remote.sh" autoconnect-daemon > "$AUTOCONNECT_LOG" 2>&1 &
                 echo $! > "$AUTOCONNECT_PID" 2>/dev/null || true
-                echo "[✓] Auto-Connect daemon active (Wake-lock engaged). Free tunnels (Serveo, Tailscale, Ngrok) will auto-restart on network drop."
+                echo "[✓] Auto-Connect daemon active (Wake-lock engaged). Tunnels (Serveo & Ngrok Backup) will auto-restart on network drop."
             fi
             ;;
         stop)
@@ -572,7 +566,7 @@ autoconnect_control() {
             ;;
         status|"")
             if [ -f "$AUTOCONNECT_STATE" ] && { pgrep -f "autoconnect-daemon" >/dev/null 2>&1 || pgrep -f "autoconnect_daemon" >/dev/null 2>&1; }; then
-                echo "Auto-Connect Daemon: ACTIVE (Monitoring SSH, Serveo, Tailscale & Ngrok with Wake-Lock)"
+                echo "Auto-Connect Daemon: ACTIVE (Monitoring SSH, Serveo & Ngrok Backup with Wake-Lock)"
             else
                 echo "Auto-Connect Daemon: INACTIVE"
             fi
@@ -580,7 +574,7 @@ autoconnect_control() {
     esac
 }
 
-# --- 9. Start All Remote Services ------------------------------------------
+# --- 7. Start All Remote Services ------------------------------------------
 start_all() {
     echo "[*] Initializing ASL Remote Bridge Services..."
     lan_control start
@@ -605,7 +599,6 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
         key|keys|pubkey) key_control "$@" ;;
         serveo) serveo_control "$@" ;;
         ngrok) ngrok_control "$@" ;;
-        tailscale) tailscale_control "$@" ;;
         autoconnect) autoconnect_control "$@" ;;
         autoconnect-daemon) autoconnect_daemon ;;
         status|"")
@@ -622,12 +615,10 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
             echo ""
             ngrok_control status
             echo ""
-            tailscale_control status
-            echo ""
             autoconnect_control status
             ;;
         *)
-            echo "Usage: asl remote [all|password|lan|keys|serveo|ngrok|tailscale|autoconnect] [start|stop|status]"
+            echo "Usage: asl remote [all|password|lan|keys|serveo|ngrok|autoconnect] [start|stop|status]"
             exit 1
             ;;
     esac

@@ -443,7 +443,6 @@ asl_remote_summary() {
     if pgrep -f "sshd" >/dev/null 2>&1; then active+=("LAN:8022"); fi
     if [ -f "$PREFIX/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then active+=("Serveo"); fi
     if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then active+=("Ngrok"); fi
-    if su -c "pgrep -f tailscaled" >/dev/null 2>&1 || pgrep -f "tailscaled" >/dev/null 2>&1; then active+=("Tailscale"); fi
     if [ ${#active[@]} -gt 0 ]; then
         printf '%s' "${active[*]}"
     else
@@ -479,14 +478,6 @@ asl_remote_details() {
             details+=("  • Ngrok Tunnel:     ssh -p ${ng_port} ${user}@${ng_host}")
         else
             details+=("  • Ngrok Tunnel:     Active (Fetching tunnel URL...)")
-        fi
-    fi
-    if su -c "pgrep -f tailscaled" >/dev/null 2>&1 || pgrep -f "tailscaled" >/dev/null 2>&1; then
-        local ts_ip
-        ts_ip=$(tailscale --socket="$HOME/.asl/tailscaled.sock" ip -4 2>/dev/null || su -c "PATH=$prefix/bin:\$PATH tailscale --socket=$HOME/.asl/tailscaled.sock ip -4" 2>/dev/null | tr -d '[:space:]')
-        if [ -n "$ts_ip" ]; then
-            details+=("  • Tailscale Mesh:   ssh -p 8022 ${user}@${ts_ip}")
-            details+=("  • Tailscale SSH:    ssh ${user}@${ts_ip}")
         fi
     fi
 
