@@ -362,10 +362,10 @@ tailscale_control() {
             ensure_tailscaled
             echo "[*] Connecting to Tailscale network..."
             local arg="${2:-}"
-            local ts_flags="--accept-routes --accept-dns=false"
+            local ts_flags="--accept-routes --accept-dns=false --ssh"
             if [ -n "$arg" ]; then
                 if [[ "$arg" =~ ^tskey-[A-Za-z0-9_-]+$ ]]; then
-                    ts_flags="--authkey=$arg --accept-routes --accept-dns=false"
+                    ts_flags="--authkey=$arg --accept-routes --accept-dns=false --ssh"
                 else
                     echo "Error: Invalid auth key format. Expected 'tskey-...'."
                     return 1
@@ -413,8 +413,9 @@ tailscale_control() {
                 ts_ip=$(tailscale --socket="$TS_SOCKET" ip -4 2>/dev/null || su -c "PATH=$PREFIX/bin:\$PATH tailscale --socket=$TS_SOCKET ip -4" 2>/dev/null | tr -d '[:space:]')
                 if [ -n "$ts_ip" ]; then
                     echo "Tailscale:    RUNNING"
-                    echo "    Connect:  ssh -p 8022 $(whoami)@$ts_ip"
-                    echo "    Authentication: SSH key only"
+                    echo "    IP:       $ts_ip"
+                    echo "    Connect:  ssh -p 8022 $(whoami)@$ts_ip (Host SSH)"
+                    echo "              ssh $(whoami)@$ts_ip (Tailscale SSH)"
                     return 0
                 fi
             fi
