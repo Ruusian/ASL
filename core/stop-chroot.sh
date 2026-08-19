@@ -16,10 +16,7 @@ if [ "${ASL_EXEC_MODE:-root}" = "proot" ]; then
     exit 0
 fi
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+asl_require_default_debianpath
 
 # Remove legacy sysctl backup file if present
 SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"

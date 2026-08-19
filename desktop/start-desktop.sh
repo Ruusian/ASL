@@ -11,10 +11,7 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/asl/desktop"
 STATE_FILE="$STATE_DIR/state"
 LAUNCHER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+asl_require_default_debianpath
 
 ensure_state_dir() {
     mkdir -p "$STATE_DIR" || return 1
@@ -300,7 +297,7 @@ export GIO_USE_VFS=local
 export WEBKIT_FORCE_SANDBOX=0
 export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
-$(asl_gpu_env_exports)
+asl_gpu_apply_exports
 
 mkdir -p /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
 chmod 700 /run/user/$target_uid 2>/dev/null

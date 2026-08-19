@@ -9,10 +9,7 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" != "proot" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+asl_require_default_debianpath
 
 CONF_FILE="$DEBIANPATH/etc/asl_wine_version.conf"
 

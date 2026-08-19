@@ -327,7 +327,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                     rm -f "$TEMP_TAR" "$TEMP_SUMS"
                     IS_MODDED=false
                 else
-                    EXPECTED=$(awk '$2 == "asl-debian-modded-arm64.tar.xz" && $1 ~ /^[[:xdigit:]]{64}$/ { print $1 }' "$TEMP_SUMS" | head -n 1)
+                    EXPECTED=$(awk '{ h=$1; sub(/^\*/, "", h); if ($NF == "asl-debian-modded-arm64.tar.xz" && h ~ /^[[:xdigit:]]{64}$/) print h }' "$TEMP_SUMS" | head -n 1)
                     rm -f "$TEMP_SUMS"
                     if [ -z "$EXPECTED" ]; then
                         echo -e "${YELLOW}[!] SHA256SUMS missing valid checksum. Falling back to Debian base...${RESET}"
@@ -346,7 +346,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                         echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
                         echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
                         ensure_chroot_unmounted_for_replace || exit 1
-                        if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
+                        if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar --no-same-owner --no-same-permissions -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
                             echo -e "${YELLOW}[!] Failed to extract modded rootfs. Falling back to Debian base...${RESET}"
                             rm -f "$TEMP_TAR"
                             IS_MODDED=false

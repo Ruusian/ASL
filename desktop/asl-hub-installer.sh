@@ -11,10 +11,7 @@ fi
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+asl_require_default_debianpath
 
 ensure_chroot_mounted() {
     if ! is_mounted; then

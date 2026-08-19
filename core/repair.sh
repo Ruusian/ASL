@@ -9,10 +9,8 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+asl_require_default_debianpath
+trap asl_release_lock EXIT INT TERM
 
 ensure_chroot_mounted() {
     if ! is_mounted; then
@@ -47,8 +45,6 @@ asl_repair_run() {
             chmod 1777 '$DEBIANPATH/dev/shm' 2>/dev/null || true
             chmod 755 '$DEBIANPATH/dev' 2>/dev/null || true
             chmod 755 '$DEBIANPATH/dev/pts' 2>/dev/null || true
-            chmod 755 '$DEBIANPATH/proc' 2>/dev/null || true
-            chmod 755 '$DEBIANPATH/sys' 2>/dev/null || true
             mkdir -p '$DEBIANPATH/run/user/0' 2>/dev/null || true
             chmod 700 '$DEBIANPATH/run/user/0' 2>/dev/null || true
         "
@@ -78,6 +74,7 @@ asl_repair_run() {
 
 case "${1:-all}" in
     run|all|mounts|permissions|dpkg|env|libs)
+        asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }
         asl_repair_run "${1:-all}"
         ;;
     *)

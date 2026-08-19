@@ -9,10 +9,13 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
+asl_require_default_debianpath
+# Refuse to operate when the target is the host root, which would wipe host /tmp.
+if [ "$DEBIANPATH" = "/" ]; then
+    echo "Error: refusing to clean DEBIANPATH '/'. Run inside a real chroot only." >&2
     exit 2
 fi
+trap asl_release_lock EXIT INT TERM
 
 ensure_chroot_mounted() {
     if ! is_mounted; then
@@ -95,6 +98,7 @@ case "${1:-status}" in
         asl_clean_status
         ;;
     run|clean|all|apt|tmp|cache)
+        asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }
         asl_clean_run "${1:-all}"
         ;;
     *)

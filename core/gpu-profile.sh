@@ -116,6 +116,16 @@ asl_gpu_env_exports() {
     printf '%b' "$res"
 }
 
+asl_gpu_apply_exports() {
+    asl_gpu_apply
+    local script_dir hud_exp
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$script_dir/hud.sh" ]; then
+        hud_exp=$("$script_dir/hud.sh" env 2>/dev/null || true)
+        [ -n "$hud_exp" ] && eval "$hud_exp"
+    fi
+}
+
 asl_sync_chroot_env() {
     DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
     if [ -d "$DEBIANPATH/etc/profile.d" ]; then

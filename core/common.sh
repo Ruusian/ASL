@@ -178,6 +178,43 @@ if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "$DEBIANPATH" != "$H
     echo "Warning: Custom DEBIANPATH $DEBIANPATH does not exist yet" >&2
 fi
 
+# Refuse unsafe/non-standard DEBIANPATH in root mode (centralized guard,
+# replaces the copy-pasted block duplicated across the core scripts).
+asl_require_default_debianpath() {
+    if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
+        echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian" >&2
+        exit 2
+    fi
+}
+
+# Advisory lock to serialize chroot-mutating operations across processes.
+ASL_LOCK_DIR="${HOME:-/data/data/com.termux/files/home}/.asl"
+asl_acquire_lock() {
+    mkdir -p "$ASL_LOCK_DIR" 2>/dev/null || return 0
+    local lock="$ASL_LOCK_DIR/.chroot.lock" tries=0 holder
+    while :; do
+        if mkdir "$lock" 2>/dev/null; then
+            echo "$$" > "$lock/pid" 2>/dev/null
+            return 0
+        fi
+        holder=$(cat "$lock/pid" 2>/dev/null)
+        if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
+            rm -rf "$lock" 2>/dev/null
+            continue
+        fi
+        tries=$((tries + 1))
+        [ "$tries" -ge 60 ] && return 1
+        sleep 0.5
+    done
+}
+asl_release_lock() {
+    local lock="$ASL_LOCK_DIR/.chroot.lock" holder
+    holder=$(cat "$lock/pid" 2>/dev/null)
+    if [ "$holder" = "$$" ] || [ -z "$holder" ]; then
+        rm -rf "$lock" 2>/dev/null
+    fi
+}
+
 if [ "${NO_COLOR:-}" = "" ]; then
     C_RESET=$'\033[0m'
     C_BOLD=$'\033[1m'

@@ -9,11 +9,9 @@ elif [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 SNAPSHOT_DIR="${ASL_SNAPSHOT_DIR:-/data/local/tmp/.asl-snapshots}"
+trap asl_release_lock EXIT INT TERM
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+asl_require_default_debianpath
 
 safe_name() { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }
 
@@ -107,17 +105,19 @@ restore_snapshot() {
     fi
 
     echo "[*] Restoring snapshot '$name'..."
+    staging="$DEBIANPATH.restore-staging-$(date +%Y%m%d_%H%M%S)"
     rollback="$DEBIANPATH.pre-snapshot-restore-$(date +%Y%m%d_%H%M%S)"
-    if ! asl_exec "mv '$DEBIANPATH' '$rollback'"; then
-        echo "[!] Failed to move current chroot to rollback location."
-        remount_if_needed "$was_mounted"
+    # Copy the snapshot into a staging dir while the live chroot stays intact,
+    # then atomically swap it into place (two quick same-fs renames).
+    if ! asl_exec "cp -a '$source' '$staging'"; then
+        asl_exec "rm -rf '$staging'" 2>/dev/null
+        echo "[!] Restore failed: could not stage snapshot copy."
         return 1
     fi
-    if ! asl_exec "cp -a '$source' '$DEBIANPATH'"; then
-        echo "[!] Restore failed; cleaning up incomplete copy and rolling back original state."
-        if ! asl_exec "rm -rf '$DEBIANPATH' && mv '$rollback' '$DEBIANPATH'"; then
-            echo "[!] Rollback failed; manual recovery may be required at $rollback."
-        fi
+    if ! asl_exec "mv '$DEBIANPATH' '$rollback' && mv '$staging' '$DEBIANPATH'"; then
+        echo "[!] Restore failed; recovering original chroot."
+        asl_exec "mv '$rollback' '$DEBIANPATH' 2>/dev/null || true"
+        asl_exec "rm -rf '$staging'" 2>/dev/null || true
         remount_if_needed "$was_mounted"
         return 1
     fi
@@ -163,7 +163,7 @@ export_snapshot() {
         return 1
     fi
     echo "[*] Exporting snapshot '$name' to '$out_file'..."
-    local out_q target_q comp_flag="--zstd"
+    local comp_flag="--zstd"
     case "$out_file" in
         *.tar.xz|*.txz) comp_flag="-J" ;;
         *.tar.gz|*.tgz) comp_flag="-z" ;;
@@ -177,9 +177,7 @@ export_snapshot() {
             fi
             ;;
     esac
-    out_q=$(printf '%q' "$out_file")
-    target_q=$(printf '%q' "$target")
-    if asl_exec "tar $comp_flag -cf $out_q -C $target_q ."; then
+    if asl_exec "tar $comp_flag -cf '$out_file' -C '$target' ."; then
         echo "[✓] Snapshot successfully exported to '$out_file'."
     else
         echo "[!] Export failed."
@@ -200,23 +198,21 @@ import_snapshot() {
     fi
     asl_exec "mkdir -p '$target'"
     echo "[*] Importing snapshot from '$file' as '$name'..."
-    local file_q target_q comp_flag="--zstd"
+    local comp_flag="--zstd"
     case "$file" in
         *.tar.xz|*.txz) comp_flag="-J" ;;
         *.tar.gz|*.tgz) comp_flag="-z" ;;
         *.tar.bz2|*.tbz2) comp_flag="-j" ;;
         *.tar.zst|*.tzst|*) comp_flag="--zstd" ;;
     esac
-    file_q=$(printf '%q' "$file")
-    target_q=$(printf '%q' "$target")
     # Reject archives that attempt path traversal or absolute paths so a
     # malicious tar cannot write outside the snapshot directory.
-    if asl_exec "tar $comp_flag -tf $file_q 2>/dev/null" | grep -qE '(^|/)\.\.(/|$)|^/'; then
+    if asl_exec "tar $comp_flag -tf '$file' 2>/dev/null" | grep -qE '(^|/)\.\.(/|$)|^/'; then
         echo "[!] Import failed: archive contains unsafe paths (absolute or ../ traversal)."
         asl_exec "rm -rf '$target'" 2>/dev/null
         return 1
     fi
-    if asl_exec "tar $comp_flag -xf $file_q -C $target_q"; then
+    if asl_exec "tar $comp_flag -xf '$file' -C '$target'"; then
         echo "[✓] Snapshot '$name' imported successfully."
     else
         echo "[!] Import failed."
@@ -226,12 +222,12 @@ import_snapshot() {
 }
 
 case "${1:-list}" in
-    create) shift; create_snapshot "$@" ;;
+    create) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; create_snapshot "$@" ;;
     list) list_snapshots ;;
-    restore) shift; restore_snapshot "$@" ;;
-    delete|remove) shift; delete_snapshot "$@" ;;
-    export) shift; export_snapshot "$@" ;;
-    import) shift; import_snapshot "$@" ;;
+    restore) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; restore_snapshot "$@" ;;
+    delete|remove) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; delete_snapshot "$@" ;;
+    export) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; export_snapshot "$@" ;;
+    import) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; import_snapshot "$@" ;;
     *) echo "Usage: asl snapshot [create|list|restore|delete|export|import] <name>"; exit 1 ;;
 esac
 

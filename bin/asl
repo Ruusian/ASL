@@ -74,10 +74,77 @@ ensure_mounted() {
     fi
 }
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+asl_with_lock() {
+    asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; return 1; }
+    "$@"
+    local rc=$?
+    asl_release_lock
+    return "$rc"
+}
+
+asl_backup() {
+    local BACKUP_DIR="/sdcard/Debian_Backups"
+    if is_mounted; then
+        echo "[!] Stopping chroot before backup..."
+        bash "$ASL_DIR/core/stop-chroot.sh" || return 1
+    fi
+    mkdir -p "$BACKUP_DIR" 2>/dev/null || BACKUP_DIR="/data/data/com.termux/files/home"
+    local BACKUP_FILE PARTIAL_BACKUP
+    BACKUP_FILE="$BACKUP_DIR/asl-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
+    PARTIAL_BACKUP="$BACKUP_FILE.partial"
+    local required_mb target_free_mb
+    required_mb=$(asl_exec "du -sm '$DEBIANPATH' 2>/dev/null" | awk '{print $1}')
+    target_free_mb=$(df -m "$BACKUP_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$required_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$required_mb" ]; then
+        echo "[!] Insufficient disk space in $BACKUP_DIR: ${target_free_mb}MB free, ~${required_mb}MB needed."
+        return 1
+    fi
+    echo "[*] Creating backup at $BACKUP_FILE..."
+    if asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; tar --warning=no-file-changed -czf '$PARTIAL_BACKUP' --exclude='./dev*' --exclude='./proc*' --exclude='./sys*' --exclude='./run*' --exclude='./tmp*' -C '$DEBIANPATH' ." && asl_exec "test -s '$PARTIAL_BACKUP'"; then
+        asl_exec "mv '$PARTIAL_BACKUP' '$BACKUP_FILE'"
+        echo "[✓] Backup completed: $BACKUP_FILE"
+    else
+        asl_exec "rm -f '$PARTIAL_BACKUP'" 2>/dev/null || true
+        echo "[!] Backup failed; no completed archive was created."
+        return 1
+    fi
+}
+
+asl_restore() {
+    local RESTORE_FILE="${1:-}"
+    if [ -z "$RESTORE_FILE" ] || [ ! -f "$RESTORE_FILE" ]; then
+        echo "Error: Valid archive file required. Usage: asl restore <path/to/backup.tar.gz>"
+        return 1
+    fi
+    if ! confirm_action "Restore Debian root from '$RESTORE_FILE'? This replaces the current chroot."; then
+        echo "[*] Cancelled."
+        return 0
+    fi
+    local BASE64_BIN restore_b64 archive_size_mb target_free_mb
+    BASE64_BIN=$(command -v base64) || { echo "Error: base64 is required to restore an archive."; return 1; }
+    restore_b64=$(printf '%s' "$RESTORE_FILE" | "$BASE64_BIN" | tr -d '\n')
+    if ! asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); tar -tzf \"\$archive\" >/dev/null && ! tar -tzf \"\$archive\" | grep -Eq '(^/|(^|/)\.\.(/|\$))'"; then
+        echo "[!] Restore archive is unreadable or contains unsafe paths."
+        return 1
+    fi
+    archive_size_mb=$(du -sm "$RESTORE_FILE" 2>/dev/null | awk '{print $1 * 3}')
+    target_free_mb=$(df -m "$DEBIANPATH" 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$archive_size_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$archive_size_mb" ]; then
+        echo "[!] Insufficient disk space on root filesystem: ${target_free_mb}MB free, ~${archive_size_mb}MB estimated needed."
+        return 1
+    fi
+    if is_mounted; then
+        echo "[!] Stopping chroot..."
+        bash "$ASL_DIR/core/stop-chroot.sh" || return 1
+    fi
+    echo "[*] Staging restore from $RESTORE_FILE..."
+    asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.asl-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; if ! mv \"\$target\" \"\$rollback\"; then echo '[!] Restore failed: could not move current root aside.' >&2; exit 1; fi; if ! mv \"\$stage\" \"\$target\"; then echo '[!] Restore failed: moving staged root into place failed; rolling back original root.' >&2; mv \"\$rollback\" \"\$target\" 2>/dev/null || true; exit 1; fi; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
+        echo "[!] Restore failed; the Debian root is unchanged (or was rolled back)."
+        return 1
+    }
+}
+
+asl_require_default_debianpath
 
 run_in_chroot() {
     local command_text="$*"
@@ -937,16 +1004,16 @@ case "${1:-}" in
         process_manager
         ;;
     start)
-        bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
+        asl_with_lock bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
         ;;
     stop)
         if ! confirm_action "Stop desktop and unmount the Debian chroot?"; then
             echo "[*] Cancelled."
             exit 0
         fi
-        bash "$ASL_DIR/desktop/start-desktop.sh" stop \
+        asl_with_lock bash "$ASL_DIR/desktop/start-desktop.sh" stop \
             || echo "[!] Desktop shutdown reported an error; continuing to unmount chroot."
-        bash "$ASL_DIR/core/stop-chroot.sh"
+        asl_with_lock bash "$ASL_DIR/core/stop-chroot.sh"
         ;;
     doctor)
         bash "$ASL_DIR/core/doctor.sh"
@@ -1196,68 +1263,11 @@ case "${1:-}" in
         bash "$ASL_DIR/core/hud.sh" "$@"
         ;;
     backup)
-        BACKUP_DIR="/sdcard/Debian_Backups"
-        if is_mounted; then
-            echo "[!] Stopping chroot before backup..."
-            bash "$ASL_DIR/core/stop-chroot.sh" || exit 1
-        fi
-        mkdir -p "$BACKUP_DIR" 2>/dev/null || BACKUP_DIR="/data/data/com.termux/files/home"
-        BACKUP_FILE="$BACKUP_DIR/asl-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
-        PARTIAL_BACKUP="$BACKUP_FILE.partial"
-
-        required_mb=$(asl_exec "du -sm '$DEBIANPATH' 2>/dev/null" | awk '{print $1}')
-        target_free_mb=$(df -m "$BACKUP_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
-        if [ -n "$required_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$required_mb" ]; then
-            echo "[!] Insufficient disk space in $BACKUP_DIR: ${target_free_mb}MB free, ~${required_mb}MB needed."
-            exit 1
-        fi
-
-        echo "[*] Creating backup at $BACKUP_FILE..."
-        if asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; tar --warning=no-file-changed -czf '$PARTIAL_BACKUP' --exclude='./dev*' --exclude='./proc*' --exclude='./sys*' --exclude='./run*' --exclude='./tmp*' -C '$DEBIANPATH' ." && asl_exec "test -s '$PARTIAL_BACKUP'"; then
-            asl_exec "mv '$PARTIAL_BACKUP' '$BACKUP_FILE'"
-            echo "[✓] Backup completed: $BACKUP_FILE"
-        else
-            asl_exec "rm -f '$PARTIAL_BACKUP'" 2>/dev/null || true
-            echo "[!] Backup failed; no completed archive was created."
-            exit 1
-        fi
+        asl_with_lock asl_backup
         ;;
     restore)
         shift
-        RESTORE_FILE="${1:-}"
-        if [ -z "$RESTORE_FILE" ] || [ ! -f "$RESTORE_FILE" ]; then
-            echo "Error: Valid archive file required. Usage: asl restore <path/to/backup.tar.gz>"
-            exit 1
-        fi
-        if ! confirm_action "Restore Debian root from '$RESTORE_FILE'? This replaces the current chroot."; then
-            echo "[*] Cancelled."
-            exit 0
-        fi
-        BASE64_BIN=$(command -v base64) || {
-            echo "Error: base64 is required to restore an archive."
-            exit 1
-        }
-        restore_b64=$(printf '%s' "$RESTORE_FILE" | "$BASE64_BIN" | tr -d '\n')
-        if ! asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); tar -tzf \"\$archive\" >/dev/null && ! tar -tzf \"\$archive\" | grep -Eq '(^/|(^|/)\.\.(/|\$))'"; then
-            echo "[!] Restore archive is unreadable or contains unsafe paths."
-            exit 1
-        fi
-
-        archive_size_mb=$(du -sm "$RESTORE_FILE" 2>/dev/null | awk '{print $1 * 3}')
-        target_free_mb=$(df -m "$DEBIANPATH" 2>/dev/null | awk 'NR==2 {print $4}')
-        if [ -n "$archive_size_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$archive_size_mb" ]; then
-            echo "[!] Insufficient disk space on root filesystem: ${target_free_mb}MB free, ~${archive_size_mb}MB estimated needed."
-            exit 1
-        fi
-        if is_mounted; then
-            echo "[!] Stopping chroot..."
-            bash "$ASL_DIR/core/stop-chroot.sh" || exit 1
-        fi
-        echo "[*] Staging restore from $RESTORE_FILE..."
-        asl_exec "export PATH=\"/data/data/com.termux/files/usr/bin:/system/bin:\$PATH\"; archive=\$(printf %s '$restore_b64' | '$BASE64_BIN' -d); target='$DEBIANPATH'; parent=\${target%/*}; stage=\$(mktemp -d \"\$parent/.asl-restore.XXXXXX\") || exit 1; trap 'rm -rf \"\$stage\"' EXIT; tar -xzf \"\$archive\" -C \"\$stage\" || exit 1; rollback=\"\$target.pre-restore-\$(date +%Y%m%d_%H%M%S)\"; test ! -e \"\$rollback\" || exit 1; if ! mv \"\$target\" \"\$rollback\"; then echo '[!] Restore failed: could not move current root aside.' >&2; exit 1; fi; if ! mv \"\$stage\" \"\$target\"; then echo '[!] Restore failed: moving staged root into place failed; rolling back original root.' >&2; mv \"\$rollback\" \"\$target\" 2>/dev/null || true; exit 1; fi; stage=; trap - EXIT; printf '[✓] Restore completed. Previous Debian root retained at: %s\\n' \"\$rollback\"" || {
-            echo "[!] Restore failed; the Debian root is unchanged (or was rolled back)."
-            exit 1
-        }
+        asl_with_lock asl_restore "$@"
         ;;
     wakelock|wake|open|clip|clipboard|toast|notify|notification|storage)
         bash "$ASL_DIR/core/termux-bridge.sh" "$@"

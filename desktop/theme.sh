@@ -8,10 +8,7 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
-if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] && [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
-    echo "Error: DEBIANPATH must be /data/local/tmp/chrootDebian"
-    exit 2
-fi
+asl_require_default_debianpath
 
 get_dbus_env() {
     local pid
