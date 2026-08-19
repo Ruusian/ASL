@@ -191,7 +191,7 @@ start_desktop() {
     start_audio || return 1
     start_gpu || true
     DISPLAY_ID=:0
-    am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
+    am start -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[*] Starting Termux:X11 display server..."
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     local xauth_file="$termux_tmp/.Xauthority"
@@ -259,6 +259,7 @@ start_desktop() {
     asl_gpu_apply
     asl_sync_chroot_env 2>/dev/null || true
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
+    chroot_pkill 9 '(^|[^A-Za-z0-9_])(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|light-locker)([^A-Za-z0-9_]|$)'
     [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
     local asl_target_user="${ASL_USER:-root}"
     if [[ ! "$asl_target_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
@@ -272,6 +273,8 @@ start_desktop() {
         target_uid=$(asl_chroot_exec "id -u '$asl_target_user' 2>/dev/null" 2>/dev/null || echo 1000)
         [ -n "$target_uid" ] || target_uid=1000
     fi
+    local gpu_exports
+    gpu_exports=$(asl_gpu_env_exports 2>/dev/null || true)
     mkdir -p "$termux_tmp"
     local launcher_script="$termux_tmp/asl-start-xfce.sh"
     umask 022
@@ -302,7 +305,7 @@ export GIO_USE_VFS=local
 export WEBKIT_FORCE_SANDBOX=0
 export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
-asl_gpu_apply_exports
+$gpu_exports
 
 mkdir -p /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
 chmod 700 /run/user/$target_uid 2>/dev/null
@@ -349,6 +352,8 @@ rm -f /tmp/xfce-keepalive 2>/dev/null
     xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true
     xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -n -t int -s 5 2>/dev/null || true
 ) &
+
+rm -f /etc/xdg/autostart/light-locker.desktop "$HOME/.config/autostart/light-locker.desktop" 2>/dev/null || true
 
 if command -v startxfce4 >/dev/null 2>&1; then
     exec dbus-run-session startxfce4
@@ -410,6 +415,7 @@ LAUNCHER_EOF
         return 1
     fi
     write_state || { cleanup_started; return 1; }
+    am start -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[✓] Desktop started on $DISPLAY_ID. Open the Termux:X11 Android app."
 }
 
