@@ -11,6 +11,62 @@ DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
 if [ "${ASL_EXEC_MODE:-root}" = "proot" ]; then
     if [ -d "$DEBIANPATH" ] || [ -d "$PREFIX/var/lib/proot-distro/containers/asl-debian" ]; then
+        if [ -d "$DEBIANPATH" ]; then
+            mkdir -p "$DEBIANPATH/usr/local/bin" "$DEBIANPATH/usr/bin" "$DEBIANPATH/bin" 2>/dev/null || true
+            cat <<'EOFSHIM' > "$DEBIANPATH/usr/local/bin/pkg"
+#!/bin/bash
+# ASL Debian chroot compatibility shim for Termux 'pkg' commands
+
+translate_pkgs() {
+    local args=()
+    for arg in "$@"; do
+        case "$arg" in
+            python|python3) args+=("python3" "python3-pip" "python3-venv" "python-is-python3") ;;
+            python-pip) args+=("python3-pip") ;;
+            libffi) args+=("libffi-dev") ;;
+            openssl) args+=("libssl-dev" "openssl") ;;
+            clang|gcc) args+=("build-essential" "clang") ;;
+            *) args+=("$arg") ;;
+        esac
+    done
+    echo "${args[@]}"
+}
+
+if [ "$1" = "install" ] || [ "$1" = "in" ]; then
+    shift
+    pkgs=$(translate_pkgs "$@")
+    apt-get update && exec apt-get install -y $pkgs
+elif [ "$1" = "upgrade" ] || [ "$1" = "up" ]; then
+    shift
+    apt-get update && exec apt-get dist-upgrade -y "$@"
+elif [ "$1" = "show" ] || [ "$1" = "info" ]; then
+    shift
+    exec apt-cache show "$@"
+elif [ "$1" = "search" ]; then
+    shift
+    exec apt-cache search "$@"
+elif [ "$1" = "uninstall" ] || [ "$1" = "remove" ]; then
+    shift
+    exec apt-get remove -y "$@"
+elif [ "$1" = "list-installed" ]; then
+    shift
+    exec dpkg -l "$@"
+elif [ "$1" = "reinstall" ]; then
+    shift
+    pkgs=$(translate_pkgs "$@")
+    apt-get update && exec apt-get install --reinstall -y $pkgs
+elif [ "$1" = "clean" ]; then
+    exec apt-get clean
+else
+    exec apt-get "$@"
+fi
+EOFSHIM
+            chmod +x "$DEBIANPATH/usr/local/bin/pkg" 2>/dev/null || true
+            cp -f "$DEBIANPATH/usr/local/bin/pkg" "$DEBIANPATH/usr/bin/pkg" 2>/dev/null || true
+            chmod +x "$DEBIANPATH/usr/bin/pkg" 2>/dev/null || true
+            cp -f "$DEBIANPATH/usr/local/bin/pkg" "$DEBIANPATH/bin/pkg" 2>/dev/null || true
+            chmod +x "$DEBIANPATH/bin/pkg" 2>/dev/null || true
+        fi
         echo "[✓] PRoot user-space subsystem active — environment ready at $DEBIANPATH."
         exit 0
     else
@@ -137,22 +193,60 @@ asl_exec "
     fi
 
     # Create pkg -> apt compatibility shim inside Debian chroot for third-party scripts
-    if [ -d \"$DEBIANPATH/usr/local/bin\" ] && [ ! -f \"$DEBIANPATH/usr/local/bin/pkg\" ]; then
-        cat <<'EOFSHIM' > \"$DEBIANPATH/usr/local/bin/pkg\"
+    mkdir -p \"$DEBIANPATH/usr/local/bin\" \"$DEBIANPATH/usr/bin\" \"$DEBIANPATH/bin\" 2>/dev/null || true
+    cat <<'EOFSHIM' > \"$DEBIANPATH/usr/local/bin/pkg\"
 #!/bin/bash
 # ASL Debian chroot compatibility shim for Termux 'pkg' commands
+
+translate_pkgs() {
+    local args=()
+    for arg in \"\$@\"; do
+        case \"\$arg\" in
+            python|python3) args+=(\"python3\" \"python3-pip\" \"python3-venv\" \"python-is-python3\") ;;
+            python-pip) args+=(\"python3-pip\") ;;
+            libffi) args+=(\"libffi-dev\") ;;
+            openssl) args+=(\"libssl-dev\" \"openssl\") ;;
+            clang|gcc) args+=(\"build-essential\" \"clang\") ;;
+            *) args+=(\"\$arg\") ;;
+        esac
+    done
+    echo \"\${args[@]}\"
+}
+
 if [ "\$1" = "install" ] || [ "\$1" = "in" ]; then
     shift
-    apt-get update && exec apt-get install -y "\$@"
+    pkgs=\$(translate_pkgs \"\$@\")
+    apt-get update && exec apt-get install -y \$pkgs
 elif [ "\$1" = "upgrade" ] || [ "\$1" = "up" ]; then
     shift
     apt-get update && exec apt-get dist-upgrade -y "\$@"
+elif [ "\$1" = "show" ] || [ "\$1" = "info" ]; then
+    shift
+    exec apt-cache show "\$@"
+elif [ "\$1" = "search" ]; then
+    shift
+    exec apt-cache search "\$@"
+elif [ "\$1" = "uninstall" ] || [ "\$1" = "remove" ]; then
+    shift
+    exec apt-get remove -y "\$@"
+elif [ "\$1" = "list-installed" ]; then
+    shift
+    exec dpkg -l "\$@"
+elif [ "\$1" = "reinstall" ]; then
+    shift
+    pkgs=\$(translate_pkgs \"\$@\")
+    apt-get update && exec apt-get install --reinstall -y \$pkgs
+elif [ "\$1" = "clean" ]; then
+    exec apt-get clean
 else
     exec apt-get "\$@"
 fi
 EOFSHIM
-        chmod +x \"$DEBIANPATH/usr/local/bin/pkg\" 2>/dev/null || true
-    fi
+    chmod +x \"$DEBIANPATH/usr/local/bin/pkg\" 2>/dev/null || true
+    cp -f \"$DEBIANPATH/usr/local/bin/pkg\" \"$DEBIANPATH/usr/bin/pkg\" 2>/dev/null || true
+    chmod +x \"$DEBIANPATH/usr/bin/pkg\" 2>/dev/null || true
+    cp -f \"$DEBIANPATH/usr/local/bin/pkg\" \"$DEBIANPATH/bin/pkg\" 2>/dev/null || true
+    chmod +x \"$DEBIANPATH/bin/pkg\" 2>/dev/null || true
 
     trap - ERR
 " || {

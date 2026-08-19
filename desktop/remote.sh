@@ -79,6 +79,10 @@ password_control() {
             fi
             set_password "$new_p"
             ;;
+        clear|unset|remove)
+            rm -f "$PASS_FILE"
+            echo "[✓] Remote password removed; SSH key-based access required."
+            ;;
         show|*)
             if [ -n "$(get_password)" ]; then
                 echo "A remote password is configured."
@@ -633,6 +637,32 @@ start_all() {
     echo "[✓] All remote connection bridges initialized!"
 }
 
+gui_control() {
+    local s_alias user host
+    user=$(whoami 2>/dev/null || echo "user")
+    host=$(lan_host_ip)
+    s_alias=$(get_serveo_alias)
+    echo "=== ASL Remote Desktop (VNC/X11) Tunnel Guide ==="
+    echo "To access the ASL graphical desktop remotely over SSH tunnel:"
+    echo ""
+    echo "1. LAN SSH (Port 8022 + Local VNC Forwarding):"
+    echo "   ssh -L 5900:127.0.0.1:5900 -p 8022 ${user}@${host}"
+    echo ""
+    echo "2. Serveo Remote Jump Host Forwarding:"
+    echo "   ssh -L 5900:127.0.0.1:5900 -J serveo.net ${user}@${s_alias}"
+    echo ""
+    local ng_url ng_host ng_port
+    ng_url=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | grep -oE 'tcp://[^"]+' | head -1)
+    if [ -n "$ng_url" ]; then
+        ng_host=$(echo "$ng_url" | sed -E 's|tcp://([^:]+):.*|\1|')
+        ng_port=$(echo "$ng_url" | sed -E 's|tcp://[^:]+:([0-9]+)|\1|')
+        echo "3. Ngrok TCP Forwarding:"
+        echo "   ssh -L 5900:127.0.0.1:5900 -p ${ng_port} ${user}@${ng_host}"
+        echo ""
+    fi
+    echo "After establishing the SSH tunnel, connect your VNC viewer (RealVNC/TigerVNC) to 'localhost:5900'."
+}
+
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     TARGET="${1:-status}"
     shift || true
@@ -644,8 +674,29 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
         key|keys|pubkey) key_control "$@" ;;
         serveo) serveo_control "$@" ;;
         ngrok) ngrok_control "$@" ;;
+        gui|desktop-tunnel) gui_control ;;
         autoconnect) autoconnect_control "$@" ;;
         autoconnect-daemon) autoconnect_daemon ;;
+        help|-h|--help)
+            echo "=== ASL Remote Access Management ==="
+            echo "Usage: asl remote <subcommand> [args]"
+            echo ""
+            echo "Subcommands:"
+            echo "  all                  Start LAN SSH, Serveo, Ngrok, and Auto-Connect daemon"
+            echo "  password set <pass>  Set remote SSH password"
+            echo "  password clear       Remove remote SSH password"
+            echo "  lan [start|stop]     Control LAN SSH server on port 8022"
+            echo "  serveo [start|stop]  Control persistent Serveo jump-host tunnel"
+            echo "  serveo alias <name>  Set custom Serveo subdomain/alias"
+            echo "  ngrok add-token <t>  Add Ngrok authtoken to pool"
+            echo "  ngrok list-tokens    List tokens and quota statuses"
+            echo "  ngrok rotate         Rotate to next active token in pool"
+            echo "  ngrok reset          Reset quota-exhausted status"
+            echo "  keys [list|add|import-github <user>] Manage SSH public keys"
+            echo "  gui                  Show remote desktop/VNC tunnel forwarding commands"
+            echo "  autoconnect          Start 24/7 auto-reconnect daemon (Wake-lock enabled)"
+            echo "  status               Display all active remote bridges"
+            ;;
         status|"")
             echo "=== ASL Remote Bridge Status ==="
             if [ -n "$(get_password)" ]; then
