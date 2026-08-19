@@ -335,16 +335,19 @@ ngrok_status() {
 # --- 5. Tailscale Support ---------------------------------------------------
 TS_SOCKET="$CONFIG_DIR/tailscaled.sock"
 TS_STATE="$CONFIG_DIR/tailscaled.state"
+TS_STATEDIR="$CONFIG_DIR/tailscaled_state"
 TS_LOG="$CONFIG_DIR/ts.log"
 
 ensure_tailscaled() {
     if ! pgrep -f "tailscaled" >/dev/null 2>&1 && ! su -c "pgrep -f tailscaled" >/dev/null 2>&1; then
         echo "[*] Starting tailscaled daemon..."
         rm -f "$TS_SOCKET"
+        mkdir -p "$TS_STATEDIR"
+        chmod 700 "$TS_STATEDIR" 2>/dev/null || true
         if command -v su >/dev/null 2>&1 && su -c "id" >/dev/null 2>&1; then
-            su -c "PATH=$PREFIX/bin:\$PATH nohup tailscaled --state='$TS_STATE' --socket='$TS_SOCKET' --tun=userspace-networking > '$TS_LOG' 2>&1 &" || true
+            su -c "PATH=$PREFIX/bin:\$PATH nohup tailscaled --statedir='$TS_STATEDIR' --state='$TS_STATE' --socket='$TS_SOCKET' --tun=userspace-networking > '$TS_LOG' 2>&1 &" || true
         else
-            nohup tailscaled --state="$TS_STATE" --socket="$TS_SOCKET" --tun=userspace-networking > "$TS_LOG" 2>&1 &
+            nohup tailscaled --statedir="$TS_STATEDIR" --state="$TS_STATE" --socket="$TS_SOCKET" --tun=userspace-networking > "$TS_LOG" 2>&1 &
         fi
         sleep 2
     fi
@@ -362,10 +365,10 @@ tailscale_control() {
             ensure_tailscaled
             echo "[*] Connecting to Tailscale network..."
             local arg="${2:-}"
-            local ts_flags="--accept-routes --accept-dns=false --ssh"
+            local ts_flags="--reset --accept-routes --accept-dns=false --ssh"
             if [ -n "$arg" ]; then
                 if [[ "$arg" =~ ^tskey-[A-Za-z0-9_-]+$ ]]; then
-                    ts_flags="--authkey=$arg --accept-routes --accept-dns=false --ssh"
+                    ts_flags="--reset --authkey=$arg --accept-routes --accept-dns=false --ssh"
                 else
                     echo "Error: Invalid auth key format. Expected 'tskey-...'."
                     return 1
