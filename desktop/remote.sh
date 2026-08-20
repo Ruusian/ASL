@@ -752,11 +752,11 @@ autoconnect_daemon() {
                 bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi
 
-            # 4. Ngrok Backup & Parallel Tunnel (Auto-Rotate on quota exhaust)
-            if ! ngrok_running; then
-                echo "[Autoconnect $(date +%H:%M:%S)] Ngrok tunnel offline. Starting/rotating token pool..." >> "$AUTOCONNECT_LOG"
-                bash "$script_path" ngrok start >> "$AUTOCONNECT_LOG" 2>&1 || true
-            fi
+#             # 4. Ngrok Backup & Parallel Tunnel (Auto-Rotate on quota exhaust)
+#             if ! ngrok_running; then
+#                 echo "[Autoconnect $(date +%H:%M:%S)] Ngrok tunnel offline. Starting/rotating token pool..." >> "$AUTOCONNECT_LOG"
+#                 bash "$script_path" ngrok start >> "$AUTOCONNECT_LOG" 2>&1 || true
+#             fi
         fi
 
         # Rotate log file if > 100KB to prevent high disk usage
@@ -764,7 +764,7 @@ autoconnect_daemon() {
             tail -n 200 "$AUTOCONNECT_LOG" > "$AUTOCONNECT_LOG.tmp" 2>/dev/null && mv "$AUTOCONNECT_LOG.tmp" "$AUTOCONNECT_LOG" 2>/dev/null || true
         fi
 
-        sleep 15
+        sleep 30
     done
 
     rm -f "$AUTOCONNECT_PID" 2>/dev/null || true
@@ -823,7 +823,7 @@ start_all() {
     fi
     serveo_control start
     echo ""
-    ngrok_control start || true
+    # ngrok_control start || true  [DISABLED - on-demand only]
     echo ""
     autoconnect_control start
     echo ""

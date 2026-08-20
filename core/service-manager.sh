@@ -26,7 +26,7 @@ asl_service_start() {
                 taskset -pc 0-3 "$pid" >/dev/null 2>&1 || true
             fi
         done
-        su -c "sysctl -w net.core.rmem_max=8388608 net.core.wmem_max=8388608 net.core.netdev_max_backlog=10000 net.core.somaxconn=2048 net.ipv4.tcp_fastopen=3 2>/dev/null" 2>/dev/null || true
+        su -c "sysctl -w net.core.rmem_max=8388608 net.core.wmem_max=8388608 net.core.rmem_default=262144 net.core.wmem_default=262144 net.ipv4.tcp_rmem=4096 87380 8388608 net.ipv4.tcp_wmem=4096 65536 8388608 net.core.netdev_max_backlog=10000 net.core.somaxconn=2048 net.ipv4.tcp_fastopen=3 net.ipv4.tcp_mtu_probing=1 net.ipv4.tcp_slow_start_after_idle=0 net.ipv4.tcp_notsent_lowat=16384 net.ipv4.tcp_window_scaling=1 net.ipv4.tcp_sack=1 2>/dev/null" 2>/dev/null || true
         echo "[✓] Android 14 Phantom Process Killer & Doze disabled, AppOps & Standby Bucket active, CPU affinity set, OOM protection applied & Kernel TCP tuned."
     fi
 
@@ -245,9 +245,9 @@ asl_service_status() {
     loop_pid=$(pgrep -f "asl-watchdog-loop" 2>/dev/null | head -1 || true)
     if [ -n "$loop_pid" ]; then
         loop_mem=$(fmt_mem "$loop_pid")
-        echo " Watchdog Loop:  ACTIVE (PID: $loop_pid, RAM: $loop_mem, Interval: 60s)"
+        echo " Watchdog Loop:  ACTIVE (PID: $loop_pid, RAM: $loop_mem, Interval: 180s)"
     else
-        echo " Watchdog Loop:  STANDBY (Run 'asl service loop' to start 60s background daemon)"
+        echo " Watchdog Loop:  STANDBY (Run 'asl service loop' to start 180s background daemon)"
     fi
 
     if is_mounted; then
@@ -309,16 +309,16 @@ asl_service_check() {
         fi
     fi
 
-    # 4. Ngrok Tunnel Check (if enabled by user state)
-    if [ -f "$prefix/tmp/asl-ngrok.state" ]; then
-        if ! pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || ! curl -s http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
-            echo "[!] Ngrok tunnel unresponsive — cycling active authtoken pool..."
-            if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
-                bash "$SCRIPT_DIR/desktop/remote.sh" ngrok start >/dev/null 2>&1 || true
-                healed=$((healed + 1))
-            fi
-        fi
-    fi
+#     # 4. Ngrok Tunnel Check (if enabled by user state)
+#     if [ -f "$prefix/tmp/asl-ngrok.state" ]; then
+#         if ! pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || ! curl -s http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
+#             echo "[!] Ngrok tunnel unresponsive — cycling active authtoken pool..."
+#             if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
+#                 bash "$SCRIPT_DIR/desktop/remote.sh" ngrok start >/dev/null 2>&1 || true
+#                 healed=$((healed + 1))
+#             fi
+#         fi
+#     fi
 
     # 5. Chroot Mount Check
     if ! is_mounted; then
@@ -375,7 +375,7 @@ asl_service_loop() {
         echo "[!] ASL autonomous watchdog loop is already RUNNING (PID: $(pgrep -f "asl-watchdog-loop" | head -1))."
         return 0
     fi
-    echo "[*] Starting ASL autonomous background watchdog daemon (60s interval)..."
+    echo "[*] Starting ASL autonomous background watchdog daemon (180s interval)..."
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
     mkdir -p "$prefix/tmp" 2>/dev/null || true
     local mgr_path="$SCRIPT_DIR/core/service-manager.sh"
@@ -386,7 +386,7 @@ asl_service_loop() {
             while true; do
                 echo \"[$(date +\"%Y-%m-%d %H:%M:%S\")] Watchdog health check...\"
                 bash \"'"$mgr_path"'\" check 2>&1
-                sleep 60
+                sleep 180
             done
         "
     ' >> "$prefix/tmp/asl-watchdog.log" 2>&1 &
