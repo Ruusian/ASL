@@ -173,7 +173,8 @@ ASL/
 │   ├── asl-hub-installer.sh # Deploys ASL Hub GTK3 Control Center into Debian rootfs
 │   ├── start-desktop.sh  # Termux:X11 desktop session & PulseAudio launcher
 │   ├── theme.sh          # GTK theme & icon set switcher
-│   ├── remote.sh         # SSH tunnels, Ngrok, Tailscale & LAN SSH bridge
+│   ├── remote.sh         # SSH tunnel dispatcher (sources remote/ modules)
+│   └── remote/         # Modular tunnel components (common, lan, serveo, oracle, ngrok, keys, autoconnect)
 │   └── pi-bridge.sh      # Raspberry Pi VNC monitor bridge
 ├── tools/
 │   └── make-release.sh   # Release automation
@@ -233,8 +234,15 @@ ASL/
 | `asl desktop status` | Inspect active desktop session state |
 | `asl theme [dark\|light]` | Switch GTK theme presets |
 | `asl resolution [720p\|1080p]` | Configure Termux:X11 display resolution |
-| `asl remote ssh [start\|stop]` | Manage SSH server (port 2222) |
-| `asl remote vnc [start\|stop]` | Manage x11vnc server (port 5900) |
+| `asl remote [status]` | Show all remote bridge status |
+| `asl remote all` | Start all remote bridges + autoconnect daemon |
+| `asl remote lan [start\|stop]` | LAN SSH server (port 8022) |
+| `asl remote oracle [start\|stop]` | Oracle Cloud VPS always-on tunnel |
+| `asl remote serveo [start\|stop]` | Persistent Serveo jump-host tunnel |
+| `asl remote ngrok [start\|stop]` | Ngrok tunnel (on-demand multi-token pool) |
+| `asl remote keys [list\|add]` | Manage SSH public keys |
+| `asl remote autoconnect` | 24/7 auto-reconnect daemon with wake-lock |
+| `asl remote password set <p>` | Set remote SSH password |
 | `asl audio [start\|stop\|test]`| PulseAudio server management |
 
 ### 6. Termux & Android Host Bridge

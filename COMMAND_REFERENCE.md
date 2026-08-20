@@ -302,25 +302,60 @@ asl termux-droid bridge             # Show Raspberry Pi bridge instructions
 
 ---
 
-### `asl remote ssh`
-Enable SSH access.
+### `asl remote`
+Modular remote access bridge with 8 tunnel components (LAN, Oracle VPS, Serveo, Ngrok, SSH Keys, Autoconnect).
 
 ```bash
-asl remote ssh on                   # Enable SSH
-asl remote ssh off                  # Disable SSH
-asl remote ssh port 2222            # Change port
-asl remote ssh list                 # Show SSH connections
+asl remote status                   # Show all tunnel status
+asl remote all                      # Start LAN + Oracle + Serveo + Autoconnect
 ```
 
----
-
-### `asl remote vnc`
-Enable VNC access.
-
+#### LAN SSH (port 8022)
 ```bash
-asl remote vnc on                   # Enable VNC
-asl remote vnc off                  # Disable VNC
-asl remote vnc port 5900            # Change port
+asl remote lan start                # Start LAN SSH server
+asl remote lan stop                 # Stop LAN SSH server
+```
+
+#### Oracle Cloud VPS (Always-On Tunnel)
+```bash
+asl remote oracle start             # Connect to Oracle VPS reverse tunnel
+asl remote oracle stop              # Disconnect Oracle tunnel
+```
+
+#### Serveo Persistent Tunnel
+```bash
+asl remote serveo start             # Start Serveo tunnel (alias: asl-<user>)
+asl remote serveo stop              # Stop Serveo tunnel
+asl remote serveo alias <name>      # Set custom Serveo subdomain
+```
+
+#### Ngrok (On-Demand Multi-Token Pool)
+```bash
+asl remote ngrok start              # Start Ngrok tunnel (auto-rotates tokens)
+asl remote ngrok stop               # Stop Ngrok tunnel
+asl remote ngrok add-token <token>  # Add auth token to pool
+asl remote ngrok list-tokens        # List tokens and quota status
+asl remote ngrok rotate             # Rotate to next active token
+asl remote ngrok reset              # Reset quota-exhausted tokens
+```
+
+#### SSH Key Management
+```bash
+asl remote keys list                # List authorized SSH public keys
+asl remote keys add "<pubkey>"      # Add an SSH public key
+asl remote keys import-github <user> # Import keys from GitHub
+```
+
+#### Autoconnect Daemon
+```bash
+asl remote autoconnect              # Start 24/7 auto-reconnect daemon
+asl remote autoconnect stop         # Stop autoconnect daemon
+```
+
+#### Password Management
+```bash
+asl remote password set <pass>      # Set remote SSH password
+asl remote password clear           # Remove remote SSH password
 ```
 
 ---
@@ -618,9 +653,9 @@ asl doctor                  # Diagnostics
 asl log                     # View logs
 
 # Online help
-# GitHub: https://github.com/Ruusian5/ASL
-# Docs: https://github.com/Ruusian5/ASL/blob/master/GETTING_STARTED.md
-# Troubleshooting: https://github.com/Ruusian5/ASL/blob/master/TROUBLESHOOTING.md
+# GitHub: https://github.com/Ruusian/ASL
+# Docs: https://github.com/Ruusian/ASL/blob/master/GETTING_STARTED.md
+# Troubleshooting: https://github.com/Ruusian/ASL/blob/master/TROUBLESHOOTING.md
 ```
 
 ---

@@ -33,13 +33,13 @@ Open **Termux** and run:
 
 ```bash
 # Recommended CDN Mirror (bypasses raw GitHub HTTP 429 rate limits):
-curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian5/ASL@master/install.sh | bash
+curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian/ASL@master/install.sh | bash
 ```
 
 Or install via Git clone:
 
 ```bash
-git clone https://github.com/Ruusian5/ASL.git
+git clone https://github.com/Ruusian/ASL.git
 cd ASL
 bash install.sh
 ```
@@ -327,7 +327,7 @@ asl desktop start
 
 ## 💬 Support & Community
 
-- 🐛 **Report Bugs**: GitHub Issues at https://github.com/Ruusian5/ASL/issues
+- 🐛 **Report Bugs**: GitHub Issues at https://github.com/Ruusian/ASL/issues
 - 💡 **Suggest Features**: GitHub Discussions
 - 📧 **Contact**: abhiksarkar00@gmail.com
 

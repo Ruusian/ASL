@@ -9,7 +9,7 @@ Thank you for your interest in improving Android Subsystem for Linux (ASL)! This
 ### 1. **Report Bugs** 🐛
 Found an issue? Help us fix it:
 
-- **GitHub Issues**: https://github.com/Ruusian5/ASL/issues
+- **GitHub Issues**: https://github.com/Ruusian/ASL/issues
 - **Include**: Your device info, Android version, steps to reproduce
 - **Example**:
   ```
@@ -68,7 +68,7 @@ Help ensure quality:
 
 ```bash
 # 1. Fork the repository
-# Go to: https://github.com/Ruusian5/ASL
+# Go to: https://github.com/Ruusian/ASL
 # Click "Fork" button
 
 # 2. Clone your fork
@@ -76,7 +76,7 @@ git clone https://github.com/YOUR_USERNAME/ASL.git
 cd ASL
 
 # 3. Add upstream remote
-git remote add upstream https://github.com/Ruusian5/ASL.git
+git remote add upstream https://github.com/Ruusian/ASL.git
 
 # 4. Create a feature branch
 git checkout -b feature/my-awesome-feature
@@ -375,8 +375,8 @@ Fixes #2
 
 ## 💬 Questions?
 
-- **GitHub Discussions**: https://github.com/Ruusian5/ASL/discussions
-- **Issues**: https://github.com/Ruusian5/ASL/issues
+- **GitHub Discussions**: https://github.com/Ruusian/ASL/discussions
+- **Issues**: https://github.com/Ruusian/ASL/issues
 - **Email**: abhiksarkar00@gmail.com
 
 ---

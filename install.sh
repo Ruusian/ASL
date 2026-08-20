@@ -15,7 +15,7 @@ if [ -d "$TARGET_DIR/.git" ]; then
     # to avoid pulling code from a hijacked or mistyped remote.
     origin_url=$(git config --get remote.origin.url 2>/dev/null || echo "")
     case "$origin_url" in
-        *github.com/Ruusian5/ASL*|*github.com/Ruusian/ASL*)
+        *github.com/Ruusian/ASL*|*github.com/Ruusian/ASL*)
             git pull origin master 2>/dev/null || true
             ;;
         *)
@@ -25,7 +25,7 @@ if [ -d "$TARGET_DIR/.git" ]; then
 else
     echo -e "\033[0;32m[*] Cloning ASL repository to $TARGET_DIR...\033[0m"
     if ! git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null && \
-       ! git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null; then
+       ! git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null; then
         echo -e "\033[0;31m[!] Failed to clone ASL repository. Check your internet connection.\033[0m"
         exit 1
     fi
@@ -198,7 +198,7 @@ fi
 # Re-verify Repository Clone now that git is installed
 if [ ! -d "$TARGET_DIR/.git" ]; then
     echo -e "${GREEN}[*] Provisioning ASL repository to $TARGET_DIR...${RESET}"
-    (git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null || git clone https://github.com/Ruusian5/ASL.git "$TARGET_DIR" 2>/dev/null) || {
+    (git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null || git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null) || {
         echo -e "${RED}[!] Failed to clone the ASL repository.${RESET}"
         exit 1
     }
@@ -318,7 +318,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
     if [ "$DISTRO_TYPE" != "skip" ]; then
         if [ "$IS_MODDED" = "true" ]; then
             RELEASE_URL="https://github.com/Ruusian/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
-            RELEASE_URL_ALT="https://github.com/Ruusian5/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
+            RELEASE_URL_ALT="https://github.com/Ruusian/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
             TEMP_TAR="$PREFIX/tmp/asl-modded-temp.tar.xz"
             echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
             echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
@@ -326,7 +326,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
             if (curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_TAR" "$RELEASE_URL" || curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o "$TEMP_TAR" "$RELEASE_URL_ALT" || wget -q --timeout=15 --tries=2 -O "$TEMP_TAR" "$RELEASE_URL_ALT") && [ -s "$TEMP_TAR" ]; then
                 echo -e "${GREEN}[*] Verifying downloaded archive checksum...${RESET}"
                 SHA256SUMS_URL="https://github.com/Ruusian/ASL/releases/latest/download/SHA256SUMS"
-                SHA256SUMS_URL_ALT="https://github.com/Ruusian5/ASL/releases/latest/download/SHA256SUMS"
+                SHA256SUMS_URL_ALT="https://github.com/Ruusian/ASL/releases/latest/download/SHA256SUMS"
                 TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
                 EXPECTED=""
                 if ! (curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL" || curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL_ALT" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL_ALT"); then

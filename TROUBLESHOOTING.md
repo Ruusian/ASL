@@ -421,7 +421,7 @@ If you can't find a solution:
    ```
 
 2. **Report the issue**
-   - Go to: https://github.com/Ruusian5/ASL/issues
+   - Go to: https://github.com/Ruusian/ASL/issues
    - Include: `asl doctor` output, error message, and steps to reproduce
 
 3. **Provide debug info**

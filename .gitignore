@@ -11,3 +11,30 @@ __pycache__/
 *.sock
 tmp/
 .DS_Store
+
+# Secrets & credentials (never commit)
+*.key
+*.pem
+*.p12
+remote_password
+ngrok_tokens.txt
+ngrok_exhausted.txt
+serveo_alias.txt
+
+# Build artifacts
+*.deb
+*.tar.gz
+*.zip
+dist/
+build/
+node_modules/
+
+# Termux / Android
+*.oat
+*.dex
+*.odex
+classes.dex
+
+# Runtime state
+asl-*.state
+asl-ngrok-current.token

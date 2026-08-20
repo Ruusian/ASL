@@ -190,7 +190,7 @@ Details:
 **ASL Status**:
 - Version: 1.1
 - Branch: master
-- Remote: https://github.com/Ruusian5/ASL.git
+- Remote: https://github.com/Ruusian/ASL.git
 - Last commit: 64b2445 (Add: CHANGELOG and GitHub Actions)
 - Release tag: v1.1 (pushed to GitHub)
 

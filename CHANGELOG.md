@@ -5,9 +5,56 @@ All notable changes to the ASL (Android Subsystem for Linux) project are documen
 ## [Unreleased] - Development Fork
 
 This repository is a continuously updated nightly development fork of
-[Ruusian/ASL](https://github.com/Ruusian5/ASL), maintained by **Abhik Sarkar**.
+[Ruusian/ASL](https://github.com/Ruusian/ASL), maintained by **Abhik Sarkar**.
 Users can install and test it, but changes may be frequent and stability is not
 guaranteed while new features, fixes, and project updates are being developed.
+
+## [1.6] - 2026-08-20
+
+### 🏗️ Modular Architecture & Performance Optimization
+
+- **Modular Remote Access Bridge (`desktop/remote.sh`)**:
+  - Refactored monolithic 918-line `desktop/remote.sh` into 8 modular components under `desktop/remote/`:
+    - `common.sh` - Shared state, SSH daemon management, password management
+    - `lan.sh` - LAN SSH server control (port 8022)
+    - `serveo.sh` - Persistent Serveo jump-host tunnel with alias fallback
+    - `oracle.sh` - Oracle Cloud VPS dedicated always-on relay (130.210.19.7)
+    - `ngrok.sh` - Multi-token pool with quota auto-rotation and metrics
+    - `keys.sh` - SSH public key management and GitHub key import
+    - `autoconnect.sh` - 24/7 auto-reconnect daemon with wake-lock
+  - New `desktop/remote.sh` is a thin 100-line dispatcher sourcing all modules
+  - Preserved full backward compatibility - all existing `asl remote` commands work unchanged
+
+- **TCP Network Tuning (`core/service-manager.sh`)**:
+  - Added 15 kernel sysctl parameters for optimized TCP throughput over double-SSH hops
+  - New persistent tuning file: `/data/data/com.termux/files/usr/etc/sysctl.d/99-asl-tcp-tuning.conf`
+  - TCP window scaling, buffer tuning, congestion control (BBR), and keepalive optimization
+
+- **Watchdog & Daemon Optimization (`core/service-manager.sh`)**:
+  - Watchdog health-check interval: 60s -> 180s (3x reduction in CPU wakeups)
+  - Autoconnect daemon poll interval: 15s -> 30s
+  - SSHD compression disabled (was conflicting with client-side config)
+
+- **Ngrok On-Demand Only (`desktop/remote.sh`)**:
+  - Removed ngrok from auto-start and autoconnect daemon
+  - Saves ~31MB RAM + bandwidth when not in active use
+  - Manual start via `asl remote ngrok start` still available
+
+- **Debian Chroot Dev Environment**:
+  - Installed core development tools in Debian 13.6 Trixie chroot: Python 3.13, GCC 14.2, curl 8.14, git 2.47, vim 9.1, htop, tmux, build-essential, openssh-client
+  - Installed Box64 v0.3.4 (arm64 -> amd64 emulation layer)
+  - Installed Wine64 v10.0 (native arm64 Windows API implementation)
+  - Total chroot: 222 packages, ready for x86/x64 emulation workloads
+
+- **Storage Cleanup**:
+  - NPM cache: 1.3GB -> 56KB (freed 1.3GB)
+  - Omniroute logs: 25MB -> 107KB (freed 25MB)
+  - Removed duplicate SSH keys (id_rsa_serveo, id_free_tunnel - 4 files)
+  - Cleaned stale known_hosts entries (16 -> 14 lines)
+
+- **Repository Hygiene**:
+  - Added comprehensive `.gitignore` covering secrets, state files, build artifacts, and runtime state
+  - Committed all pending changes to `core/service-manager.sh` and `desktop/remote.sh`
 
 ## [1.5] - 2026-08-17
 
@@ -148,7 +195,7 @@ Initial stable release with core functionality for ASL chroot management.
 
 ## How to Report Issues
 
-Found a bug? Please open an issue on [GitHub](https://github.com/Ruusian5/ASL/issues) with:
+Found a bug? Please open an issue on [GitHub](https://github.com/Ruusian/ASL/issues) with:
 1. ASL version (`asl --version`)
 2. Device info (Android version, Termux version)
 3. Steps to reproduce
@@ -165,4 +212,4 @@ Contributions are welcome! Please:
 
 ---
 
-**Maintained by**: [@Ruusian5](https://github.com/Ruusian5)
+**Maintained by**: [@Ruusian](https://github.com/Ruusian)
