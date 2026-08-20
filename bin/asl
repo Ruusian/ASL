@@ -460,6 +460,25 @@ asl_gpu_cached() {
     printf '%s %s\n' "$now" "${ASL_GPU_PROFILE:-generic-virgl}" > "$cache_file" 2>/dev/null || true
 }
 
+asl_wan_ping_cached() {
+    local now cache_file cache_time cache_ping
+    now=$(date +%s 2>/dev/null || echo 0)
+    cache_file="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.asl_ping_cache"
+
+    if [ -f "$cache_file" ]; then
+        read -r cache_time cache_ping < "$cache_file" 2>/dev/null || true
+        if [ -n "$cache_time" ] && [[ "$cache_time" =~ ^[0-9]+$ ]] && [ "$((now - cache_time))" -lt 15 ] && [ -n "$cache_ping" ]; then
+            printf '%s' "$cache_ping"
+            return 0
+        fi
+    fi
+
+    cache_ping=$(ping -c 1 -W 1 -w 1 1.1.1.1 2>/dev/null | awk -F'/' '/rtt/ {printf "%dms", $5}')
+    [ -n "$cache_ping" ] || cache_ping="online"
+    printf '%s %s\n' "$now" "$cache_ping" > "$cache_file" 2>/dev/null || true
+    printf '%s' "$cache_ping"
+}
+
 asl_remote_summary() {
     local active=()
     if pgrep -f "sshd" >/dev/null 2>&1; then active+=("LAN:8022"); fi
@@ -504,18 +523,33 @@ asl_remote_details() {
     fi
     if [ -f "$prefix/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then
         local ng_url ng_host ng_port ng_json ng_status_json ng_lat ng_region ng_conns
-        ng_json=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null)
+        local now ng_cache cache_time
+        now=$(date +%s 2>/dev/null || echo 0)
+        ng_cache="${prefix}/tmp/.asl_ngrok_api_cache"
+        if [ -f "$ng_cache" ]; then
+            read -r cache_time < "$ng_cache" 2>/dev/null || true
+            if [ -n "$cache_time" ] && [[ "$cache_time" =~ ^[0-9]+$ ]] && [ "$((now - cache_time))" -lt 5 ]; then
+                ng_json=$(sed -n '2p' "$ng_cache" 2>/dev/null || true)
+                ng_status_json=$(sed -n '3p' "$ng_cache" 2>/dev/null || true)
+            fi
+        fi
+        if [ -z "$ng_json" ]; then
+            ng_json=$(curl -s --max-time 0.2 --connect-timeout 0.2 http://127.0.0.1:4040/api/tunnels 2>/dev/null)
+            ng_status_json=$(curl -s --max-time 0.2 --connect-timeout 0.2 http://127.0.0.1:4040/api/status 2>/dev/null)
+            if [ -n "$ng_json" ]; then
+                printf '%s\n%s\n%s\n' "$now" "$(echo "$ng_json" | tr -d '\n')" "$(echo "$ng_status_json" | tr -d '\n')" > "$ng_cache" 2>/dev/null || true
+            fi
+        fi
+
         ng_url=$(echo "$ng_json" | grep -oE 'tcp://[^"]+' | head -1)
         if [ -n "$ng_url" ]; then
             ng_host=$(echo "$ng_url" | sed -E 's|tcp://([^:]+):.*|\1|')
-            ng_port=$(echo "$ng_url" | sed -E 's|tcp://[^:]+:([0-9]+)|\1|')
+            ng_port=$(echo "$ng_url" | sed -E 's|tcp://([^:]+:([0-9]+))|\1|' | sed -E 's|.*:||')
             details+=("  • Ngrok Tunnel:     ssh -p ${ng_port} ${user}@${ng_host}")
         else
             details+=("  • Ngrok Tunnel:     Active (Fetching tunnel URL...)")
         fi
 
-        # Fetch live ping, region & connection metrics from local Ngrok API
-        ng_status_json=$(curl -s http://127.0.0.1:4040/api/status 2>/dev/null)
         ng_lat=$(echo "$ng_status_json" | grep -oE '"latency":"[^"]+"' | cut -d'"' -f4)
         ng_region=$(echo "$ng_status_json" | grep -oE '"region":"[^"]+"' | cut -d'"' -f4)
         ng_conns=$(echo "$ng_json" | grep -oE '"count":[0-9]+' | head -1 | cut -d':' -f2)
@@ -540,10 +574,12 @@ asl_remote_details() {
         details+=("    - Bandwidth Quota:  [██████░░░░] 60% (600 MB / 1000 MB Left)")
         if [ -f "$tok_file" ] && [ -s "$tok_file" ]; then
             details+=("    - Token Pool Quota: ${active_toks}/${total_toks} Active Keys")
+            local exh_content=""
+            [ -f "$exh_file" ] && exh_content=$(cat "$exh_file" 2>/dev/null || true)
             while IFS= read -r tok || [ -n "$tok" ]; do
                 [ -n "$tok" ] || continue
                 local st="ACTIVE"
-                if grep -qF "$tok" "$exh_file" 2>/dev/null; then
+                if [ -n "$exh_content" ] && [[ "$exh_content" == *"$tok"* ]]; then
                     st="CARD REQUIRED (ERR_NGROK_8013)"
                 elif [ "$tok" = "$curr_tok" ]; then
                     st="ACTIVE & VERIFIED (In Use)"
@@ -679,8 +715,7 @@ overview() {
         oom_status="ACTIVE (-1000)"
         wdog_status="RUNNING"
     fi
-    wan_ping=$(ping -c 1 -w 2 1.1.1.1 2>/dev/null | awk -F'/' '/rtt/ {printf "%dms", $5}')
-    [ -n "$wan_ping" ] || wan_ping="online"
+    wan_ping=$(asl_wan_ping_cached)
 
     printf '%s━━━ %sAndroid Subsystem for Linux (ASL)%s %sConsole v2.5.1%s %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_DIM" "$C_CYAN$C_BOLD" "$C_CYAN$C_BOLD" "$C_RESET"
     printf '  %sChroot:%s %s   %sDesktop:%s %s   %sGPU:%s %s%s\n' "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE$C_RESET"
@@ -963,33 +998,16 @@ dashboard() {
                     esac
                     continue
                     ;;
-                LEFT)
+                LEFT|RIGHT)
                     case "$sel" in
                         1|2|3|4|5|6) sel=$(( sel + 6 )) ;;
+                        7|8|9|10|11|12) sel=$(( sel - 6 )) ;;
                         13|14|15) sel=$(( sel + 3 )) ;;
+                        16|17|18) sel=$(( sel - 3 )) ;;
+                        19) sel=15 ;;
                         20) sel=22 ;;
                         21) sel=23 ;;
                         24) sel=25 ;;
-                        7|8|9|10|11|12) sel=$(( sel - 6 )) ;;
-                        16|17|18) sel=$(( sel - 3 )) ;;
-                        19) sel=13 ;;
-                        22) sel=20 ;;
-                        23) sel=21 ;;
-                        25) sel=24 ;;
-                        *) sel=1 ;;
-                    esac
-                    continue
-                    ;;
-                RIGHT)
-                    case "$sel" in
-                        1|2|3|4|5|6) sel=$(( sel + 6 )) ;;
-                        13|14|15) sel=$(( sel + 3 )) ;;
-                        20) sel=22 ;;
-                        21) sel=23 ;;
-                        24) sel=25 ;;
-                        7|8|9|10|11|12) sel=$(( sel - 6 )) ;;
-                        16|17|18) sel=$(( sel - 3 )) ;;
-                        19) sel=13 ;;
                         22) sel=20 ;;
                         23) sel=21 ;;
                         25) sel=24 ;;
