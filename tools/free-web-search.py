@@ -25,31 +25,38 @@ def search_ddg_html(query, max_results=5):
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             html_text = resp.read().decode("utf-8", errors="ignore")
-            # Find result blocks
-            matches = re.findall(
-                r'<a class="result__snippet"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
-                html_text,
-                re.DOTALL
+
+            # Extract combined title, url, snippet items
+            items = re.findall(
+                r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)</a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)</a>',
+                html_text
             )
 
-            if not matches:
-                # Alternative regex pattern for DDG HTML layout
-                links = re.findall(r'<a class="result__url" href="([^"]+)".*?<a class="result__snippet"[^>]*>(.*?)</a>', html_text, re.DOTALL)
-                for href, snippet in links:
-                    matches.append((href, snippet))
+            if not items:
+                # Alternative regex pattern for DDG HTML layout fallback
+                items = re.findall(
+                    r'<a[^>]*class="result__snippet"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)</a>',
+                    html_text
+                )
+                for raw_url, raw_snippet in items[:max_results]:
+                    clean_snippet = unescape(re.sub(r"<[^>]+>", "", raw_snippet)).strip()
+                    m_url = re.search(r"uddg=(https?%3A%2F%2F[^&]+)", raw_url)
+                    final_url = urllib.parse.unquote(m_url.group(1)) if m_url else raw_url
+                    results.append({
+                        "title": final_url,
+                        "url": final_url,
+                        "snippet": clean_snippet
+                    })
+                return results
 
-            for raw_url, raw_snippet in matches[:max_results]:
+            for raw_url, raw_title, raw_snippet in items[:max_results]:
+                clean_title = unescape(re.sub(r"<[^>]+>", "", raw_title)).strip()
                 clean_snippet = unescape(re.sub(r"<[^>]+>", "", raw_snippet)).strip()
-                # Parse actual target URL from uddg param
                 m_url = re.search(r"uddg=(https?%3A%2F%2F[^&]+)", raw_url)
                 final_url = urllib.parse.unquote(m_url.group(1)) if m_url else raw_url
 
-                # Extract title if possible
-                title_match = re.search(r'<a class="result__a"[^>]*>(.*?)</a>', html_text)
-                title = unescape(re.sub(r"<[^>]+>", "", title_match.group(1))).strip() if title_match else final_url
-
                 results.append({
-                    "title": title,
+                    "title": clean_title,
                     "url": final_url,
                     "snippet": clean_snippet
                 })

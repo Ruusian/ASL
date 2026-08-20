@@ -13,8 +13,16 @@ HOST_CONF_FILE="${PREFIX:-/data/data/com.termux/files/usr}/etc/asl.conf"
 
 init_default_config() {
     local target="${1:-$CONF_FILE}"
+    if [ ! -d "$(dirname "$target")" ]; then
+        target="$HOST_CONF_FILE"
+    fi
+
     local target_dir="$(dirname "$target")"
     mkdir -p "$target_dir" 2>/dev/null || asl_exec "mkdir -p '$target_dir'" 2>/dev/null || true
+
+    if [ -f "$target" ]; then
+        return 0
+    fi
 
     local default_content="# Android Subsystem for Linux (ASL) System Configuration
 # File location: /etc/asl.conf (inside container) or \$PREFIX/etc/asl.conf
@@ -43,15 +51,9 @@ generate_hosts = true
 profile = turnip-zink
 hud = off
 "
-    if [ -d "$DEBIANPATH" ]; then
-        asl_chroot_exec "
-            if [ ! -f /etc/asl.conf ]; then
-                cat << 'ASLCONF_EOF' > /etc/asl.conf
+    printf '%s' "$default_content" > "$target" 2>/dev/null || asl_exec "cat << 'EOF' > '$target'
 $default_content
-ASLCONF_EOF
-            fi
-        " 2>/dev/null || true
-    fi
+EOF" 2>/dev/null || true
 }
 
 get_config_value() {
