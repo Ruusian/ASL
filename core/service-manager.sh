@@ -19,7 +19,7 @@ asl_service_start() {
 
     # 0. Disable Android Phantom Process Killer, set OOM score adjustment, CPU affinity & tune TCP sysctl if root available
     if su -c "id -u" >/dev/null 2>&1; then
-        su -c "device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; settings put global settings_enable_monitor_phantom_procs false 2>/dev/null; setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false 2>/dev/null; dumpsys deviceidle whitelist +com.termux 2>/dev/null" 2>/dev/null || true
+        su -c "device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; settings put global settings_enable_monitor_phantom_procs false 2>/dev/null; setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false 2>/dev/null; dumpsys deviceidle whitelist +com.termux 2>/dev/null; am set-standby-bucket com.termux active 2>/dev/null; cmd appops set com.termux RUN_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS allow 2>/dev/null" 2>/dev/null || true
         for pid in $(pgrep -f "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop" 2>/dev/null); do
             su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || true
             if command -v taskset >/dev/null 2>&1; then
@@ -27,7 +27,7 @@ asl_service_start() {
             fi
         done
         su -c "sysctl -w net.core.rmem_max=8388608 net.core.wmem_max=8388608 net.core.netdev_max_backlog=10000 net.core.somaxconn=2048 net.ipv4.tcp_fastopen=3 2>/dev/null" 2>/dev/null || true
-        echo "[✓] Android 14 Phantom Process Killer & Doze disabled, CPU affinity set, OOM protection applied & Kernel TCP tuned."
+        echo "[✓] Android 14 Phantom Process Killer & Doze disabled, AppOps & Standby Bucket active, CPU affinity set, OOM protection applied & Kernel TCP tuned."
     fi
 
     # 1. Engage CPU wake lock to prevent Android deep sleep
