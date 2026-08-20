@@ -463,6 +463,7 @@ asl_gpu_cached() {
 asl_remote_summary() {
     local active=()
     if pgrep -f "sshd" >/dev/null 2>&1; then active+=("LAN:8022"); fi
+    if [ -f "$PREFIX/tmp/asl-oracle.state" ] && pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then active+=("Oracle"); fi
     if [ -f "$PREFIX/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then active+=("Serveo"); fi
     if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then active+=("Ngrok"); fi
     if [ ${#active[@]} -gt 0 ]; then
@@ -486,6 +487,11 @@ asl_remote_details() {
 
     if pgrep -f "sshd" >/dev/null 2>&1; then
         details+=("  • LAN SSH (Host):   ssh -p 8022 ${user}@${host_ip}")
+    fi
+    if [ -f "$prefix/tmp/asl-oracle.state" ] && pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then
+        details+=("  • Oracle VPS Tunnel: ssh -J ubuntu@130.210.19.7 -p 2222 ${user}@127.0.0.1")
+    elif [ -f "$HOME/.ssh/oracle_vps.key" ]; then
+        details+=("  • Oracle VPS Tunnel: Standby (Run 'asl remote oracle start')")
     fi
     if [ -f "$prefix/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
         local s_alias="asl-${user}"
@@ -1087,19 +1093,29 @@ dashboard() {
                 pause_dashboard ;;
             10|v|V)
                 echo "Remote Manager:"
-                echo "  1) Start All Tunnels (Serveo + Ngrok + LAN + AutoConnect)"
-                echo "  2) Serveo Tunnel Start / Stop"
-                echo "  3) Ngrok Tunnel Start / Stop"
-                echo "  4) Manage Ngrok Auth Tokens (Add / List / Reset)"
-                echo "  5) Show Remote VNC / Desktop Tunnel Instructions"
-                echo "  6) LAN SSH Server Start / Stop"
-                echo "  7) Auto-Connect Daemon Start / Stop"
-                echo "  8) Configure Remote SSH Password (optional)"
-                echo "  9) Show Connection Info & Status"
-                read -r -p "Select action [1-9]: " r_act
+                echo "  1) Start All Tunnels (Oracle + Serveo + Ngrok + LAN + AutoConnect)"
+                echo "  2) Oracle VPS Tunnel Start / Stop / Status"
+                echo "  3) Serveo Tunnel Start / Stop"
+                echo "  4) Ngrok Tunnel Start / Stop"
+                echo "  5) Manage Ngrok Auth Tokens (Add / List / Reset)"
+                echo "  6) Show Remote VNC / Desktop Tunnel Instructions"
+                echo "  7) LAN SSH Server Start / Stop"
+                echo "  8) Auto-Connect Daemon Start / Stop"
+                echo "  9) Configure Remote SSH Password (optional)"
+                echo " 10) Show Connection Info & Status"
+                read -r -p "Select action [1-10]: " r_act
                 case "$r_act" in
                     1) bash "$REAL_SCRIPT" remote all ;;
                     2)
+                        echo "Oracle VPS: 1) Start  2) Stop  3) Status"
+                        read -r -p "Choice: " o_choice
+                        case "$o_choice" in
+                            1) bash "$REAL_SCRIPT" remote oracle start ;;
+                            2) bash "$REAL_SCRIPT" remote oracle stop ;;
+                            *) bash "$REAL_SCRIPT" remote oracle status ;;
+                        esac
+                        ;;
+                    3)
                         echo "Serveo: 1) Start  2) Stop  3) Set Custom Alias  4) Status"
                         read -r -p "Choice: " s_choice
                         case "$s_choice" in
@@ -1112,7 +1128,7 @@ dashboard() {
                             *) bash "$REAL_SCRIPT" remote serveo status ;;
                         esac
                         ;;
-                    3)
+                    4)
                         echo "Ngrok: 1) Start  2) Stop  3) Rotate Token  4) Status"
                         read -r -p "Choice: " n_choice
                         case "$n_choice" in
@@ -1122,7 +1138,7 @@ dashboard() {
                             *) bash "$REAL_SCRIPT" remote ngrok status ;;
                         esac
                         ;;
-                    4)
+                    5)
                         echo "Ngrok Tokens: 1) Add Token  2) List Pool  3) Reset Exhausted Status"
                         read -r -p "Choice: " nt_choice
                         case "$nt_choice" in
@@ -1134,10 +1150,10 @@ dashboard() {
                             3) bash "$REAL_SCRIPT" remote ngrok reset ;;
                         esac
                         ;;
-                    5)
+                    6)
                         bash "$REAL_SCRIPT" remote gui
                         ;;
-                    6)
+                    7)
                         echo "LAN SSH: 1) Start  2) Stop  3) Status"
                         read -r -p "Choice: " l_choice
                         case "$l_choice" in
@@ -1146,7 +1162,7 @@ dashboard() {
                             *) bash "$REAL_SCRIPT" remote lan status ;;
                         esac
                         ;;
-                    7)
+                    8)
                         echo "Auto-Connect Daemon: 1) Start  2) Stop  3) Status"
                         read -r -p "Choice: " ac_choice
                         case "$ac_choice" in
@@ -1155,7 +1171,7 @@ dashboard() {
                             *) bash "$REAL_SCRIPT" remote autoconnect status ;;
                         esac
                         ;;
-                    8)
+                    9)
                         read -r -p "Enter new SSH Remote Password (or 'clear' to remove): " new_ssh_pass
                         if [ "$new_ssh_pass" = "clear" ]; then
                             bash "$REAL_SCRIPT" remote password clear

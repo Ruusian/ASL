@@ -640,8 +640,8 @@ oracle_status() {
     if oracle_running; then
         echo "Oracle VPS Tunnel: RUNNING (Dedicated Always-On Private Relay)"
         echo "    Host:     ${ORACLE_HOST} (User: ${ORACLE_USER})"
-        echo "    Connect:  ssh -p ${ORACLE_PORT} $(whoami)@${ORACLE_HOST}"
-        echo "    Authentication: SSH key only"
+        echo "    Connect:  ssh -J ${ORACLE_USER}@${ORACLE_HOST} -p ${ORACLE_PORT} $(whoami)@127.0.0.1"
+        echo "    Authentication: SSH key or configured remote credential"
     else
         echo "Oracle VPS Tunnel: STOPPED"
     fi
