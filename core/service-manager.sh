@@ -264,9 +264,9 @@ asl_service_check() {
         fi
     fi
 
-    # 2. Auto-Connect Daemon Check
-    if ! pgrep -f "autoconnect" >/dev/null 2>&1; then
-        echo "[!] Auto-Connect daemon inactive — restarting remote Watchdog..."
+    # 2. Auto-Connect Daemon Check (if enabled by user state)
+    if [ -f "$prefix/tmp/asl-autoconnect.state" ] && ! pgrep -f "autoconnect" >/dev/null 2>&1; then
+        echo "[!] Auto-Connect daemon state ACTIVE but process down — restoring remote Watchdog..."
         if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
             bash "$SCRIPT_DIR/desktop/remote.sh" autoconnect start >/dev/null 2>&1 || true
             healed=$((healed + 1))
