@@ -120,8 +120,10 @@ asl_kernel_check() {
     
     # Check kernel version
     local major minor
-    major=$(uname -r | cut -d. -f1)
-    minor=$(uname -r | cut -d. -f2)
+    major=$(uname -r | cut -d. -f1 | sed 's/[^0-9].*//')
+    minor=$(uname -r | cut -d. -f2 | sed 's/[^0-9].*//')
+    [ -n "$major" ] && [[ "$major" =~ ^[0-9]+$ ]] || major=0
+    [ -n "$minor" ] && [[ "$minor" =~ ^[0-9]+$ ]] || minor=0
     if [ "$major" -lt 4 ] || ([ "$major" -eq 4 ] && [ "$minor" -lt 14 ]); then
         echo "  [!] Kernel $major.$minor is very old (4.14+ recommended for ASL)"
     fi

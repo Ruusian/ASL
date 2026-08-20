@@ -12,7 +12,7 @@ ensure_state_dir() {
 }
 
 sanitize_hud_value() {
-    printf '%s' "$1" | tr -d '\n\r"\`$\\'
+    printf '%s' "$1" | tr -d "'\n\r\"\`$\\"
 }
 
 asl_hud_is_enabled() {

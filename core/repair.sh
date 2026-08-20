@@ -10,7 +10,6 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
 fi
 
 asl_require_default_debianpath
-trap asl_release_lock EXIT INT TERM
 
 ensure_chroot_mounted() {
     if ! is_mounted; then
@@ -61,6 +60,12 @@ asl_repair_run() {
         echo "[3/4] Repairing Debian DPKG / APT lock states & dynamic linker bindings (ldconfig)..."
         asl_chroot_exec "
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            if pgrep -x 'apt|apt-get|dpkg' >/dev/null 2>&1; then
+                echo '[!] Active APT/DPKG process detected; terminating stuck package managers...'
+                pkill -x 'apt|apt-get|dpkg' 2>/dev/null || true
+                sleep 1
+                pkill -9 -x 'apt|apt-get|dpkg' 2>/dev/null || true
+            fi
             rm -f /var/lib/dpkg/lock* /var/cache/apt/archives/lock* /var/lib/apt/lists/lock*
             dpkg --configure -a 2>/dev/null || true
             apt-get install -f -y 2>/dev/null || true
@@ -81,6 +86,7 @@ asl_repair_run() {
 case "${1:-all}" in
     run|all|mounts|permissions|dpkg|env|libs)
         asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }
+        trap asl_release_lock EXIT INT TERM
         asl_repair_run "${1:-all}"
         ;;
     *)

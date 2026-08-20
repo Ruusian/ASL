@@ -29,7 +29,7 @@ ensure_serveo_key() {
 
 serveo_running() {
     [ -f "$SERVEO_STATE" ] && pgrep -f "serveo.net" >/dev/null 2>&1 && \
-        ! grep -qE "remote port forwarding failed|Permission denied|Connection closed|Connection refused|Host key verification failed|kex_exchange_identification" "$SERVEO_LOG" 2>/dev/null
+        ! tail -n 10 "$SERVEO_LOG" 2>/dev/null | grep -qE "remote port forwarding failed|Permission denied|Connection closed|Connection refused|Host key verification failed|kex_exchange_identification"
 }
 
 serveo_control() {

@@ -15,7 +15,6 @@ if [ "$DEBIANPATH" = "/" ]; then
     echo "Error: refusing to clean DEBIANPATH '/'. Run inside a real chroot only." >&2
     exit 2
 fi
-trap asl_release_lock EXIT INT TERM
 
 ensure_chroot_mounted() {
     if ! is_mounted; then
@@ -98,6 +97,7 @@ case "${1:-status}" in
         ;;
     run|clean|all|apt|tmp|cache)
         asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }
+        trap asl_release_lock EXIT INT TERM
         asl_clean_run "${1:-all}"
         ;;
     *)

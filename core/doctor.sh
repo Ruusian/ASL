@@ -54,8 +54,8 @@ if [ -d /sdcard ] && [ -w /sdcard ]; then check storage optional "/sdcard is wri
 asl_gpu_detect
 if [ -e /dev/dri ] || [ -e /dev/kgsl-3d0 ]; then check gpu optional "profile=$ASL_GPU_PROFILE; host GPU node present" PASS; else check gpu optional "profile=$ASL_GPU_PROFILE; no known host GPU node" WARN; fi
 if [ "$mounted" = 1 ]; then
-    (asl_chroot_exec "/usr/bin/test -x /usr/bin/xfwm4 -o -x /usr/bin/xfce4-session" 2>/dev/null) && check xfce required "XFCE session / window manager available" PASS || check xfce required "install Debian xfwm4 or xfce4-session" FAIL
-    (asl_chroot_exec "/usr/bin/test -x /usr/bin/dbus-launch -a \( -S /var/run/dbus/system_bus_socket -o -S /run/dbus/system_bus_socket -o -x /usr/bin/dbus-daemon \)" 2>/dev/null) && check dbus required "D-Bus daemon & launcher ready" PASS || check dbus required "install Debian dbus-x11 / dbus" FAIL
+    (asl_chroot_exec "/usr/bin/test -x /usr/bin/xfwm4 -o -x /usr/bin/xfce4-session" 2>/dev/null) && check xfce optional "XFCE session / window manager available" PASS || check xfce optional "install Debian xfwm4 or xfce4-session" WARN
+    (asl_chroot_exec "/usr/bin/test -x /usr/bin/dbus-launch -a \( -S /var/run/dbus/system_bus_socket -o -S /run/dbus/system_bus_socket -o -x /usr/bin/dbus-daemon \)" 2>/dev/null) && check dbus optional "D-Bus daemon & launcher ready" PASS || check dbus optional "install Debian dbus-x11 / dbus" WARN
     if asl_chroot_exec "/usr/bin/find /usr/share/vulkan/icd.d -type f -name '*.json' -print -quit 2>/dev/null | grep -q ." 2>/dev/null; then check vulkan optional "ICD JSON found" PASS; else check vulkan optional "no Vulkan ICD JSON found" WARN; fi
 fi
 exit "$fail"

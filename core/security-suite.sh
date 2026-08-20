@@ -72,7 +72,10 @@ asl_security_install() {
                 DEBIAN_FRONTEND=noninteractive apt-get install -y nmap tshark tcpdump socat hydra aircrack-ng john hashcat
                 ;;
             nmap) apt-get install -y nmap ;;
-            wireshark|tshark) DEBIAN_FRONTEND=noninteractive apt-get install -y tshark ;;
+            wireshark|tshark)
+                echo "wireshark-common wireshark-common/install-setuid boolean true" | debconf-set-selections 2>/dev/null || true
+                DEBIAN_FRONTEND=noninteractive apt-get install -y tshark
+                ;;
             *)
                 echo \"[*] Installing custom package: $preset\"
                 apt-get install -y \"$preset\"

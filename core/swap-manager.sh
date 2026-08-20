@@ -23,10 +23,12 @@ asl_swap_status() {
     echo "ZRAM Status:"
     if [ -d /sys/block/zram0 ]; then
         local zram_size zram_used zram_comp algo
-        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
-        zram_used=$(cat /sys/block/zram0/mm_stat 2>/dev/null | awk '{print $3}' || echo "0")
+        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null | tr -d '[:space:]')
+        zram_used=$(cat /sys/block/zram0/mm_stat 2>/dev/null | awk '{print $3}' | tr -d '[:space:]')
         algo=$(cat /sys/block/zram0/comp_algorithm 2>/dev/null || echo "unknown")
-        
+        [[ "$zram_size" =~ ^[0-9]+$ ]] || zram_size=0
+        [[ "$zram_used" =~ ^[0-9]+$ ]] || zram_used=0
+
         if [ "$zram_size" -gt 0 ]; then
             local zram_size_mb=$((zram_size / 1024 / 1024))
             local zram_used_mb=$((zram_used / 1024 / 1024))
@@ -87,8 +89,13 @@ asl_swap_setup() {
     # Enable swap if not already active
     if ! swapon --show 2>/dev/null | grep -q "$swapfile"; then
         echo "[*] Enabling swap..."
-        swapon "$swapfile" 2>/dev/null
-        echo "[✓] Swap enabled"
+        if [ "$(id -u)" -eq 0 ]; then
+            swapon "$swapfile" 2>/dev/null && echo "[✓] Swap enabled" || echo "[!] swapon failed."
+        elif su -c "id" >/dev/null 2>&1; then
+            su -c "swapon '$swapfile'" 2>/dev/null && echo "[✓] Swap enabled (via root)" || echo "[!] swapon failed."
+        else
+            echo "[!] Warning: swapon requires root privileges on Android. Run with root to enable."
+        fi
     fi
 
     # Set swappiness (prefer keeping Linux processes in RAM)

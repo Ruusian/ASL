@@ -197,7 +197,9 @@ termux_clipboard_sync() {
                         curr_clip=$(termux-clipboard-get 2>/dev/null || true)
                         if [ -n "$curr_clip" ] && [ "$curr_clip" != "$last_clip" ]; then
                             last_clip="$curr_clip"
-                            asl exec "echo -n \"$curr_clip\" | xclip -selection clipboard 2>/dev/null || echo -n \"$curr_clip\" | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
+                            local enc_clip
+                            enc_clip=$(printf '%s' "$curr_clip" | base64 | tr -d '\n')
+                            asl exec "echo -n '$enc_clip' | base64 -d | xclip -selection clipboard 2>/dev/null || echo -n '$enc_clip' | base64 -d | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
                         fi
                     fi
                     sleep 3

@@ -65,6 +65,7 @@ asl_exec() {
                 find "$tmp_dir" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
                 local tmpf
                 tmpf=$(mktemp "$tmp_dir/.asl_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$tmp_dir/.asl_cmd_$$_$RANDOM.sh"
+                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
                 printf '%s\n' "$cmd" > "$tmpf"
                 chmod 700 "$tmpf" 2>/dev/null || true
                 su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
@@ -72,7 +73,9 @@ asl_exec() {
                 rm -f "$tmpf" 2>/dev/null || true
                 return $res
             else
-                su -c "$cmd"
+                local enc_cmd
+                enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
+                su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; echo $enc_cmd | base64 -d | bash"
             fi
             ;;
         shizuku)
@@ -82,6 +85,7 @@ asl_exec() {
                 find "$tmp_dir" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
                 local tmpf
                 tmpf=$(mktemp "$tmp_dir/.asl_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$tmp_dir/.asl_cmd_$$_$RANDOM.sh"
+                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
                 printf '%s\n' "$cmd" > "$tmpf"
                 chmod 700 "$tmpf" 2>/dev/null || true
                 if command -v rish >/dev/null 2>&1; then
@@ -122,6 +126,7 @@ asl_chroot_exec() {
                 find "$DEBIANPATH/tmp" -maxdepth 1 -name '.asl_chroot_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
                 local tmpf tmpbase
                 tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
+                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
                 tmpbase=${tmpf##*/}
                 printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || asl_exec "cat << 'ASLEOF' > '$tmpf'
 $cmd
@@ -132,7 +137,9 @@ ASLEOF"
                 rm -f "$tmpf" 2>/dev/null || asl_exec "rm -f '$tmpf'"
                 return $res
             else
-                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c '$cmd'"
+                local enc_cmd
+                enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
+                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c \"\$(echo $enc_cmd | base64 -d)\""
             fi
             ;;
         shizuku)
@@ -140,6 +147,7 @@ ASLEOF"
                 mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || true
                 local tmpf tmpbase
                 tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
+                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
                 tmpbase=${tmpf##*/}
                 printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || true
                 chmod 700 "$tmpf" 2>/dev/null || true
@@ -158,6 +166,7 @@ ASLEOF"
                 mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || true
                 local tmpf tmpbase
                 tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
+                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
                 tmpbase=${tmpf##*/}
                 printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || true
                 chmod 700 "$tmpf" 2>/dev/null || true
@@ -236,7 +245,9 @@ is_mounted() {
     (awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null) && return 0
     case "$ASL_EXEC_MODE" in
         root)
-            su -c "awk -v target='$target' '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
+            local enc_target
+            enc_target=$(printf '%s' "$target" | base64 | tr -d '\n')
+            su -c "target=\$(echo $enc_target | base64 -d); awk -v target=\"\$target\" '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
             ;;
         shizuku)
             # Read-only status check: never start the container as a side effect.

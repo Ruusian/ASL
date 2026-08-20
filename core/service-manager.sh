@@ -159,6 +159,9 @@ asl_service_status() {
 
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
     local start_file="$prefix/tmp/asl-service.start_time"
+    if ! pgrep -f "sshd|autoconnect|asl-watchdog-loop|ngrok|serveo" >/dev/null 2>&1; then
+        rm -f "$start_file" 2>/dev/null || true
+    fi
     if [ -f "$start_file" ]; then
         local start_t now_t diff_t s_d s_h s_m
         start_t=$(cat "$start_file" 2>/dev/null | tr -d '[:space:]')

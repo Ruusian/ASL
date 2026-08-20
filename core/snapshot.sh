@@ -9,7 +9,6 @@ elif [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 SNAPSHOT_DIR="${ASL_SNAPSHOT_DIR:-/data/local/tmp/.asl-snapshots}"
-trap asl_release_lock EXIT INT TERM
 
 asl_require_default_debianpath
 
@@ -51,9 +50,12 @@ create_snapshot() {
         bash "$(find_script stop-chroot.sh)" || return 1
     fi
 
-    required_mb=$(asl_exec "du -sm '$DEBIANPATH' 2>/dev/null" | awk '{print $1}')
-    target_free_mb=$(df -m "/data/local/tmp" 2>/dev/null | awk 'NR==2 {print $4}')
-    if [ -n "$required_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$required_mb" ]; then
+    required_mb=$(asl_exec "du -sm '$DEBIANPATH' 2>/dev/null" 2>/dev/null | awk '{print $1}')
+    if [ -z "$required_mb" ] || [[ ! "$required_mb" =~ ^[0-9]+$ ]]; then
+        required_mb=$(du -sm "$DEBIANPATH" 2>/dev/null | awk '{print $1}')
+    fi
+    target_free_mb=$(df -m "/data/local/tmp" 2>/dev/null | awk 'NR>=2 {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/) free=$i} END{print free}')
+    if [ -n "$required_mb" ] && [[ "$required_mb" =~ ^[0-9]+$ ]] && [ -n "$target_free_mb" ] && [[ "$target_free_mb" =~ ^[0-9]+$ ]] && [ "$target_free_mb" -lt "$required_mb" ]; then
         echo "[!] Insufficient disk space: ${target_free_mb}MB free, ~${required_mb}MB required."
         remount_if_needed "$was_mounted"
         return 1
@@ -98,9 +100,12 @@ restore_snapshot() {
     if is_mounted; then
         was_mounted=1
     fi
-    required_mb=$(asl_exec "du -sm '$source' 2>/dev/null" | awk '{print $1}')
-    target_free_mb=$(df -m "/data/local/tmp" 2>/dev/null | awk 'NR==2 {print $4}')
-    if [ -n "$required_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$required_mb" ]; then
+    required_mb=$(asl_exec "du -sm '$source' 2>/dev/null" 2>/dev/null | awk '{print $1}')
+    if [ -z "$required_mb" ] || [[ ! "$required_mb" =~ ^[0-9]+$ ]]; then
+        required_mb=$(du -sm "$source" 2>/dev/null | awk '{print $1}')
+    fi
+    target_free_mb=$(df -m "/data/local/tmp" 2>/dev/null | awk 'NR>=2 {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/) free=$i} END{print free}')
+    if [ -n "$required_mb" ] && [[ "$required_mb" =~ ^[0-9]+$ ]] && [ -n "$target_free_mb" ] && [[ "$target_free_mb" =~ ^[0-9]+$ ]] && [ "$target_free_mb" -lt "$required_mb" ]; then
         echo "[!] Insufficient disk space to restore snapshot: ${target_free_mb}MB free, ~${required_mb}MB required."
         return 1
     fi
@@ -167,9 +172,12 @@ export_snapshot() {
     local out_dir
     out_dir=$(dirname "$out_file")
     local req_mb avail_mb
-    req_mb=$(asl_exec "du -sm '$target' 2>/dev/null | cut -f1" || echo 1000)
-    avail_mb=$(asl_exec "df -m '$out_dir' 2>/dev/null | awk 'NR==2 {print \$4}'" || echo 5000)
-    if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "$req_mb" ]; then
+    req_mb=$(asl_exec "du -sm '$target' 2>/dev/null" 2>/dev/null | awk '{print $1}')
+    if [ -z "$req_mb" ] || [[ ! "$req_mb" =~ ^[0-9]+$ ]]; then
+        req_mb=$(du -sm "$target" 2>/dev/null | awk '{print $1}')
+    fi
+    avail_mb=$(df -m "$out_dir" 2>/dev/null | awk 'NR>=2 {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/) free=$i} END{print free}')
+    if [ -n "$req_mb" ] && [[ "$req_mb" =~ ^[0-9]+$ ]] && [ -n "$avail_mb" ] && [[ "$avail_mb" =~ ^[0-9]+$ ]] && [ "$avail_mb" -lt "$req_mb" ]; then
         echo "[!] Storage error: Insufficient space in $out_dir (Required: ~${req_mb}MB, Available: ${avail_mb}MB)."
         return 1
     fi
@@ -233,12 +241,12 @@ import_snapshot() {
 }
 
 case "${1:-list}" in
-    create) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; create_snapshot "$@" ;;
+    create) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; trap asl_release_lock EXIT INT TERM; create_snapshot "$@" ;;
     list) list_snapshots ;;
-    restore) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; restore_snapshot "$@" ;;
-    delete|remove) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; delete_snapshot "$@" ;;
-    export) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; export_snapshot "$@" ;;
-    import) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; import_snapshot "$@" ;;
+    restore) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; trap asl_release_lock EXIT INT TERM; restore_snapshot "$@" ;;
+    delete|remove) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; trap asl_release_lock EXIT INT TERM; delete_snapshot "$@" ;;
+    export) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; trap asl_release_lock EXIT INT TERM; export_snapshot "$@" ;;
+    import) shift; asl_acquire_lock || { echo "[!] Another ASL operation is in progress; try again shortly."; exit 1; }; trap asl_release_lock EXIT INT TERM; import_snapshot "$@" ;;
     *) echo "Usage: asl snapshot [create|list|restore|delete|export|import] <name>"; exit 1 ;;
 esac
 
