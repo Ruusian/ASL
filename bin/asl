@@ -380,7 +380,8 @@ asl_svc_uptime() {
             s_h=$((diff_t / 3600)); s_m=$(((diff_t % 3600) / 60))
             if [ "$s_d" -gt 0 ]; then printf '%dd %dh' "$s_d" "$s_h"
             elif [ "$s_h" -gt 0 ]; then printf '%dh %02dm' "$s_h" "$s_m"
-            else printf '%dm' "$s_m"; fi
+            elif [ "$s_m" -gt 0 ]; then printf '%dm' "$s_m"
+            else printf '%ds' "$diff_t"; fi
             return
         fi
     fi
@@ -793,8 +794,11 @@ watch_dashboard() {
         printf '%s%-7s %-8s %7s %6s  %s%s\n' "$C_DIM" "PID" "USER" "%CPU" "%MEM" "COMMAND" "$C_RESET"
         asl_exec "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || ps aux | head -n 9 | tail -n +2 || true
         echo ""
-        printf '%s[LIVE MONITOR - %s] Host Up %s (Svc %s) | Ctrl+C to return to dashboard%s\n' "$C_CYAN$C_BOLD" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$(asl_svc_uptime)" "$C_RESET"
-        sleep 1.5
+        printf '%s[LIVE MONITOR - %s] Host Up %s (Svc %s) | Press "q" or Ctrl+C to return%s\n' "$C_CYAN$C_BOLD" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$(asl_svc_uptime)" "$C_RESET"
+        read -rsn1 -t 1.5 key 2>/dev/null || true
+        if [ "$key" = "q" ] || [ "$key" = "Q" ] || [ "$key" = $'\x1b' ]; then
+            break
+        fi
     done
     printf "\033[?25h" 2>/dev/null || true
     trap - INT

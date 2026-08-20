@@ -79,10 +79,13 @@ asl_service_stop() {
         bash "$SCRIPT_DIR/desktop/remote.sh" ngrok stop >/dev/null 2>&1 || true
         bash "$SCRIPT_DIR/desktop/remote.sh" lan stop >/dev/null 2>&1 || true
     fi
+    pkill -f "asl-watchdog-loop" 2>/dev/null || true
+    pkill -f "omniroute" 2>/dev/null || true
     if command -v termux-wake-unlock >/dev/null 2>&1; then
         termux-wake-unlock 2>/dev/null || true
     fi
     rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-service.start_time" 2>/dev/null || true
+    rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-watchdog.pid" 2>/dev/null || true
     echo "[✓] ASL 24/7 background services stopped."
 }
 
@@ -167,8 +170,10 @@ asl_service_status() {
                 echo " Service Uptime: ${s_d}d ${s_h}h ${s_m}m"
             elif [ "$s_h" -gt 0 ]; then
                 echo " Service Uptime: ${s_h}h ${s_m}m"
-            else
+            elif [ "$s_m" -gt 0 ]; then
                 echo " Service Uptime: ${s_m}m"
+            else
+                echo " Service Uptime: ${diff_t}s"
             fi
         fi
     fi
@@ -367,6 +372,7 @@ asl_service_loop() {
         "
     ' >> "$prefix/tmp/asl-watchdog.log" 2>&1 &
     local lpid=$!
+    echo "$lpid" > "$prefix/tmp/asl-watchdog.pid" 2>/dev/null || true
     echo "[✓] Autonomous watchdog daemon ACTIVE (PID: $lpid)."
 }
 
