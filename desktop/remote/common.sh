@@ -20,7 +20,15 @@ PASS_FILE="$CONFIG_DIR/remote_password"
 
 get_password() {
     if [ -f "$PASS_FILE" ]; then
-        cat "$PASS_FILE" 2>/dev/null
+        local stored
+        stored=$(cat "$PASS_FILE" 2>/dev/null)
+        if [[ "$stored" == *:* ]]; then
+            # Salted hash format: salt:hash
+            echo "$stored"
+        else
+            # Legacy plain SHA256 format
+            echo "$stored"
+        fi
     fi
 }
 
@@ -30,6 +38,13 @@ set_password() {
         echo "Error: Password cannot be empty or contain newlines."
         return 1
     fi
+    
+    # Validate password strength
+    if [ ${#new_pass} -lt 8 ]; then
+        echo "Error: Password must be at least 8 characters."
+        return 1
+    fi
+    
     if ! printf '%s\n%s\n' "$new_pass" "$new_pass" | passwd >/dev/null 2>&1; then
         echo "Error: Could not update the host password."
         return 1
@@ -42,7 +57,12 @@ set_password() {
             return 1
         fi
     fi
-    printf '%s' "$new_pass" | sha256sum 2>/dev/null | cut -d' ' -f1 > "$PASS_FILE" || : > "$PASS_FILE"
+    # Store salted hash instead of plain SHA256
+    local salt
+    salt=$(head -c 16 /dev/urandom | base64 | tr -d '\n' | head -c 16)
+    local hash
+    hash=$(printf '%s%s' "$salt" "$new_pass" | sha256sum | cut -d' ' -f1)
+    printf '%s:%s' "$salt" "$hash" > "$PASS_FILE" || : > "$PASS_FILE"
     chmod 600 "$PASS_FILE"
     echo "[✓] ASL Remote SSH password updated."
 }

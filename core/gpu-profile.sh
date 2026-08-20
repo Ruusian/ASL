@@ -5,6 +5,7 @@ asl_gpu_detect() {
     ASL_GPU_PLATFORM=$(getprop ro.board.platform 2>/dev/null || true)
     ASL_GPU_PLATFORM=${ASL_GPU_PLATFORM,,}
     ASL_GPU_PROFILE="generic-virgl"
+    ASL_GPU_MODEL="unknown"
 
     local is_adreno=0
     case "$ASL_GPU_PLATFORM" in
@@ -19,6 +20,18 @@ asl_gpu_detect() {
     esac
 
     if [ "$is_adreno" -eq 1 ]; then
+        # Detect Adreno GPU generation for optimal TU_DEBUG settings
+        if [ -d /sys/class/kgsl/kgsl-3d0 ]; then
+            local gpu_id
+            gpu_id=$(cat /sys/class/kgsl/kgsl-3d0/gpu_id 2>/dev/null || true)
+            case "$gpu_id" in
+                7[0-9][0-9]) ASL_GPU_MODEL="adreno7xx" ;;  # Adreno 730, 740, 750
+                8[0-9][0-9]) ASL_GPU_MODEL="adreno8xx" ;;  # Adreno 830, 840
+                6[0-9][0-9]) ASL_GPU_MODEL="adreno6xx" ;;  # Adreno 610-660
+                *) ASL_GPU_MODEL="adreno-unknown" ;;
+            esac
+        fi
+
         DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
         if [ -d "$DEBIANPATH" ] && asl_chroot_exec "compgen -G /usr/lib/*/dri/zink_dri.so >/dev/null || compgen -G /usr/share/vulkan/icd.d/*freedreno*.json >/dev/null || compgen -G /usr/share/vulkan/icd.d/*turnip*.json >/dev/null || compgen -G /usr/local/share/vulkan/icd.d/*.json >/dev/null" 2>/dev/null; then
             ASL_GPU_PROFILE="adreno-turnip-zink"
@@ -53,7 +66,7 @@ asl_gpu_icd_name() {
 
 asl_gpu_apply() {
     asl_gpu_detect
-    unset GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE MESA_VK_WINSYS TU_DEBUG MESA_SHADER_CACHE_DIR VK_ICD_FILENAMES VK_DRIVER_FILES MESA_GL_VERSION_OVERRIDE MESA_GLES_VERSION_OVERRIDE ZINK_DESCRIPTORS MESA_NO_ERROR BOX64_MMAP32 VKD3D_CONFIG
+    unset GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE MESA_VK_WINSYS TU_DEBUG MESA_SHADER_CACHE_DIR VK_ICD_FILENAMES VK_DRIVER_FILES MESA_GL_VERSION_OVERRIDE MESA_GLES_VERSION_OVERRIDE ZINK_DESCRIPTORS MESA_NO_ERROR BOX64_MMAP32 VKD3D_CONFIG TU_PERF
 
     case "$ASL_GPU_PROFILE" in
         adreno-turnip-zink|gaming-max|dx12-vkd3d)
@@ -73,8 +86,30 @@ asl_gpu_apply() {
             export MESA_SHADER_CACHE_DIR="/tmp/.mesa_cache"
             export MESA_GL_SHADER_CACHE_DIR="/tmp/.mesa_cache"
             export MESA_VK_SHADER_CACHE_DIR="/tmp/.mesa_cache"
-            export MESA_SHADER_CACHE_MAX_SIZE="1G"
-            export TU_DEBUG=noconform
+            export MESA_SHADER_CACHE_MAX_SIZE="2G"
+            
+            # GPU-specific TU_DEBUG settings for optimal performance
+            case "${ASL_GPU_MODEL:-}" in
+                adreno8xx)
+                    # Adreno 8xx: Use flushall,syncdraw to avoid post-unlock race condition
+                    export TU_DEBUG="flushall,syncdraw,noconform"
+                    export TU_PERF="batched"
+                    ;;
+                adreno7xx)
+                    # Adreno 7xx: Optimal settings for 730/740/750
+                    export TU_DEBUG="noconform"
+                    export TU_PERF="batched"
+                    ;;
+                adreno6xx)
+                    # Adreno 6xx: Conservative settings for older hardware
+                    export TU_DEBUG="noconform"
+                    ;;
+                *)
+                    # Fallback: safe default
+                    export TU_DEBUG="noconform"
+                    ;;
+            esac
+            
             if [ "$ASL_GPU_PROFILE" = "dx12-vkd3d" ]; then
                 export VKD3D_CONFIG=dxr11,dxr
             fi
@@ -158,10 +193,13 @@ asl_gpu_report() {
     asl_gpu_apply
     printf 'Profile: %s\n' "$ASL_GPU_PROFILE"
     printf 'Platform: %s\n' "${ASL_GPU_PLATFORM:-unknown}"
+    printf 'GPU Model: %s\n' "${ASL_GPU_MODEL:-unknown}"
     printf 'GALLIUM_DRIVER=%s\n' "${GALLIUM_DRIVER:-}"
     printf 'MESA_LOADER_DRIVER_OVERRIDE=%s\n' "${MESA_LOADER_DRIVER_OVERRIDE:-}"
     printf 'MESA_VK_WINSYS=%s\n' "${MESA_VK_WINSYS:-}"
     printf 'TU_DEBUG=%s\n' "${TU_DEBUG:-}"
+    printf 'TU_PERF=%s\n' "${TU_PERF:-}"
+    printf 'MESA_SHADER_CACHE_MAX_SIZE=%s\n' "${MESA_SHADER_CACHE_MAX_SIZE:-}"
 }
 
 asl_gpu_install_drivers() {

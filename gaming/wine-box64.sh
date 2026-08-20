@@ -24,7 +24,7 @@ check_emulation_available() {
 }
 
 build_gaming_env_exports() {
-    local gpu_vars snippet dyn_mode fastround=1 fastnan=1 x87double=0 bigblock=2 strongmem=1 forward=1024 callret=1 weakbarrier=1 safeflags=1 aligned_atomics=0 bleeding_edge=1 esync_var="" fsync_var=""
+    local gpu_vars snippet dyn_mode fastround=1 fastnan=1 x87double=0 bigblock=2 strongmem=1 forward=1024 callret=2 weakbarrier=1 safeflags=1 aligned_atomics=0 bleeding_edge=1 dirty=2 esync_var="" fsync_var=""
     gpu_vars=$(asl_gpu_env_exports)
 
     if [ -e /proc/sys/fs/epoll ]; then
@@ -45,6 +45,7 @@ build_gaming_env_exports() {
         safeflags=0
         aligned_atomics=1
         bleeding_edge=0
+        dirty=0
     fi
 
     snippet=$(cat << EOF
@@ -72,6 +73,11 @@ export SDL_GAMECONTROLLERCONFIG_FILE=/etc/gamecontrollerdb.txt
 export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1
 export WINEDLLOVERRIDES="winemenubuilder.exe=d;mscoree,mshtml=d"
 export WINEDEBUG=-all
+export WINEESYNC=1
+export WINEFSYNC=1
+export STAGING_SHARED_MEMORY=1
+export MANGOHUD=1
+export MANGOHUD_CONFIG="fps,frametime,cpu_temp,gpu_temp,ram,vram,engine_version,vulkan_driver"
 ${esync_var}${fsync_var}@GPU_VARS@
 export PULSE_SERVER=unix:/tmp/pulse-socket,tcp:127.0.0.1
 export PULSE_LATENCY_MSEC=30
@@ -90,8 +96,17 @@ export BOX64_DYNAREC_SAFEFLAGS=$safeflags
 export BOX64_DYNAREC_ALIGNED_ATOMICS=$aligned_atomics
 export BOX64_DYNAREC_BLEEDING_EDGE=$bleeding_edge
 export BOX64_DYNAREC_WAIT=1
+export BOX64_DYNAREC_DIRTY=$dirty
+export BOX64_DYNAREC_NATIVEFLAGS=1
+export BOX64_DYNAREC_METADIB=1
+export BOX64_DYNAREC_CALLRET=2
+export BOX64_DYNACACHE=1
+export BOX64_DYNACACHE_LIMIT=2147483648
+export BOX64_NOBANNER=1
+export BOX64_ALLOW_MISSING_LIBS=1
 export DXVK_ASYNC=1
 export DXVK_STATE_CACHE=1
+export DXVK_LOG_LEVEL=none
 export BOX64_LD_LIBRARY_PATH="/usr/local/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:${BOX64_LD_LIBRARY_PATH:-}"
 [ -f /etc/box64.apps.conf ] && export BOX64_RCFILE=/etc/box64.apps.conf
 mkdir -p /run/user/0 /tmp/.mesa_cache 2>/dev/null || true
@@ -300,6 +315,21 @@ setup_gaming() {
             exit 1
         fi
         cat << \"EOF_DXVK\" > /etc/dxvk.conf
+# DXVK 3.0+ Configuration for ASL
+# Requires Vulkan 1.4 support from Mesa Turnip
+
+# Performance
+dxvk.enableAsync = True
+dxvk.numCompilerThreads = 4
+dxvk.numAsyncThreads = 2
+dxvk.gplPipelineCache = True
+dxvk.enableGraphicsPipelineLibrary = True
+
+# Memory
+dxvk.shrinkNvidiaHvvHeap = False
+dxvk.maxChunkSize = 16
+
+# Display
 dxgi.allowModeSwitch = True
 dxgi.syncInterval = 0
 dxgi.maxFrameRate = 0
@@ -307,12 +337,23 @@ dxgi.maxFrameLatency = 1
 dxgi.tearFree = False
 dxgi.deferredSurfaceCreation = False
 dxgi.nvapiHack = False
+
+# D3D11
 d3d11.maxFeatureLevel = 11_1
 d3d11.relaxedBarriers = True
-dxvk.enableAsync = True
-dxvk.gplPipelineCache = True
-dxvk.numCompilerThreads = 4
+d3d11.strictContextSharing = False
+
+# D3D9 (fixed-function pipeline ubershaders for older games)
+d3d9.forceSamplerTypeSpecConstants = True
+d3d9.floatEmulation = True
+d3d9.presentInterval = 0
+
+# HUD (set to 1 for FPS counter, 2 for full stats)
 dxvk.hud = 0
+
+# Logging (disable for production)
+dxvk.logLevel = none
+dxvk.logPath = /tmp
 EOF_DXVK
     '"; then
         echo "[✗] Gaming environment setup FAILED. See the errors above."

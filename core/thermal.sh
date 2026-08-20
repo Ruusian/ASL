@@ -53,6 +53,20 @@ asl_thermal_report() {
         printf ' Battery:     %sUnknown%s\n' "$c_yellow" "$c_reset"
     fi
 
+    # Thermal headroom (Android 15+ API)
+    local thermal_headroom=""
+    thermal_headroom=$(asl_exec "dumpsys hardware_properties | awk -F= '/ThermalHeadroom/ {print \$2}'" 2>/dev/null || true)
+    if [ -n "$thermal_headroom" ] && [[ "$thermal_headroom" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+        printf ' Thermal Headroom: %s%s%s' "$c_cyan" "$thermal_headroom" "$c_reset"
+        if [ "$(echo "$thermal_headroom < 0.5" | bc 2>/dev/null || echo "1")" = "1" ]; then
+            printf ' %s[COOL]%s\n' "$c_green" "$c_reset"
+        elif [ "$(echo "$thermal_headroom < 1.0" | bc 2>/dev/null || echo "0")" = "1" ]; then
+            printf ' %s[WARM]%s\n' "$c_yellow" "$c_reset"
+        else
+            printf ' %s[HOT - THROTTLE RISK]%s\n' "$c_red" "$c_reset"
+        fi
+    fi
+
     echo " Thermal Zones (SoC, CPU, GPU):"
     local count=0
     for tz_path in /sys/class/thermal/thermal_zone*; do
@@ -82,6 +96,30 @@ asl_thermal_report() {
 
     if [ "$count" -eq 0 ]; then
         echo "  No active CPU/GPU thermal sensors available."
+    fi
+
+    # Thermal throttling status
+    echo ""
+    echo "Throttling Status:"
+    local throttle_status
+    throttle_status=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || true)
+    local throttle_max
+    throttle_max=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null || true)
+    
+    if [ -n "$throttle_status" ] && [ -n "$throttle_max" ]; then
+        local freq_mhz=$((throttle_status / 1000))
+        local max_mhz=$((throttle_max / 1000))
+        local usage_pct=$((freq_mhz * 100 / max_mhz))
+        
+        if [ "$usage_pct" -gt 90 ]; then
+            printf '  CPU Freq: %s%dMHz / %dMHz (%d%%)%s\n' "$c_green" "$freq_mhz" "$max_mhz" "$usage_pct" "$c_reset"
+        elif [ "$usage_pct" -gt 70 ]; then
+            printf '  CPU Freq: %s%dMHz / %dMHz (%d%%)%s\n' "$c_yellow" "$freq_mhz" "$max_mhz" "$usage_pct" "$c_reset"
+        else
+            printf '  CPU Freq: %s%dMHz / %dMHz (%d%%) [THROTTLED]%s\n' "$c_red" "$freq_mhz" "$max_mhz" "$usage_pct" "$c_reset"
+        fi
+    else
+        echo "  CPU frequency info not available"
     fi
 }
 
