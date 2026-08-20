@@ -879,12 +879,10 @@ dashboard() {
         printf "\033[J\033[?25h" 2>/dev/null || true
     }
 
-    clear 2>/dev/null || true
     while true; do
         if [ "$need_refresh" -eq 1 ] || [ -z "$overview_cache" ]; then
             overview_cache=$(overview 2>/dev/null || true)
             need_refresh=0
-            clear 2>/dev/null || true
         fi
 
         render_frame
@@ -920,39 +918,77 @@ dashboard() {
                     continue
                     ;;
                 UP)
-                    sel=$(( (sel - 2 + 25) % 25 + 1 ))
+                    case "$sel" in
+                        2|3|4|5|6) sel=$(( sel - 1 )) ;;
+                        1) sel=24 ;;
+                        8|9|10|11|12) sel=$(( sel - 1 )) ;;
+                        7) sel=25 ;;
+                        14|15) sel=$(( sel - 1 )) ;;
+                        13) sel=6 ;;
+                        17|18|19) sel=$(( sel - 1 )) ;;
+                        16) sel=12 ;;
+                        21) sel=20 ;;
+                        24) sel=21 ;;
+                        20) sel=15 ;;
+                        23) sel=22 ;;
+                        25) sel=23 ;;
+                        22) sel=19 ;;
+                        *) sel=1 ;;
+                    esac
                     continue
                     ;;
                 DOWN)
-                    sel=$(( sel % 25 + 1 ))
+                    case "$sel" in
+                        1|2|3|4|5) sel=$(( sel + 1 )) ;;
+                        6) sel=13 ;;
+                        7|8|9|10|11) sel=$(( sel + 1 )) ;;
+                        12) sel=16 ;;
+                        13|14) sel=$(( sel + 1 )) ;;
+                        15) sel=20 ;;
+                        16|17|18) sel=$(( sel + 1 )) ;;
+                        19) sel=22 ;;
+                        20) sel=21 ;;
+                        21) sel=24 ;;
+                        24) sel=1 ;;
+                        22) sel=23 ;;
+                        23) sel=25 ;;
+                        25) sel=7 ;;
+                        *) sel=1 ;;
+                    esac
                     continue
                     ;;
                 LEFT)
-                    if [ "$sel" -ge 7 ] && [ "$sel" -le 12 ]; then
-                        sel=$(( sel - 6 ))
-                    elif [ "$sel" -ge 16 ] && [ "$sel" -le 19 ]; then
-                        sel=$(( sel - 3 ))
-                    elif [ "$sel" -ge 22 ] && [ "$sel" -le 23 ]; then
-                        sel=$(( sel - 2 ))
-                    elif [ "$sel" -eq 25 ]; then
-                        sel=24
-                    else
-                        sel=$(( (sel - 2 + 25) % 25 + 1 ))
-                    fi
+                    case "$sel" in
+                        1|2|3|4|5|6) sel=$(( sel + 6 )) ;;
+                        13|14|15) sel=$(( sel + 3 )) ;;
+                        20) sel=22 ;;
+                        21) sel=23 ;;
+                        24) sel=25 ;;
+                        7|8|9|10|11|12) sel=$(( sel - 6 )) ;;
+                        16|17|18) sel=$(( sel - 3 )) ;;
+                        19) sel=13 ;;
+                        22) sel=20 ;;
+                        23) sel=21 ;;
+                        25) sel=24 ;;
+                        *) sel=1 ;;
+                    esac
                     continue
                     ;;
                 RIGHT)
-                    if [ "$sel" -ge 1 ] && [ "$sel" -le 6 ]; then
-                        sel=$(( sel + 6 ))
-                    elif [ "$sel" -ge 13 ] && [ "$sel" -le 15 ]; then
-                        sel=$(( sel + 3 ))
-                    elif [ "$sel" -ge 20 ] && [ "$sel" -le 21 ]; then
-                        sel=$(( sel + 2 ))
-                    elif [ "$sel" -eq 24 ]; then
-                        sel=25
-                    else
-                        sel=$(( sel % 25 + 1 ))
-                    fi
+                    case "$sel" in
+                        1|2|3|4|5|6) sel=$(( sel + 6 )) ;;
+                        13|14|15) sel=$(( sel + 3 )) ;;
+                        20) sel=22 ;;
+                        21) sel=23 ;;
+                        24) sel=25 ;;
+                        7|8|9|10|11|12) sel=$(( sel - 6 )) ;;
+                        16|17|18) sel=$(( sel - 3 )) ;;
+                        19) sel=13 ;;
+                        22) sel=20 ;;
+                        23) sel=21 ;;
+                        25) sel=24 ;;
+                        *) sel=1 ;;
+                    esac
                     continue
                     ;;
                 ENTER)
