@@ -158,7 +158,7 @@ asl_exec "
         domount_bind /proc/sys/fs/binfmt_misc \"$DEBIANPATH/proc/sys/fs/binfmt_misc\"
     fi
 
-    if [ -d /sdcard ]; then
+    if [ "${ASL_MOUNT_SDCARD:-1}" = "1" ] && [ -d /sdcard ]; then
         domount_bind /sdcard \"$DEBIANPATH/sdcard\"
         mkdir -p \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
         if ! is_mounted \"$DEBIANPATH/storage/emulated/0\"; then

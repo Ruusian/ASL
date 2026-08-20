@@ -51,15 +51,21 @@ asl_orphan_kill() {
     done
 
     if [ "$unkillable" -eq 1 ]; then
-        echo "[!] Fail-Safe System Triggered: Unkillable kernel threads detected."
-        echo "[!] Initiating automatic system reboot in 3 seconds..."
-        sleep 3
-        if command -v su &>/dev/null; then
-            su -c "reboot"
+        echo "[!] WARNING: Unkillable kernel threads detected (processes in D-state)."
+        echo "[!] Recommended action: Run 'asl restart' or restart the container."
+        if [ "$ASL_FORCE_REBOOT" = "1" ] || [ "$1" = "--force-reboot" ]; then
+            echo "[!] Fail-Safe System Triggered: Force-reboot flag detected. Rebooting in 3s..."
+            sleep 3
+            if command -v su &>/dev/null; then
+                su -c "reboot"
+            else
+                echo "[!] su not available to reboot."
+            fi
+            exit 1
         else
-            echo "[!] su not available to reboot. Please manually reboot your device."
+            echo "[*] Skipping automatic reboot (pass --force-reboot or ASL_FORCE_REBOOT=1 to force)."
+            return 1
         fi
-        exit 1
     else
         echo "[✓] All rogue orphan processes successfully killed."
         return 0

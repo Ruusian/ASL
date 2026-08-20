@@ -125,6 +125,7 @@ asl_thermal_report() {
 
 asl_thermal_watch() {
     echo "[*] Starting thermal watchdog monitor (interval: 5s)... Press Ctrl+C to stop."
+    trap 'echo -e "\n[*] Thermal watchdog stopped."; trap - INT TERM; return 0 2>/dev/null || exit 0' INT TERM
     while true; do
         clear
         asl_thermal_report

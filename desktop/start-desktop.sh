@@ -174,7 +174,8 @@ start_desktop() {
     fi
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
-        rm -f "$termux_tmp/.X11-unix/X0" "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X11-unix/X0" "$DEBIANPATH/tmp/.X0-lock" 2>/dev/null || true
+        echo "[*] Cleaning up orphaned X11 display sockets and lock files..."
+        rm -f "$termux_tmp"/.X*-lock "$termux_tmp"/.X11-unix/X* "$DEBIANPATH/tmp"/.X*-lock "$DEBIANPATH/tmp"/.X11-unix/X* /tmp/.X*-lock /tmp/.X11-unix/X* 2>/dev/null || true
     fi
     command -v termux-x11 >/dev/null || { echo "[!] Termux:X11 client is not installed. Install it with: pkg install termux-x11"; return 1; }
     local missing=""

@@ -19,6 +19,12 @@ import gi
 
 APP_VERSION = "1.6.0"
 
+if not os.environ.get("DISPLAY"):
+    sys.stderr.write("[!] Error: $DISPLAY environment variable is not set.\n"
+                     "    ASL Control Center requires an active X11 display (Termux-X11 / VNC).\n"
+                     "    For CLI management, run: asl status\n")
+    sys.exit(1)
+
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Pango
 

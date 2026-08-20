@@ -53,6 +53,9 @@ termux_open_file() {
             echo "[!] Android Download directory is unavailable. Run: asl storage"
             return 1
         fi
+
+        # Prune shared temporary files older than 24 hours
+        find "$download_dir" -maxdepth 1 -name "asl-shared-*" -mtime +1 -delete 2>/dev/null || true
         base=$(basename "$target")
         stem="${base%.*}"
         ext="${base##*.}"

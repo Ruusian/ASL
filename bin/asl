@@ -93,9 +93,12 @@ asl_backup() {
     BACKUP_FILE="$BACKUP_DIR/asl-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
     PARTIAL_BACKUP="$BACKUP_FILE.partial"
     local required_mb target_free_mb
-    required_mb=$(asl_exec "du -sm '$DEBIANPATH' 2>/dev/null" | awk '{print $1}')
-    target_free_mb=$(df -m "$BACKUP_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
-    if [ -n "$required_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$required_mb" ]; then
+    required_mb=$(asl_exec "du -sm '$DEBIANPATH' 2>/dev/null" 2>/dev/null | awk '{print $1}')
+    if [ -z "$required_mb" ] || [[ ! "$required_mb" =~ ^[0-9]+$ ]]; then
+        required_mb=$(du -sm "$DEBIANPATH" 2>/dev/null | awk '{print $1}')
+    fi
+    target_free_mb=$(df -m "$BACKUP_DIR" 2>/dev/null | awk 'NR>=2 {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/) free=$i} END{print free}')
+    if [ -n "$required_mb" ] && [[ "$required_mb" =~ ^[0-9]+$ ]] && [ -n "$target_free_mb" ] && [[ "$target_free_mb" =~ ^[0-9]+$ ]] && [ "$target_free_mb" -lt "$required_mb" ]; then
         echo "[!] Insufficient disk space in $BACKUP_DIR: ${target_free_mb}MB free, ~${required_mb}MB needed."
         return 1
     fi
@@ -128,8 +131,8 @@ asl_restore() {
         return 1
     fi
     archive_size_mb=$(du -sm "$RESTORE_FILE" 2>/dev/null | awk '{print $1 * 3}')
-    target_free_mb=$(df -m "$DEBIANPATH" 2>/dev/null | awk 'NR==2 {print $4}')
-    if [ -n "$archive_size_mb" ] && [ -n "$target_free_mb" ] && [ "$target_free_mb" -lt "$archive_size_mb" ]; then
+    target_free_mb=$(df -m "$DEBIANPATH" 2>/dev/null | awk 'NR>=2 {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/) free=$i} END{print free}')
+    if [ -n "$archive_size_mb" ] && [[ "$archive_size_mb" =~ ^[0-9]+$ ]] && [ -n "$target_free_mb" ] && [[ "$target_free_mb" =~ ^[0-9]+$ ]] && [ "$target_free_mb" -lt "$archive_size_mb" ]; then
         echo "[!] Insufficient disk space on root filesystem: ${target_free_mb}MB free, ~${archive_size_mb}MB estimated needed."
         return 1
     fi

@@ -273,9 +273,17 @@ asl_service_check() {
     local healed=0
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
 
-    # 1. SSH Server Check
-    if ! pgrep -f "sshd" >/dev/null 2>&1; then
-        echo "[!] SSH server inactive — restarting LAN SSH..."
+    # 1. SSH Server Check (process & socket probe)
+    local ssh_alive=0
+    if pgrep -f "sshd" >/dev/null 2>&1; then
+        if command -v nc >/dev/null 2>&1; then
+            nc -z 127.0.0.1 8022 >/dev/null 2>&1 && ssh_alive=1
+        else
+            ssh_alive=1
+        fi
+    fi
+    if [ "$ssh_alive" -eq 0 ]; then
+        echo "[!] SSH server inactive or socket unresponsive — restarting LAN SSH..."
         if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
             bash "$SCRIPT_DIR/desktop/remote.sh" lan start >/dev/null 2>&1 || true
             healed=$((healed + 1))
