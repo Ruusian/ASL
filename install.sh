@@ -456,6 +456,11 @@ if ! (
     exit 1
 fi
 
+echo -e "${GREEN}[*] Provisioning OpenClaude AI agent environment...${RESET}"
+if [ -f "$TARGET_DIR/core/openclaude-setup.sh" ]; then
+    bash "$TARGET_DIR/core/openclaude-setup.sh" || true
+fi
+
 echo -e "${CYAN}====================================================${RESET}"
 echo -e "${GREEN}[✓] Android Subsystem for Linux (ASL) Installed!     ${RESET}"
 echo -e "${CYAN}====================================================${RESET}"

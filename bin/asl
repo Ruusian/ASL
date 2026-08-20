@@ -1412,6 +1412,11 @@ case "${1:-}" in
         ensure_mounted
         run_in_chroot "$@"
         ;;
+    dxvk)
+        shift
+        ensure_mounted
+        bash "$ASL_DIR/gaming/wine-box64.sh" dxvk "$@"
+        ;;
     game|wine)
         shift
         ensure_mounted
@@ -1631,6 +1636,14 @@ case "${1:-}" in
     gamepad)
         shift
         bash "$ASL_DIR/core/gamepad.sh" "$@"
+        ;;
+    aslpath|asl-path|path)
+        shift
+        bash "$ASL_DIR/core/asl-path.sh" "$@"
+        ;;
+    config|asl.conf|wsl.conf)
+        shift
+        bash "$ASL_DIR/core/asl-conf.sh" "$@"
         ;;
     dev-suite)
         shift

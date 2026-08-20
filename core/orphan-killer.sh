@@ -73,10 +73,10 @@ asl_orphan_kill() {
 }
 
 case "${1:-run}" in
-    run|scan|kill)
+    run|scan|kill|status|check|list)
         asl_orphan_kill
         ;;
     *)
-        echo "Usage: $0 [run|scan|kill]"
+        echo "Usage: $0 [run|scan|kill|status]"
         ;;
 esac

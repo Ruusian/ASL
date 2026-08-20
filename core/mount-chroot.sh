@@ -95,7 +95,7 @@ asl_exec "
 
     cleanup_on_error() {
         echo '[!] Mount error encountered; rolling back partial mounts...' >&2
-        for m in \"$DEBIANPATH/proc/sys/fs/binfmt_misc\" \"$DEBIANPATH/dev/pts\" \"$DEBIANPATH/proc\" \"$DEBIANPATH/sys\" \"$DEBIANPATH/dev/shm\" \"$DEBIANPATH/run\" \"$DEBIANPATH/var/lock\" \"$DEBIANPATH/tmp\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" \"$DEBIANPATH/sdcard\" \"$DEBIANPATH/dev\" \"$DEBIANPATH\"; do
+        for m in \"$DEBIANPATH/proc/sys/fs/binfmt_misc\" \"$DEBIANPATH/dev/pts\" \"$DEBIANPATH/proc\" \"$DEBIANPATH/sys\" \"$DEBIANPATH/dev/shm\" \"$DEBIANPATH/run\" \"$DEBIANPATH/var/lock\" \"$DEBIANPATH/tmp\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" \"$DEBIANPATH/storage/emulated/0\" \"$DEBIANPATH/sdcard\" \"$DEBIANPATH/dev\" \"$DEBIANPATH\"; do
             grep -q -F \" \$m \" /proc/mounts 2>/dev/null && umount -l \"\$m\" 2>/dev/null || true
         done
     }

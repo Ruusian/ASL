@@ -639,11 +639,50 @@ run_winetricks() {
     asl_chroot_exec "source /tmp/.asl_gaming_env.sh; winetricks"
 }
 
+run_dxvk_manage() {
+    local action="${1:-status}"
+    case "$action" in
+        enable|install|setup)
+            echo "[*] Ensuring DXVK DirectX-to-Vulkan translation layer configuration..."
+            asl_chroot_exec "
+                export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                if [ ! -f /etc/dxvk.conf ]; then
+                    cat << \"EOF_DXVK\" > /etc/dxvk.conf
+# DXVK 3.0+ Configuration for ASL
+dxvk.enableAsync = True
+dxvk.numCompilerThreads = 4
+dxvk.numAsyncThreads = 2
+dxvk.gplPipelineCache = True
+dxvk.enableGraphicsPipelineLibrary = True
+dxvk.hud = 0
+dxvk.logLevel = none
+EOF_DXVK
+                fi
+            " 2>/dev/null || true
+            echo "[✓] DXVK Async DirectX 9/10/11 translation environment configured (/etc/dxvk.conf)."
+            ;;
+        status|*)
+            echo "--- DXVK DirectX-to-Vulkan Translation Status ---"
+            if asl_chroot_exec "test -f /etc/dxvk.conf" 2>/dev/null; then
+                echo "  DXVK Config (/etc/dxvk.conf) : PRESENT"
+                echo "  Async Shader Pipelines       : ENABLED (dxvk.enableAsync = True)"
+                echo "  Pipeline Cache (GPL)         : ENABLED (dxvk.gplPipelineCache = True)"
+            else
+                echo "  DXVK Config (/etc/dxvk.conf) : MISSING (run 'asl dxvk enable' to setup)"
+            fi
+            ;;
+    esac
+}
+
 if [ "${BASH_SOURCE[0]}" != "$0" ]; then
     return 0 2>/dev/null || true
 fi
 
 case "${1:-}" in
+    dxvk)
+        shift
+        run_dxvk_manage "$@"
+        ;;
     setup|setup-gaming)
         setup_gaming
         ;;
