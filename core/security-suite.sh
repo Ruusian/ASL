@@ -73,7 +73,7 @@ asl_security_install() {
                 ;;
             nmap) apt-get install -y nmap ;;
             wireshark|tshark)
-                echo "wireshark-common wireshark-common/install-setuid boolean true" | debconf-set-selections 2>/dev/null || true
+                echo \"wireshark-common wireshark-common/install-setuid boolean true\" | debconf-set-selections 2>/dev/null || true
                 DEBIAN_FRONTEND=noninteractive apt-get install -y tshark
                 ;;
             *)
