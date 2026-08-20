@@ -61,9 +61,6 @@ if [ -f "$ASL_DIR/core/common.sh" ]; then
 elif [ -f "$HOME/ASL/core/common.sh" ]; then
     source "$HOME/ASL/core/common.sh"
 fi
-if [ -f "$ASL_DIR/core/termux-droid.sh" ]; then
-    source "$ASL_DIR/core/termux-droid.sh"
-fi
 if [ -f "$ASL_DIR/core/gpu-profile.sh" ]; then
     source "$ASL_DIR/core/gpu-profile.sh"
 fi
@@ -315,7 +312,6 @@ show_help() {
     echo "  desktop stop     Stop only the ASL-managed desktop"
     echo "  desktop status   Show desktop lifecycle status"
     echo "  desktop sync-apps Create ASL-owned Termux launchers"
-    echo "  termux-droid [setup|start|stop|status|sync-apps|bridge]  Termux Droid compatibility workflow"
     echo "  theme [preset]   Set XFCE look & feel (dark|light|nord|dracula)"
     echo "  resolution [preset] Set Termux:X11 display resolution (720p|1080p|native)"
     echo "  remote [all|password|lan|serveo|ngrok|gui|autoconnect]  Manage SSH, Serveo, Ngrok (multi-token), VNC Desktop & Auto-Connect"
@@ -1455,10 +1451,6 @@ case "${1:-}" in
     service|autostart|daemon|boot)
         shift
         bash "$ASL_DIR/core/service-manager.sh" "$@"
-        ;;
-    termux-droid)
-        shift
-        termux_droid "${1:-help}"
         ;;
     desktop)
         shift

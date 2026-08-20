@@ -164,7 +164,6 @@ ASL/
 │   ├── repair.sh             # Automated integrity repair & system recovery
 │   ├── thermal.sh            # SoC & battery thermal sensor diagnostic monitor
 │   ├── termux-bridge.sh      # WakeLock, open, clipboard, and notification bridge
-│   ├── termux-droid.sh       # Termux Droid compatibility workflow
 │   ├── android-aid.sh        # Android AID GID group mapper
 │   └── snapshot.sh           # Point-in-time chroot snapshot & backup manager
 ├── gaming/
@@ -192,7 +191,6 @@ ASL/
 │   ├── GAMING_GUIDE.md
 │   ├── PERFORMANCE_TUNING.md
 │   ├── ROADMAP_AND_TRACKING.md
-│   └── TERMUX_DROID_MIGRATION.md
 └── .github/
     └── workflows/
         └── lint.yml          # CI linting workflow
@@ -266,22 +264,6 @@ ASL/
 | `asl aid setup` | Map Android host AID GIDs inside chroot |
 
 ---
-
-## 🔗 Termux Droid Compatibility
-
-ASL now provides the Termux Droid workflow through one management surface. It
-uses ASL's existing root/proot detection, Debian environment, XFCE4 desktop,
-Termux:X11 integration, and GPU profiles instead of maintaining a second
-container configuration.
-
-```bash
-asl termux-droid setup
-asl termux-droid start
-asl termux-droid status
-```
-
-For Raspberry Pi monitor output, use `desktop/pi-bridge.sh` after enabling USB
-tethering and starting the ASL VNC service on the phone.
 
 ## 🔒 Safety & Isolation Guarantees
 
