@@ -75,6 +75,7 @@ asl_service_stop() {
     echo "[*] Stopping ASL 24/7 Background Services..."
     if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
         bash "$SCRIPT_DIR/desktop/remote.sh" autoconnect stop >/dev/null 2>&1 || true
+        bash "$SCRIPT_DIR/desktop/remote.sh" oracle stop >/dev/null 2>&1 || true
         bash "$SCRIPT_DIR/desktop/remote.sh" serveo stop >/dev/null 2>&1 || true
         bash "$SCRIPT_DIR/desktop/remote.sh" ngrok stop >/dev/null 2>&1 || true
         bash "$SCRIPT_DIR/desktop/remote.sh" lan stop >/dev/null 2>&1 || true
@@ -206,6 +207,15 @@ asl_service_status() {
         echo " LAN SSH Server: INACTIVE"
     fi
 
+    local oracle_pid oracle_mem
+    oracle_pid=$(pgrep -f "ssh.*130.210.19.7" 2>/dev/null | head -1 || true)
+    if [ -n "$oracle_pid" ]; then
+        oracle_mem=$(fmt_mem "$oracle_pid")
+        echo " Oracle Tunnel: ACTIVE (130.210.19.7:2222, PID: $oracle_pid, RAM: $oracle_mem)"
+    elif [ -f "$HOME/.ssh/oracle_vps.key" ]; then
+        echo " Oracle Tunnel: STANDBY (Run 'asl remote oracle start')"
+    fi
+
     local serveo_pid serveo_mem
     serveo_pid=$(pgrep -f "serveo.net" 2>/dev/null | head -1 || true)
     if [ -n "$serveo_pid" ]; then
@@ -281,7 +291,16 @@ asl_service_check() {
         fi
     fi
 
-    # 3. Serveo Tunnel Check (if enabled by user state)
+    # 3. Oracle VPS Tunnel Check (if enabled by user state)
+    if [ -f "$prefix/tmp/asl-oracle.state" ] && ! pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then
+        echo "[!] Oracle VPS tunnel state ACTIVE but process down — restoring tunnel..."
+        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
+            bash "$SCRIPT_DIR/desktop/remote.sh" oracle start >/dev/null 2>&1 || true
+            healed=$((healed + 1))
+        fi
+    fi
+
+    # 4. Serveo Tunnel Check (if enabled by user state)
     if [ -f "$prefix/tmp/asl-serveo.state" ] && ! pgrep -f "serveo.net" >/dev/null 2>&1; then
         echo "[!] Serveo tunnel state ACTIVE but process down — restoring tunnel..."
         if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then

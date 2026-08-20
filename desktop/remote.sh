@@ -581,7 +581,73 @@ except Exception:
     fi
 }
 
-# --- 5. SSH Public Key Authorization Management -----------------------------
+# --- 5. Oracle Cloud VPS Dedicated Reverse Tunnel (Always-On Private Relay) --
+ORACLE_KEY="$HOME/.ssh/oracle_vps.key"
+ORACLE_LOG="$PREFIX/tmp/oracle-vps.log"
+ORACLE_STATE="$PREFIX/tmp/asl-oracle.state"
+ORACLE_HOST="${ASL_ORACLE_HOST:-130.210.19.7}"
+ORACLE_USER="${ASL_ORACLE_USER:-ubuntu}"
+ORACLE_PORT="${ASL_ORACLE_PORT:-2222}"
+
+oracle_running() {
+    [ -f "$ORACLE_STATE" ] && pgrep -f "ssh.*${ORACLE_HOST}" >/dev/null 2>&1 && \
+        ! grep -qE "Permission denied|Connection closed|Connection refused|Host key verification failed|kex_exchange_identification" "$ORACLE_LOG" 2>/dev/null
+}
+
+oracle_control() {
+    local action="${1:-status}"
+    case "$action" in
+        start)
+            ensure_host_sshd
+            touch "$ORACLE_STATE"
+            if oracle_running; then
+                echo "[*] Oracle VPS dedicated tunnel is already running."
+            else
+                pkill -f "ssh.*${ORACLE_HOST}" 2>/dev/null || true
+                sleep 1
+                echo "[*] Launching Oracle VPS persistent SSH tunnel (130.210.19.7:${ORACLE_PORT} -> 8022)..."
+                rm -f "$ORACLE_LOG"
+                nohup ssh -i "$ORACLE_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=15 -R "${ORACLE_PORT}:127.0.0.1:8022" "${ORACLE_USER}@${ORACLE_HOST}" > "$ORACLE_LOG" 2>&1 &
+                echo $! > "$ORACLE_STATE"
+                sleep 2
+                if ! oracle_running; then
+                    echo "Error: Oracle VPS tunnel failed to connect. Log output:"
+                    cat "$ORACLE_LOG" 2>/dev/null
+                    return 1
+                fi
+            fi
+            oracle_status
+            ;;
+        stop)
+            if oracle_running; then
+                local pid
+                pid=$(cat "$ORACLE_STATE" 2>/dev/null)
+                [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || pkill -f "ssh.*${ORACLE_HOST}" 2>/dev/null || true
+                rm -f "$ORACLE_STATE" "$ORACLE_LOG"
+                echo "[✓] Oracle VPS tunnel stopped."
+            else
+                rm -f "$ORACLE_STATE"
+                echo "[*] Oracle VPS tunnel is not running."
+            fi
+            ;;
+        status|"")
+            oracle_status
+            ;;
+    esac
+}
+
+oracle_status() {
+    if oracle_running; then
+        echo "Oracle VPS Tunnel: RUNNING (Dedicated Always-On Private Relay)"
+        echo "    Host:     ${ORACLE_HOST} (User: ${ORACLE_USER})"
+        echo "    Connect:  ssh -p ${ORACLE_PORT} $(whoami)@${ORACLE_HOST}"
+        echo "    Authentication: SSH key only"
+    else
+        echo "Oracle VPS Tunnel: STOPPED"
+    fi
+}
+
+# --- 6. SSH Public Key Authorization Management -----------------------------
 key_control() {
     local action="${1:-list}"
     local key_file="$HOME/.ssh/authorized_keys"
@@ -674,13 +740,19 @@ autoconnect_daemon() {
 
         # Check network connectivity before attempting remote tunnels
         if is_online; then
-            # 2. Serveo Tunnel (Free persistent SSH jump host)
+            # 2. Oracle VPS Dedicated Tunnel
+            if [ -f "$ORACLE_KEY" ] && ! oracle_running; then
+                echo "[Autoconnect $(date +%H:%M:%S)] Oracle VPS tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
+                bash "$script_path" oracle start >> "$AUTOCONNECT_LOG" 2>&1 || true
+            fi
+
+            # 3. Serveo Tunnel (Free persistent SSH jump host)
             if ! serveo_running; then
                 echo "[Autoconnect $(date +%H:%M:%S)] Serveo tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
                 bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi
 
-            # 3. Ngrok Backup & Parallel Tunnel (Auto-Rotate on quota exhaust)
+            # 4. Ngrok Backup & Parallel Tunnel (Auto-Rotate on quota exhaust)
             if ! ngrok_running; then
                 echo "[Autoconnect $(date +%H:%M:%S)] Ngrok tunnel offline. Starting/rotating token pool..." >> "$AUTOCONNECT_LOG"
                 bash "$script_path" ngrok start >> "$AUTOCONNECT_LOG" 2>&1 || true
@@ -745,6 +817,10 @@ start_all() {
     echo "[*] Initializing ASL Remote Bridge Services..."
     lan_control start
     echo ""
+    if [ -f "$ORACLE_KEY" ]; then
+        oracle_control start || true
+        echo ""
+    fi
     serveo_control start
     echo ""
     ngrok_control start || true
@@ -789,6 +865,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
         password|pass) password_control "$@" ;;
         lan) lan_control "$@" ;;
         key|keys|pubkey) key_control "$@" ;;
+        oracle|vps) oracle_control "$@" ;;
         serveo) serveo_control "$@" ;;
         ngrok) ngrok_control "$@" ;;
         gui|desktop-tunnel) gui_control ;;
@@ -799,10 +876,11 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
             echo "Usage: asl remote <subcommand> [args]"
             echo ""
             echo "Subcommands:"
-            echo "  all                  Start LAN SSH, Serveo, Ngrok, and Auto-Connect daemon"
+            echo "  all                  Start LAN SSH, Oracle VPS, Serveo, Ngrok, and Auto-Connect daemon"
             echo "  password set <pass>  Set remote SSH password"
             echo "  password clear       Remove remote SSH password"
             echo "  lan [start|stop]     Control LAN SSH server on port 8022"
+            echo "  oracle [start|stop]  Control dedicated Oracle Cloud VPS tunnel (130.210.19.7)"
             echo "  serveo [start|stop]  Control persistent Serveo jump-host tunnel"
             echo "  serveo alias <name>  Set custom Serveo subdomain/alias"
             echo "  ngrok add-token <t>  Add Ngrok authtoken to pool"
@@ -823,6 +901,8 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
             fi
             echo ""
             lan_control status
+            echo ""
+            oracle_control status
             echo ""
             serveo_control status
             echo ""
