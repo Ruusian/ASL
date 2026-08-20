@@ -440,7 +440,6 @@ find "$TARGET_DIR" -maxdepth 3 -name "*.sh" -exec chmod +x {} + 2>/dev/null || t
 
 mkdir -p "$PREFIX/bin"
 ln -sf "$TARGET_DIR/bin/asl" "$PREFIX/bin/asl"
-ln -sf "$TARGET_DIR/bin/asl" "$PREFIX/bin/superkit" 2>/dev/null || echo -e "${YELLOW}[!] Could not create superkit symlink in \$PREFIX/bin${RESET}"
 
 echo -e "${GREEN}[*] Applying Android GID mappings...${RESET}"
 if ! "$TARGET_DIR/core/android-aid.sh" setup; then

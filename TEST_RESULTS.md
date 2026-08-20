@@ -10,7 +10,6 @@
 
 | Test | Status | Notes |
 |------|--------|-------|
-| ✅ Bash Syntax (bin/) | **PASS** | bin/asl and bin/superkit verified |
 | ✅ Core Scripts Syntax | **PASS** | All core/*.sh files verified (including mount-chroot.sh, stop-chroot.sh) |
 | ✅ Desktop/Gaming/Tools Syntax | **PASS** | All shell scripts in desktop/, gaming/, tools/ verified |
 | ✅ System Diagnostics | **PASS** | `asl doctor` runs successfully, shows system state |
@@ -28,7 +27,6 @@
 
 ### Test 1: Bash Syntax Checks (bin/)
 ```
-Command: bash -n bin/asl && bash -n bin/superkit
 Result: ✅ PASS
 Details: No syntax errors found in main CLI scripts
 ```

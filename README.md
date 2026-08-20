@@ -141,44 +141,51 @@ All technical specifications, architecture invariants, CLI subcommands, and oper
 
 ```text
 ASL/
-├── install.sh            # Automated setup script with distro selection & driver setup
+├── install.sh                # Automated setup with distro selection & driver setup
 ├── bin/
-│   ├── asl               # Main CLI entrypoint & interactive console dashboard
-│   └── superkit          # Alternative entrypoint symlink
+│   ├── asl                   # Main CLI entrypoint & interactive console dashboard
 ├── core/
-│   ├── common.sh         # Shared environment & common utilities (exec modes, mounts)
-│   ├── mount-chroot.sh   # Safe isolated chroot mount manager
-│   ├── stop-chroot.sh    # Safe unmount & process termination manager
-│   ├── doctor.sh         # Environment pre-flight check & diagnostics
-│   ├── gpu-detect.sh     # Hardware SoC auto-detection & profile selection
-│   ├── gpu-profile.sh    # Mesa Turnip / Zink / VirGL environment profile manager
-│   ├── wizard.sh         # Guided first-time setup wizard
-│   ├── hud.sh            # MangoHud & DXVK_HUD telemetry overlay manager
-│   ├── wine-bundle.sh    # Wine Mono & Gecko offline MSI bundle installer
-│   ├── wine-version.sh   # Wine & Proton-GE version manager
-│   ├── gamepad.sh        # Bluetooth & USB gamepad evdev input mapper
-│   ├── dev-suite.sh      # Developer suite installer (Python, Node, Go, Rust, VS Code)
-│   ├── security-suite.sh # Defensive security audit toolsuite (Nmap, Wireshark, Socat)
-│   ├── cleaner.sh        # Storage cache purger & disk space cleaner
-│   ├── repair.sh         # Automated integrity repair & system recovery
-│   ├── thermal.sh        # SoC & battery thermal sensor diagnostic monitor
-│   ├── termux-bridge.sh  # WakeLock, open, clipboard, and notification bridge
-│   ├── termux-droid.sh   # Termux Droid compatibility workflow
-│   ├── android-aid.sh    # Android AID GID group mapper
-│   └── snapshot.sh       # Point-in-time chroot snapshot & backup manager
+│   ├── common.sh             # Shared environment & common utilities
+│   ├── mount-chroot.sh       # Safe isolated chroot mount manager
+│   ├── stop-chroot.sh        # Safe unmount & process termination manager
+│   ├── service-manager.sh    # Service health watchdog (180s interval)
+│   ├── orphan-killer.sh      # Orphan process cleanup utility
+│   ├── doctor.sh             # Environment pre-flight check & diagnostics
+│   ├── gpu-detect.sh         # Hardware SoC auto-detection & profile selection
+│   ├── gpu-profile.sh        # Mesa Turnip / Zink / VirGL environment profile manager
+│   ├── wizard.sh             # Guided first-time setup wizard
+│   ├── hud.sh                # MangoHud & DXVK_HUD telemetry overlay manager
+│   ├── wine-bundle.sh        # Wine Mono & Gecko offline MSI bundle installer
+│   ├── wine-version.sh       # Wine & Proton-GE version manager
+│   ├── gamepad.sh            # Bluetooth & USB gamepad evdev input mapper
+│   ├── dev-suite.sh          # Developer suite installer (Python, Node, Go, Rust, VS Code)
+│   ├── security-suite.sh     # Defensive security audit toolsuite
+│   ├── cleaner.sh            # Storage cache purger & disk space cleaner
+│   ├── repair.sh             # Automated integrity repair & system recovery
+│   ├── thermal.sh            # SoC & battery thermal sensor diagnostic monitor
+│   ├── termux-bridge.sh      # WakeLock, open, clipboard, and notification bridge
+│   ├── termux-droid.sh       # Termux Droid compatibility workflow
+│   ├── android-aid.sh        # Android AID GID group mapper
+│   └── snapshot.sh           # Point-in-time chroot snapshot & backup manager
 ├── gaming/
-│   └── wine-box64.sh     # Wine64, Box64 & Windows app execution manager
+│   └── wine-box64.sh         # Wine64, Box64 & Windows app execution manager
 ├── desktop/
-│   ├── asl-hub/          # ASL Hub GTK3 Control Center source (Python)
-│   ├── asl-hub-installer.sh # Deploys ASL Hub GTK3 Control Center into Debian rootfs
-│   ├── start-desktop.sh  # Termux:X11 desktop session & PulseAudio launcher
-│   ├── theme.sh          # GTK theme & icon set switcher
-│   ├── remote.sh         # SSH tunnel dispatcher (sources remote/ modules)
-│   └── remote/         # Modular tunnel components (common, lan, serveo, oracle, ngrok, keys, autoconnect)
-│   └── pi-bridge.sh      # Raspberry Pi VNC monitor bridge
+│   ├── asl-hub/              # ASL Hub GTK3 Control Center source (Python)
+│   ├── asl-hub-installer.sh  # Deploys ASL Hub into Debian rootfs
+│   ├── start-desktop.sh      # Termux:X11 desktop session & PulseAudio launcher
+│   ├── theme.sh              # GTK theme & icon set switcher
+│   ├── remote.sh             # SSH tunnel dispatcher (sources remote/ modules)
+│   ├── remote/               # Modular tunnel components
+│   │   ├── common.sh         #   Shared state, SSH daemon, password management
+│   │   ├── lan.sh            #   LAN SSH server (port 8022)
+│   │   ├── serveo.sh         #   Persistent Serveo jump-host tunnel
+│   │   ├── oracle.sh         #   Oracle Cloud VPS always-on relay
+│   │   ├── ngrok.sh          #   Multi-token pool with quota auto-rotation
+│   │   ├── keys.sh           #   SSH public key management
+│   │   └── autoconnect.sh    #   24/7 auto-reconnect daemon with wake-lock
+│   └── pi-bridge.sh          # Raspberry Pi VNC monitor bridge
 ├── tools/
-│   └── make-release.sh   # Release automation
-├── tests/                # Lint, unit, integration & stress test suites
+│   └── make-release.sh       # Release automation
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── CLI_AND_UTILITIES.md
@@ -186,6 +193,9 @@ ASL/
 │   ├── PERFORMANCE_TUNING.md
 │   ├── ROADMAP_AND_TRACKING.md
 │   └── TERMUX_DROID_MIGRATION.md
+└── .github/
+    └── workflows/
+        └── lint.yml          # CI linting workflow
 ```
 
 ---

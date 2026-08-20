@@ -194,7 +194,6 @@ Related to #124
 
 ```bash
 # Check all shell scripts
-bash -n bin/asl bin/superkit
 for f in core/*.sh desktop/*.sh gaming/*.sh; do bash -n "$f" || echo "ERROR in $f"; done
 
 # Run ShellCheck linting

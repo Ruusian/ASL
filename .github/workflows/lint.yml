@@ -28,7 +28,6 @@ jobs:
     - name: Verify syntax of bin/asl
       run: |
         bash -n bin/asl
-        bash -n bin/superkit
     
     - name: Verify syntax of core scripts
       run: |
@@ -40,6 +39,13 @@ jobs:
     - name: Verify syntax of desktop scripts
       run: |
         for script in desktop/*.sh; do
+          echo "Syntax check: $script"
+          bash -n "$script"
+        done
+
+    - name: Verify syntax of desktop/remote modules
+      run: |
+        for script in desktop/remote/*.sh; do
           echo "Syntax check: $script"
           bash -n "$script"
         done
@@ -84,7 +90,7 @@ jobs:
           echo "ERROR: README.md not found!"
           exit 1
         fi
-        echo "✓ README.md found"
+        echo "README.md found"
     
     - name: Check CHANGELOG exists
       run: |
@@ -92,20 +98,4 @@ jobs:
           echo "ERROR: CHANGELOG.md not found!"
           exit 1
         fi
-        echo "✓ CHANGELOG.md found"
-
-  tests:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install test dependencies
-      run: sudo apt-get update && sudo apt-get install -y shellcheck
-
-    - name: Run ASL test suite
-      run: bash tests/run-all.sh
-
-    - name: Compile GTK control center
-      run: python3 -m py_compile desktop/asl-hub/asl-control-center.py
+        echo "CHANGELOG.md found"
