@@ -22,6 +22,7 @@ ensure_chroot_mounted() {
 
 asl_repair_run() {
     local target="${1:-all}"
+    [ "$target" = "run" ] && target="all"
     echo "[*] Running ASL Automated Repair & Recovery (target: $target)..."
 
     # Step 1: Repair mounts & stale unmounts
@@ -36,9 +37,12 @@ asl_repair_run() {
         fi
     fi
 
-    # Step 2: Fix rootfs permissions
+    # Step 2: Fix rootfs permissions & GPU/IPC sockets
     if [ "$target" = "permissions" ] || [ "$target" = "all" ]; then
-        echo "[2/4] Repairing critical directory permissions (/tmp, /dev/shm, /var/tmp)..."
+        echo "[2/5] Repairing critical directory permissions, GPU device nodes, and stale IPC sockets..."
+        chmod 666 /dev/kgsl-3d0 2>/dev/null || true
+        chmod 666 /dev/dri/renderD128 2>/dev/null || true
+        chmod 666 /dev/dri/card0 2>/dev/null || true
         asl_exec "
             chmod 1777 '$DEBIANPATH/tmp' 2>/dev/null || true
             chmod 1777 '$DEBIANPATH/var/tmp' 2>/dev/null || true
@@ -47,6 +51,8 @@ asl_repair_run() {
             chmod 755 '$DEBIANPATH/dev/pts' 2>/dev/null || true
             mkdir -p '$DEBIANPATH/run/user/0' 2>/dev/null || true
             chmod 700 '$DEBIANPATH/run/user/0' 2>/dev/null || true
+            rm -f '$DEBIANPATH/tmp/.X11-unix/X0.lock' 2>/dev/null || true
+            rm -f '$DEBIANPATH/tmp/pulse-socket.lock' 2>/dev/null || true
         "
     fi
 

@@ -90,6 +90,9 @@ case "${1:-status}" in
     install|setup)
         asl_security_install "${2:-basic}"
         ;;
+    basic|network|audit|full|nmap|wireshark|tshark)
+        asl_security_install "$1"
+        ;;
     *)
         echo "Usage: asl security-suite [status|install <preset|package>]"
         echo "Presets: basic, audit, nmap, wireshark"

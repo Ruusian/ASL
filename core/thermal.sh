@@ -27,7 +27,7 @@ asl_thermal_report() {
     # Battery Temperature via dumpsys or sysfs
     local batt_temp=""
     batt_temp=$(asl_exec "dumpsys battery | awk '/temperature:/ {print int(\$2/10)}'" 2>/dev/null || true)
-    if [ -z "$batt_temp" ] || [ "$batt_temp" -le 0 ]; then
+    if [ -z "$batt_temp" ] || [[ ! "$batt_temp" =~ ^-?[0-9]+$ ]] || [ "$batt_temp" -le 0 ]; then
         for p in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp; do
             if [ -r "$p" ]; then
                 raw_temp=$(cat "$p" 2>/dev/null || true)
@@ -45,7 +45,7 @@ asl_thermal_report() {
         done
     fi
 
-    if [ -n "$batt_temp" ] && [ "$batt_temp" -gt 0 ] && [ "$batt_temp" -lt 100 ]; then
+    if [ -n "$batt_temp" ] && [[ "$batt_temp" =~ ^[0-9]+$ ]] && [ "$batt_temp" -gt 0 ] && [ "$batt_temp" -lt 100 ]; then
         printf ' Battery:     '
         format_temp "$batt_temp"
         echo

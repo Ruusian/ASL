@@ -15,10 +15,21 @@ asl_require_default_debianpath
 
 safe_name() { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }
 
+find_script() {
+    local s="$1"
+    if [ -f "$SCRIPT_DIR/$s" ]; then
+        echo "$SCRIPT_DIR/$s"
+    elif [ -f "$SCRIPT_DIR/core/$s" ]; then
+        echo "$SCRIPT_DIR/core/$s"
+    else
+        echo "$SCRIPT_DIR/$s"
+    fi
+}
+
 remount_if_needed() {
     if [ "${1:-0}" -eq 1 ]; then
         echo "[*] Re-mounting chroot..."
-        bash "$SCRIPT_DIR/mount-chroot.sh" || echo "[!] Warning: chroot remount failed; run 'asl start' to mount it."
+        bash "$(find_script mount-chroot.sh)" || echo "[!] Warning: chroot remount failed; run 'asl start' to mount it."
     fi
 }
 
@@ -37,7 +48,7 @@ create_snapshot() {
     if is_mounted; then
         was_mounted=1
         echo "[!] Stopping chroot before creating snapshot..."
-        bash "$SCRIPT_DIR/stop-chroot.sh" || return 1
+        bash "$(find_script stop-chroot.sh)" || return 1
     fi
 
     required_mb=$(asl_exec "du -sm '$DEBIANPATH' 2>/dev/null" | awk '{print $1}')
@@ -96,7 +107,7 @@ restore_snapshot() {
 
     if [ "$was_mounted" -eq 1 ] || is_mounted; then
         echo "[!] Stopping chroot before restoring snapshot..."
-        bash "$SCRIPT_DIR/stop-chroot.sh" || return 1
+        bash "$(find_script stop-chroot.sh)" || return 1
     fi
 
     if is_mounted; then

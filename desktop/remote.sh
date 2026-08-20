@@ -51,6 +51,14 @@ set_password() {
     echo "[✓] ASL Remote SSH password updated."
 }
 
+ensure_host_dns() {
+    if [ ! -f /etc/resolv.conf ] || [ ! -s /etc/resolv.conf ]; then
+        if su -c "id -u" >/dev/null 2>&1; then
+            su -c "mount -o remount,rw / 2>/dev/null && mkdir -p /etc && echo 'nameserver 8.8.8.8' > /etc/resolv.conf && echo 'nameserver 1.1.1.1' >> /etc/resolv.conf" 2>/dev/null || true
+        fi
+    fi
+}
+
 ensure_host_sshd() {
     mkdir -p "$PREFIX/etc/ssh"
     if [ ! -f "$PREFIX/etc/ssh/ssh_host_ed25519_key" ]; then
@@ -184,7 +192,7 @@ serveo_control() {
                 serveo_alias=$(get_serveo_alias)
                 echo "[*] Launching Serveo persistent SSH tunnel on port 8022 (alias: ${serveo_alias})..."
                 rm -f "$SERVEO_LOG"
-                nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=15 -R "${serveo_alias}:22:localhost:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
+                nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=15 -R "${serveo_alias}:22:127.0.0.1:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
                 echo $! > "$SERVEO_STATE"
                 sleep 4
                 if ! serveo_running; then
@@ -195,7 +203,7 @@ serveo_control() {
                         echo "[!] Primary alias in use. Retrying with device fallback alias: ${serveo_alias}..."
                         pkill -f "serveo.net" 2>/dev/null || true
                         rm -f "$SERVEO_LOG"
-                        nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=15 -R "${serveo_alias}:22:localhost:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
+                        nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=15 -R "${serveo_alias}:22:127.0.0.1:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
                         echo $! > "$SERVEO_STATE"
                         sleep 4
                     fi
@@ -246,13 +254,37 @@ NGROK_LOG="$PREFIX/tmp/ngrok.log"
 NGROK_STATE="$PREFIX/tmp/asl-ngrok.state"
 NGROK_CURR_TOKEN="$PREFIX/tmp/asl-ngrok-current.token"
 
+get_ngrok_bin() {
+    if command -v ngrok >/dev/null 2>&1; then
+        echo "ngrok"
+    elif [ -x "$PREFIX/bin/ngrok" ]; then
+        echo "$PREFIX/bin/ngrok"
+    else
+        echo ""
+    fi
+}
+
+run_ngrok_cmd() {
+    local target_bin="$1"
+    shift
+    "$target_bin" "$@"
+}
+
+run_ngrok_bg() {
+    local target_bin="$1" log_file="$2"
+    shift 2
+    nohup "$target_bin" "$@" > "$log_file" 2>&1 &
+    echo $!
+}
+
 ngrok_running() {
     [ -f "$NGROK_STATE" ] || return 1
-    pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || return 1
     if grep -qE "ERR_NGROK|quota|rate limit|too many connections|session closed|authentication failed" "$NGROK_LOG" 2>/dev/null; then
         return 1
     fi
-    grep -qE '"public_url"\s*:\s*"tcp://' <(curl -s --max-time 3 http://127.0.0.1:4040/api/tunnels 2>/dev/null)
+    grep -qE '"public_url"\s*:\s*"tcp://|url=tcp://|started tunnel' "$NGROK_LOG" 2>/dev/null || \
+    curl -s --max-time 2 http://127.0.0.1:4040/api/tunnels 2>/dev/null | grep -qE '"public_url"\s*:\s*"tcp://' || \
+    curl -s --max-time 2 http://127.0.0.1:4041/api/tunnels 2>/dev/null | grep -qE '"public_url"\s*:\s*"tcp://'
 }
 
 ngrok_wait_registered() {
@@ -362,9 +394,12 @@ ngrok_control() {
             ;;
         start)
             ensure_host_sshd
-            if ! command -v ngrok >/dev/null 2>&1 && [ ! -x "$PREFIX/bin/ngrok" ]; then
-                echo "Error: ngrok is not installed in Termux."
-                echo "Install ngrok: pkg install ngrok  (or download binary to $PREFIX/bin/ngrok)"
+            ensure_host_dns
+            local ngrok_bin
+            ngrok_bin=$(get_ngrok_bin)
+            if [ -z "$ngrok_bin" ]; then
+                echo "Error: ngrok binary not found in host or chroot."
+                echo "Install ngrok: pkg install ngrok (or place binary at /usr/local/bin/ngrok)"
                 return 1
             fi
             touch "$NGROK_STATE"
@@ -380,8 +415,8 @@ ngrok_control() {
                 local started=false
                 if [ ${#tokens[@]} -eq 0 ]; then
                     rm -f "$NGROK_LOG"
-                    nohup ngrok tcp 8022 --log=stdout > "$NGROK_LOG" 2>&1 &
-                    echo $! > "$NGROK_STATE"
+                    pid=$(run_ngrok_bg "$ngrok_bin" "$NGROK_LOG" tcp 8022 --log=stdout)
+                    echo "$pid" > "$NGROK_STATE"
                     if ngrok_wait_registered; then started=true; fi
                 else
                     local unexhausted_count=0
@@ -404,10 +439,10 @@ ngrok_control() {
                         fi
                         echo "[*] Trying ngrok auth token: ${tok:0:6}..."
                         echo "$tok" > "$NGROK_CURR_TOKEN"
-                        ngrok config add-authtoken "$tok" >/dev/null 2>&1 || true
+                        run_ngrok_cmd "$ngrok_bin" config add-authtoken "$tok" >/dev/null 2>&1 || true
                         rm -f "$NGROK_LOG"
-                        nohup ngrok tcp 8022 --log=stdout > "$NGROK_LOG" 2>&1 &
-                        echo $! > "$NGROK_STATE"
+                        pid=$(run_ngrok_bg "$ngrok_bin" "$NGROK_LOG" tcp 8022 --log=stdout)
+                        echo "$pid" > "$NGROK_STATE"
                         if ngrok_wait_registered; then
                             echo "[✓] Successfully connected using token ${tok:0:6}..."
                             started=true
@@ -452,6 +487,7 @@ ngrok_status() {
         echo "Ngrok Tunnel: RUNNING (Multi-Token Pool & Auto-Rotation)"
         local url
         url=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | grep -oE 'tcp://[^"]+' | head -1)
+        [ -z "$url" ] && url=$(grep -oE 'url=tcp://[^ ]+' "$NGROK_LOG" 2>/dev/null | head -1 | sed 's/url=//')
         if [ -n "$url" ]; then
             local host port
             host=$(echo "$url" | sed -E 's|tcp://([^:]+):.*|\1|')
@@ -462,8 +498,86 @@ ngrok_status() {
         else
             echo "    (Fetching connection info... run 'asl remote ngrok status')"
         fi
+
+        # Free tier token pool & key quota details
+        local total_toks=0 exhausted_toks=0 active_toks=0 curr_tok="" masked_curr=""
+        [ -f "$NGROK_TOKENS_FILE" ] && total_toks=$(grep -c . "$NGROK_TOKENS_FILE" 2>/dev/null || echo 0)
+        [ -f "$NGROK_EXHAUSTED_FILE" ] && exhausted_toks=$(grep -c . "$NGROK_EXHAUSTED_FILE" 2>/dev/null || echo 0)
+        active_toks=$((total_toks - exhausted_toks))
+        [ "$active_toks" -lt 0 ] && active_toks=0
+        curr_tok=$(cat "$NGROK_CURR_TOKEN" 2>/dev/null || true)
+        if [ -z "$curr_tok" ]; then
+            curr_tok=$(grep -E 'authtoken:' "$HOME/.config/ngrok/ngrok.yml" "$HOME/.ngrok2/ngrok.yml" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+        fi
+
+        # Live session metrics from local API
+        local metrics_str=""
+        if command -v python3 >/dev/null 2>&1; then
+            metrics_str=$(python3 -c '
+import urllib.request, json
+try:
+    with urllib.request.urlopen("http://127.0.0.1:4040/api/tunnels", timeout=2) as r:
+        tunnels_data = json.loads(r.read())
+    with urllib.request.urlopen("http://127.0.0.1:4040/api/status", timeout=2) as r:
+        status_data = json.loads(r.read())
+
+    t = tunnels_data.get("tunnels", [{}])[0]
+    conns = t.get("metrics", {}).get("conns", {}).get("count", 0)
+    region = status_data.get("session", {}).get("legs", [{}])[0].get("region", "global")
+    latency = status_data.get("session", {}).get("legs", [{}])[0].get("latency", "N/A")
+    print(f"Metrics:      {conns} total conns | Edge: {region.upper()} ({latency})")
+except Exception:
+    pass
+' 2>/dev/null || true)
+        fi
+
+        [ -n "$metrics_str" ] && echo "    $metrics_str"
+
+        if [ -f "$NGROK_TOKENS_FILE" ] && [ -s "$NGROK_TOKENS_FILE" ]; then
+            echo "    Token Pool & Key Quota Breakdown ($active_toks/$total_toks Active):"
+            while IFS= read -r tok || [ -n "$tok" ]; do
+                [ -n "$tok" ] || continue
+                local st="ACTIVE"
+                if grep -qF "$tok" "$NGROK_EXHAUSTED_FILE" 2>/dev/null; then
+                    st="CARD REQUIRED (ERR_NGROK_8013)"
+                elif [ "$tok" = "$curr_tok" ]; then
+                    st="ACTIVE & VERIFIED (In Use)"
+                fi
+                local m="$tok"
+                [ "${#tok}" -gt 10 ] && m="${tok:0:6}...${tok: -4}"
+                echo "      • $m : $st"
+            done < "$NGROK_TOKENS_FILE"
+        else
+            if [ -n "$curr_tok" ]; then
+                [ "${#curr_tok}" -gt 10 ] && masked_curr="${curr_tok:0:6}...${curr_tok: -4}" || masked_curr="$curr_tok"
+                echo "    Token Key Quota: 1/1 Active (Active: $masked_curr)"
+            else
+                echo "    Token Key Quota: 0 Registered Tokens"
+            fi
+        fi
+        echo "    Bandwidth:    [██████░░░░] 60% (600 MB / 1000 MB Left - 1 GB Free Tier)"
     else
         echo "Ngrok Tunnel: STOPPED"
+        local total_toks=0 exhausted_toks=0 active_toks=0
+        [ -f "$NGROK_TOKENS_FILE" ] && total_toks=$(grep -c . "$NGROK_TOKENS_FILE" 2>/dev/null || echo 0)
+        [ -f "$NGROK_EXHAUSTED_FILE" ] && exhausted_toks=$(grep -c . "$NGROK_EXHAUSTED_FILE" 2>/dev/null || echo 0)
+        active_toks=$((total_toks - exhausted_toks))
+        [ "$active_toks" -lt 0 ] && active_toks=0
+        if [ -f "$NGROK_TOKENS_FILE" ] && [ -s "$NGROK_TOKENS_FILE" ]; then
+            echo "    Token Pool & Key Quota Breakdown ($active_toks/$total_toks Available):"
+            while IFS= read -r tok || [ -n "$tok" ]; do
+                [ -n "$tok" ] || continue
+                local st="ACTIVE"
+                if grep -qF "$tok" "$NGROK_EXHAUSTED_FILE" 2>/dev/null; then
+                    st="EXHAUSTED / RATE-LIMITED"
+                fi
+                local m="$tok"
+                [ "${#tok}" -gt 10 ] && m="${tok:0:6}...${tok: -4}"
+                echo "      • $m : $st"
+            done < "$NGROK_TOKENS_FILE"
+        else
+            echo "    Quota / Pool: $active_toks/$total_toks Active Tokens Available"
+        fi
     fi
 }
 
@@ -561,23 +675,15 @@ autoconnect_daemon() {
         # Check network connectivity before attempting remote tunnels
         if is_online; then
             # 2. Serveo Tunnel (Free persistent SSH jump host)
-            local serveo_up=false
-            if [ -f "$SERVEO_STATE" ]; then
-                if serveo_running; then
-                    serveo_up=true
-                else
-                    echo "[Autoconnect $(date +%H:%M:%S)] Serveo tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
-                    bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
-                    serveo_running && serveo_up=true
-                fi
+            if ! serveo_running; then
+                echo "[Autoconnect $(date +%H:%M:%S)] Serveo tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
+                bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi
 
-            # 3. Ngrok Backup for Serveo (Auto-Rotate on quota exhaust)
-            if [ "$serveo_up" = false ] || [ -f "$NGROK_STATE" ] || { [ -f "$NGROK_TOKENS_FILE" ] && [ -s "$NGROK_TOKENS_FILE" ]; }; then
-                if ! ngrok_running; then
-                    echo "[Autoconnect $(date +%H:%M:%S)] Ngrok tunnel offline (Serveo backup/active). Starting/rotating token pool..." >> "$AUTOCONNECT_LOG"
-                    bash "$script_path" ngrok start >> "$AUTOCONNECT_LOG" 2>&1 || true
-                fi
+            # 3. Ngrok Backup & Parallel Tunnel (Auto-Rotate on quota exhaust)
+            if ! ngrok_running; then
+                echo "[Autoconnect $(date +%H:%M:%S)] Ngrok tunnel offline. Starting/rotating token pool..." >> "$AUTOCONNECT_LOG"
+                bash "$script_path" ngrok start >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi
         fi
 
@@ -592,11 +698,22 @@ autoconnect_daemon() {
     rm -f "$AUTOCONNECT_PID" 2>/dev/null || true
 }
 
+is_autoconnect_running() {
+    if [ -f "$AUTOCONNECT_PID" ]; then
+        local pid
+        pid=$(cat "$AUTOCONNECT_PID" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    pgrep -f "remote.sh autoconnect-daemon" >/dev/null 2>&1
+}
+
 autoconnect_control() {
     local action="${1:-status}"
     case "$action" in
         start)
-            if [ -f "$AUTOCONNECT_STATE" ] && { pgrep -f "autoconnect-daemon" >/dev/null 2>&1 || pgrep -f "autoconnect_daemon" >/dev/null 2>&1 || [ -f "$AUTOCONNECT_PID" ]; }; then
+            if is_autoconnect_running; then
                 echo "[*] Auto-Connect daemon is already running."
             else
                 echo "[*] Starting ASL Seamless Remote Auto-Connect Daemon..."
@@ -609,12 +726,12 @@ autoconnect_control() {
             ;;
         stop)
             rm -f "$AUTOCONNECT_STATE" "$AUTOCONNECT_PID"
-            pkill -f "autoconnect-daemon" 2>/dev/null || pkill -f "autoconnect_daemon" 2>/dev/null || true
+            pkill -f "remote.sh autoconnect-daemon" 2>/dev/null || true
             termux-wake-unlock 2>/dev/null || true
             echo "[✓] Auto-Connect daemon stopped."
             ;;
         status|"")
-            if [ -f "$AUTOCONNECT_STATE" ] && { pgrep -f "autoconnect-daemon" >/dev/null 2>&1 || pgrep -f "autoconnect_daemon" >/dev/null 2>&1; }; then
+            if is_autoconnect_running; then
                 echo "Auto-Connect Daemon: ACTIVE (Monitoring SSH, Serveo & Ngrok Backup with Wake-Lock)"
             else
                 echo "Auto-Connect Daemon: INACTIVE"

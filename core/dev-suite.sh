@@ -149,6 +149,9 @@ case "${1:-status}" in
     install|setup)
         asl_dev_suite_install "${2:-all}"
         ;;
+    python|webdev|node|neovim|nvim|go|golang|rust|vscode|code-server|all)
+        asl_dev_suite_install "$1"
+        ;;
     *)
         echo "Usage: asl dev-suite [status|install <preset>]"
         echo "Presets: python, webdev, neovim, go, rust, vscode, all"

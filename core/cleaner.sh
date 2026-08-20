@@ -68,7 +68,7 @@ asl_clean_run() {
                 echo \"[*] Cleaning user build & shader cache (~/.cache & /tmp/.mesa_cache)...\"
                 rm -rf /root/.cache/* /home/*/.cache/* /tmp/.mesa_cache/* 2>/dev/null || true
                 ;;
-            all)
+            all|run|clean)
                 echo \"[*] Purging APT package cache...\"
                 apt-get clean
                 rm -rf /var/lib/apt/lists/*

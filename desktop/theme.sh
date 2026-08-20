@@ -56,13 +56,13 @@ set_xfce_theme() {
 
     asl_chroot_exec "
         mkdir -p '$target_home/.config/gtk-3.0'
-        cat << 'GTK3EOF' > '$target_home/.config/gtk-3.0/settings.ini'
+        cat << GTK3EOF > '$target_home/.config/gtk-3.0/settings.ini'
 [Settings]
 gtk-theme-name=$gtk_theme
 gtk-icon-theme-name=$icon_theme
 gtk-cursor-theme-name=$cursor_theme
 GTK3EOF
-        cat << 'GTK2EOF' > '$target_home/.gtkrc-2.0'
+        cat << GTK2EOF > '$target_home/.gtkrc-2.0'
 gtk-theme-name=\"$gtk_theme\"
 gtk-icon-theme-name=\"$icon_theme\"
 gtk-cursor-theme-name=\"$cursor_theme\"

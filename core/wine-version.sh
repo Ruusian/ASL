@@ -74,10 +74,13 @@ asl_wine_version_install() {
                 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
                 set -e
                 mkdir -p /opt/proton-ge/bin /opt/proton-ge/lib64
-                if command -v wget >/dev/null 2>&1; then
-                    DL_CMD=\"wget -q -O\"
+                if command -v curl >/dev/null 2>&1; then
+                    DL_CMD="curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o"
+                elif command -v wget >/dev/null 2>&1; then
+                    DL_CMD="wget -q --timeout=600 --tries=2 -O"
                 else
-                    DL_CMD=\"curl -s -L -o\"
+                    apt-get update && apt-get install -y curl
+                    DL_CMD="curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o"
                 fi
                 if [ ! -x /opt/proton-ge/bin/wine ]; then
                     echo \"[*] Fetching latest Proton-GE release metadata...\"
@@ -85,7 +88,7 @@ asl_wine_version_install() {
                     [ -n \"\$LATEST_TAG\" ] || LATEST_TAG=GE-Proton8-26
                     PROTON_URL=\"https://github.com/GloriousEggroll/proton-ge-custom/releases/download/\${LATEST_TAG}/\${LATEST_TAG}.tar.gz\"
                     echo \"[*] Downloading \$LATEST_TAG release archive...\"
-                    if ! \$DL_CMD /tmp/proton-ge.tar.gz \"\$PROTON_URL\" --max-time 600 --retry 2 2>/dev/null || [ ! -s /tmp/proton-ge.tar.gz ]; then
+                    if ! \$DL_CMD /tmp/proton-ge.tar.gz \"\$PROTON_URL\" 2>/dev/null || [ ! -s /tmp/proton-ge.tar.gz ]; then
                         rm -f /tmp/proton-ge.tar.gz 2>/dev/null || true
                         echo \"[!] FAILED: Proton-GE download failed. Aborting; no fallback engine was created.\" >&2
                         exit 1

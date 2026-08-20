@@ -84,6 +84,7 @@ MOUNTS="\$(
         echo "$DEBIANPATH/dev/shm"
         echo "$DEBIANPATH/data/data/com.termux/files/usr/tmp"
         echo "$DEBIANPATH/var/lock"
+        echo "$DEBIANPATH/storage/emulated/0"
         echo "$DEBIANPATH/sdcard"
         echo "$DEBIANPATH/tmp"
         echo "$DEBIANPATH/run"
@@ -97,7 +98,7 @@ MOUNTS="\$(
 
 failed=0
 for mp in \$MOUNTS; do
-    if grep -q -F " \$mp " /proc/mounts 2>/dev/null; then
+    if grep -q -E " \$mp([[:space:]]|\$)" /proc/mounts 2>/dev/null; then
         if ! umount "\$mp" 2>/dev/null; then
             if ! umount -l -f "\$mp" 2>/dev/null; then
                 echo "[!] Could not unmount: \$mp" >&2

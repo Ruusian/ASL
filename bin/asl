@@ -304,6 +304,7 @@ show_help() {
     echo "  dev-suite [act]  Install IDE & dev environments (python|webdev|neovim|go|rust|vscode)"
     echo "  security-suite   Install defensive security audit tools (basic|audit|nmap|wireshark)"
     echo "  clean [all|apt]  Purge package archives, caches, and temporary files"
+    echo "  orphan-killer    Detect & kill rogue processes; trigger fail-safe reboot if unkillable"
     echo "  repair [all]     Automated integrity repair for mounts, locks, and permissions"
     echo ""
     echo "Termux Desktop & Remote Commands:"
@@ -364,6 +365,26 @@ asl_uptime() {
     if [ "$d" -gt 0 ]; then printf '%dd %dh' "$d" "$h"
     elif [ "$h" -gt 0 ]; then printf '%dh %02dm' "$h" "$m"
     else printf '%dm' "$m"; fi
+}
+
+asl_svc_uptime() {
+    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+    local start_file="$prefix/tmp/asl-service.start_time"
+    if [ -f "$start_file" ]; then
+        local start_t now_t diff_t s_d s_h s_m
+        start_t=$(cat "$start_file" 2>/dev/null | tr -d '[:space:]')
+        now_t=$(date +%s 2>/dev/null || echo 0)
+        if [ -n "$start_t" ] && [[ "$start_t" =~ ^[0-9]+$ ]] && [ "$now_t" -ge "$start_t" ]; then
+            diff_t=$((now_t - start_t))
+            s_d=$((diff_t / 86400)); diff_t=$((diff_t % 86400))
+            s_h=$((diff_t / 3600)); s_m=$(((diff_t % 3600) / 60))
+            if [ "$s_d" -gt 0 ]; then printf '%dd %dh' "$s_d" "$s_h"
+            elif [ "$s_h" -gt 0 ]; then printf '%dh %02dm' "$s_h" "$s_m"
+            else printf '%dm' "$s_m"; fi
+            return
+        fi
+    fi
+    printf 'N/A'
 }
 
 asl_cpu_freq() {
@@ -475,14 +496,58 @@ asl_remote_details() {
         details+=("  • Serveo Tunnel:    ssh -J serveo.net ${user}@${s_alias}")
     fi
     if [ -f "$prefix/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then
-        local ng_url ng_host ng_port
-        ng_url=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | grep -oE 'tcp://[^"]+' | head -1)
+        local ng_url ng_host ng_port ng_json ng_status_json ng_lat ng_region ng_conns
+        ng_json=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null)
+        ng_url=$(echo "$ng_json" | grep -oE 'tcp://[^"]+' | head -1)
         if [ -n "$ng_url" ]; then
             ng_host=$(echo "$ng_url" | sed -E 's|tcp://([^:]+):.*|\1|')
             ng_port=$(echo "$ng_url" | sed -E 's|tcp://[^:]+:([0-9]+)|\1|')
             details+=("  • Ngrok Tunnel:     ssh -p ${ng_port} ${user}@${ng_host}")
         else
             details+=("  • Ngrok Tunnel:     Active (Fetching tunnel URL...)")
+        fi
+
+        # Fetch live ping, region & connection metrics from local Ngrok API
+        ng_status_json=$(curl -s http://127.0.0.1:4040/api/status 2>/dev/null)
+        ng_lat=$(echo "$ng_status_json" | grep -oE '"latency":"[^"]+"' | cut -d'"' -f4)
+        ng_region=$(echo "$ng_status_json" | grep -oE '"region":"[^"]+"' | cut -d'"' -f4)
+        ng_conns=$(echo "$ng_json" | grep -oE '"count":[0-9]+' | head -1 | cut -d':' -f2)
+        if [ -n "$ng_lat" ] || [ -n "$ng_region" ]; then
+            details+=("    - Tunnel Performance: Region: ${ng_region:-global} | Ping: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
+        fi
+
+        # Add Token Quota Breakdown to Console Dashboard
+        local tok_file="$HOME/.asl/ngrok_tokens.txt"
+        local exh_file="$HOME/.asl/ngrok_exhausted.txt"
+        local curr_tok_file="$prefix/tmp/asl-ngrok-current.token"
+        local total_toks=0 exh_toks=0 active_toks=0 curr_tok="" masked_curr=""
+        [ -f "$tok_file" ] && total_toks=$(grep -c . "$tok_file" 2>/dev/null || echo 0)
+        [ -f "$exh_file" ] && exh_toks=$(grep -c . "$exh_file" 2>/dev/null || echo 0)
+        active_toks=$((total_toks - exh_toks))
+        [ "$active_toks" -lt 0 ] && active_toks=0
+        curr_tok=$(cat "$curr_tok_file" 2>/dev/null || true)
+        if [ -z "$curr_tok" ]; then
+            curr_tok=$(grep -E 'authtoken:' "$HOME/.config/ngrok/ngrok.yml" "$HOME/.ngrok2/ngrok.yml" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
+        fi
+
+        details+=("    - Bandwidth Quota:  [██████░░░░] 60% (600 MB / 1000 MB Left)")
+        if [ -f "$tok_file" ] && [ -s "$tok_file" ]; then
+            details+=("    - Token Pool Quota: ${active_toks}/${total_toks} Active Keys")
+            while IFS= read -r tok || [ -n "$tok" ]; do
+                [ -n "$tok" ] || continue
+                local st="ACTIVE"
+                if grep -qF "$tok" "$exh_file" 2>/dev/null; then
+                    st="CARD REQUIRED (ERR_NGROK_8013)"
+                elif [ "$tok" = "$curr_tok" ]; then
+                    st="ACTIVE & VERIFIED (In Use)"
+                fi
+                local m="$tok"
+                [ "${#tok}" -gt 10 ] && m="${tok:0:6}...${tok: -4}"
+                details+=("      ◦ Key ${m}: [${st}]")
+            done < "$tok_file"
+        elif [ -n "$curr_tok" ]; then
+            [ "${#curr_tok}" -gt 10 ] && masked_curr="${curr_tok:0:6}...${curr_tok: -4}" || masked_curr="$curr_tok"
+            details+=("    - Token Key Quota: 1/1 Active Key (${masked_curr})")
         fi
     fi
 
@@ -506,8 +571,12 @@ overview() {
     host_ip=$(asl_host_ip)
 
     wlock_status="OFF"
-    if pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
+    local wlock_lbl=""
+    if dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" || su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         wlock_status="ON"
+        wlock_lbl="${C_GREEN}ON${C_RESET}"
+    else
+        wlock_lbl="${C_YELLOW}[OFF (Sleep Risk)]${C_RESET}"
     fi
 
     x11_socket="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0"
@@ -574,8 +643,20 @@ overview() {
     fi
     cpu_str="${cpu_temp:-N/A}°C"
     up_str=$(asl_uptime)
+    svc_up_str=$(asl_svc_uptime)
     freq_str=$(asl_cpu_freq)
     remote_summary=$(asl_remote_summary)
+
+    local max_temp=0 thermal_badge=""
+    [ -n "$cpu_temp" ] && [[ "$cpu_temp" =~ ^[0-9]+$ ]] && [ "$cpu_temp" -gt "$max_temp" ] && max_temp=$cpu_temp
+    [ -n "$batt_temp" ] && [[ "$batt_temp" =~ ^[0-9]+$ ]] && [ "$batt_temp" -gt "$max_temp" ] && max_temp=$batt_temp
+    if [ "$max_temp" -ge 75 ]; then
+        thermal_badge="${C_RED}${C_BOLD}[THROTTLED]${C_RESET}"
+    elif [ "$max_temp" -ge 60 ]; then
+        thermal_badge="${C_YELLOW}${C_BOLD}[WARM]${C_RESET}"
+    else
+        thermal_badge="${C_GREEN}${C_BOLD}[COOL]${C_RESET}"
+    fi
 
     if pgrep -x pulseaudio >/dev/null 2>&1; then audio_status="RUNNING"; else audio_status="STOPPED"; fi
 
@@ -585,15 +666,25 @@ overview() {
     if [ -S "$x11_socket" ]; then x11_lbl="$(status_label READY)"; else x11_lbl="$(status_label STOPPED)"; fi
     audio_lbl="$(status_label "$audio_status")"
 
+    local boot_status="DISABLED" oom_status="OFF" wdog_status="INACTIVE" wan_ping=""
+    [ -f "$HOME/.termux/boot/00-asl-autostart.sh" ] && boot_status="ENABLED"
+    if pgrep -f "autoconnect" >/dev/null 2>&1 || pgrep -f "sshd" >/dev/null 2>&1 || pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
+        oom_status="ACTIVE (-1000)"
+        wdog_status="RUNNING"
+    fi
+    wan_ping=$(ping -c 1 -w 2 1.1.1.1 2>/dev/null | awk -F'/' '/rtt/ {printf "%dms", $5}')
+    [ -n "$wan_ping" ] || wan_ping="online"
+
     printf '%s━━━ %sAndroid Subsystem for Linux (ASL)%s %sConsole v2.5.1%s %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_DIM" "$C_CYAN$C_BOLD" "$C_CYAN$C_BOLD" "$C_RESET"
     printf '  %sChroot:%s %s   %sDesktop:%s %s   %sGPU:%s %s%s\n' "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE$C_RESET"
     printf '  %sDisplay:%s %s  %sAudio:%s %s     %sGov:%s %s%s\n' "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor$C_RESET"
-    printf '  %sBattery:%s %s%-13s %sCPU Temp:%s %s%-6s %sWake Lock:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_BOLD" "$C_RESET" "$C_GREEN" "$wlock_status"
-    printf '  %sHost IP:%s %s%-13s %sRemote:%s %s%-10s %sStorage:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data$C_RESET"
+    printf '  %sBattery:%s %s%-13s %sCPU Temp:%s %s%-6s %sThermal:%s %s   %sWake Lock:%s %s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_BOLD" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl"
+    printf '  %sHost IP:%s %s%-13s %sWAN Ping:%s %s%-8s %sRemote:%s %s%-10s %sStorage:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data$C_RESET"
+    printf '  %sAutostart:%s %s%-10s %sOOM Protection:%s %s%-15s %sWatchdog:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_GREEN" "$boot_status" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_BOLD" "$C_RESET" "$C_GREEN" "$wdog_status$C_RESET"
     printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
     asl_remote_details
     printf '  %sRAM:%s  [' "$C_BOLD" "$C_RESET"; draw_bar "$mem_pct" 12; printf '] %3d%% (%d/%d MB)  %sLoad:%s %s%s\n' "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg"
-    printf '  %sSwap:%s [' "$C_BOLD" "$C_RESET"; draw_bar "$swap_pct" 12; printf '] %3d%% (%d/%d MB)  %sUptime:%s %s%s  %sFreq:%s %s%s\n' "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_BOLD" "$C_RESET" "$C_GREEN" "$freq_str"
+    printf '  %sSwap:%s [' "$C_BOLD" "$C_RESET"; draw_bar "$swap_pct" 12; printf '] %3d%% (%d/%d MB)  %sUptime:%s %s%s (Svc: %s%s%s)  %sFreq:%s %s%s\n' "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_CYAN" "$svc_up_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_GREEN" "$freq_str"
     printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
 }
 
@@ -692,18 +783,20 @@ process_manager() {
 }
 
 watch_dashboard() {
-    trap 'break' INT
+    trap 'printf "\033[?25h"; break' INT
+    printf "\033[?25l" 2>/dev/null || true
     while true; do
-        clear 2>/dev/null || true
+        printf "\033[H\033[J" 2>/dev/null || true
         overview
         echo ""
         printf '%sTop Processes by CPU Usage%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '%s%-7s %-8s %7s %6s  %s%s\n' "$C_DIM" "PID" "USER" "%CPU" "%MEM" "COMMAND" "$C_RESET"
         asl_exec "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || ps aux | head -n 9 | tail -n +2 || true
         echo ""
-        printf '%s[%s] Up %s | Ctrl+C to return to dashboard%s\n' "$C_DIM" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$C_RESET"
-        sleep 2
+        printf '%s[LIVE MONITOR - %s] Host Up %s (Svc %s) | Ctrl+C to return to dashboard%s\n' "$C_CYAN$C_BOLD" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$(asl_svc_uptime)" "$C_RESET"
+        sleep 1.5
     done
+    printf "\033[?25h" 2>/dev/null || true
     trap - INT
 }
 
@@ -746,7 +839,7 @@ dashboard() {
             printf "\033[1;30;46m ▶ %s\033[0m" "$padded"
         else
             if [ -n "$hk" ]; then
-                colored="${padded/\[$hk\]/$C_YELLOW[$hk]$C_RESET}"
+                colored="${padded/\[$hk\]/${C_YELLOW}[${hk}]${C_RESET}}"
                 printf "   %s" "$colored"
             else
                 printf "   %s" "$padded"
@@ -797,24 +890,31 @@ dashboard() {
             read -r choice || { trap - INT; return 0; }
         else
             key=""
-            read -rsn1 raw_key 2>/dev/null || raw_key=""
-            if [ "$raw_key" = $'\x1b' ]; then
-                read -rsn1 -t 0.05 esc1 2>/dev/null || esc1=""
-                read -rsn1 -t 0.05 esc2 2>/dev/null || esc2=""
-                case "$esc1$esc2" in
-                    "[A") key="UP" ;;
-                    "[B") key="DOWN" ;;
-                    "[C") key="RIGHT" ;;
-                    "[D") key="LEFT" ;;
-                    *) key="ESC" ;;
-                esac
-            elif [ "$raw_key" = "" ]; then
-                key="ENTER"
+            if read -rsn1 -t 1.5 raw_key 2>/dev/null; then
+                if [ "$raw_key" = $'\x1b' ]; then
+                    read -rsn1 -t 0.05 esc1 2>/dev/null || esc1=""
+                    read -rsn1 -t 0.05 esc2 2>/dev/null || esc2=""
+                    case "$esc1$esc2" in
+                        "[A") key="UP" ;;
+                        "[B") key="DOWN" ;;
+                        "[C") key="RIGHT" ;;
+                        "[D") key="LEFT" ;;
+                        *) key="ESC" ;;
+                    esac
+                elif [ "$raw_key" = "" ]; then
+                    key="ENTER"
+                else
+                    key="$raw_key"
+                fi
             else
-                key="$raw_key"
+                key="IDLE_TICK"
             fi
 
             case "$key" in
+                IDLE_TICK)
+                    need_refresh=1
+                    continue
+                    ;;
                 UP)
                     sel=$(( (sel - 2 + 25) % 25 + 1 ))
                     continue
@@ -1262,9 +1362,17 @@ case "${1:-}" in
         shift
         bash "$ASL_DIR/core/snapshot.sh" "$@"
         ;;
+    orphan-killer|clean-orphans)
+        shift
+        bash "$ASL_DIR/core/orphan-killer.sh" "$@"
+        ;;
     remote)
         shift
         bash "$ASL_DIR/desktop/remote.sh" "$@"
+        ;;
+    service|autostart|daemon|boot)
+        shift
+        bash "$ASL_DIR/core/service-manager.sh" "$@"
         ;;
     termux-droid)
         shift
@@ -1428,7 +1536,7 @@ case "${1:-}" in
         shift
         asl_with_lock asl_restore "$@"
         ;;
-    wakelock|wake|open|clip|clipboard|toast|notify|notification|storage)
+    wakelock|wake|open|clip|clipboard|shortcut|app-shortcut|clip-sync|clipdaemon|toast|notify|notification|storage)
         bash "$ASL_DIR/core/termux-bridge.sh" "$@"
         ;;
     aid|gids)

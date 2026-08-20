@@ -59,7 +59,7 @@ termux_open_file() {
         [ "$stem" = "$base" ] && ext="" || ext=".$ext"
         safe_stem=$(echo "$stem" | sed 's/[^A-Za-z0-9_-]/_/g')
         [ -n "$safe_stem" ] || safe_stem="file"
-        tmp_copy=$(mktemp "$download_dir/asl-shared-${safe_stem}.XXXXXX${ext}") || {
+        tmp_copy=$(mktemp --suffix="${ext}" "$download_dir/asl-shared-${safe_stem}.XXXXXX" 2>/dev/null || mktemp "$download_dir/asl-shared-${safe_stem}.XXXXXX") || {
             echo "[!] Could not allocate a unique file in Android Download."
             return 1
         }
@@ -144,6 +144,84 @@ termux_storage_setup() {
     fi
 }
 
+termux_create_shortcut() {
+    local app_name="${1:-}"
+    if [ -z "$app_name" ]; then
+        echo "Usage: asl shortcut <desktop-app-or-binary-name>"
+        return 1
+    fi
+    local shortcuts_dir="$HOME/.shortcuts"
+    local bin_dir="$HOME/bin"
+    mkdir -p "$shortcuts_dir" "$bin_dir" 2>/dev/null || true
+
+    local script_name
+    script_name=$(echo "$app_name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/_/g')
+    local target_script="$shortcuts_dir/${script_name}.sh"
+    local target_bin="$bin_dir/${script_name}"
+
+    cat <<EOF > "$target_script"
+#!/bin/bash
+# ASL Android Home Screen / Termux Shortcut Launcher
+export PATH="/data/data/com.termux/files/usr/bin:\$PATH"
+asl start >/dev/null 2>&1 || true
+asl desktop start >/dev/null 2>&1 || true
+asl host launch "$app_name"
+EOF
+    chmod +x "$target_script"
+    cp "$target_script" "$target_bin" 2>/dev/null || true
+    chmod +x "$target_bin" 2>/dev/null || true
+
+    echo "[✓] Created ASL application shortcut for '$app_name':"
+    echo "  - Termux Widget Shortcut: $target_script"
+    echo "  - CLI Command: $target_bin"
+}
+
+termux_clipboard_sync() {
+    local action="${1:-start}"
+    local pid_file="${TMPDIR:-/data/data/com.termux/files/usr/tmp}/asl_clip_sync.pid"
+
+    case "$action" in
+        start|on)
+            if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+                echo "[*] Clipboard sync daemon is already running (PID: $(cat "$pid_file"))."
+                return 0
+            fi
+            echo "[*] Starting ASL Bidirectional System Clipboard Sync..."
+            (
+                last_clip=""
+                while true; do
+                    if command -v termux-clipboard-get >/dev/null 2>&1; then
+                        curr_clip=$(termux-clipboard-get 2>/dev/null || true)
+                        if [ -n "$curr_clip" ] && [ "$curr_clip" != "$last_clip" ]; then
+                            last_clip="$curr_clip"
+                            asl exec "echo -n \"$curr_clip\" | xclip -selection clipboard 2>/dev/null || echo -n \"$curr_clip\" | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
+                        fi
+                    fi
+                    sleep 3
+                done
+            ) &
+            echo $! > "$pid_file"
+            echo "[✓] Clipboard sync daemon active (PID: $!)."
+            ;;
+        stop|off)
+            if [ -f "$pid_file" ]; then
+                kill "$(cat "$pid_file")" 2>/dev/null || true
+                rm -f "$pid_file"
+                echo "[✓] Clipboard sync daemon stopped."
+            else
+                echo "[*] Clipboard sync daemon is not running."
+            fi
+            ;;
+        status|*)
+            if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+                echo "[*] Clipboard Sync Daemon: ACTIVE (PID: $(cat "$pid_file"))"
+            else
+                echo "[*] Clipboard Sync Daemon: INACTIVE"
+            fi
+            ;;
+    esac
+}
+
 case "${1:-}" in
     wakelock|wake)
         shift
@@ -156,6 +234,14 @@ case "${1:-}" in
     clip|clipboard)
         shift
         termux_clipboard "$@"
+        ;;
+    shortcut|app-shortcut)
+        shift
+        termux_create_shortcut "$@"
+        ;;
+    clip-sync|clipdaemon)
+        shift
+        termux_clipboard_sync "$@"
         ;;
     toast)
         shift
@@ -170,7 +256,7 @@ case "${1:-}" in
         ;;
     *)
         echo "ASL Termux & Android Host Bridge"
-        echo "Usage: asl [wakelock|open|clip|toast|notify|storage]"
+        echo "Usage: asl [wakelock|open|clip|shortcut|clip-sync|toast|notify|storage]"
         ;;
 esac
 

@@ -127,12 +127,12 @@ asl_chroot_exec() {
 $cmd
 ASLEOF"
                 chmod 700 "$tmpf" 2>/dev/null || asl_exec "chmod 700 '$tmpf'"
-                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -l /tmp/$tmpbase"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash /tmp/$tmpbase"
                 local res=$?
                 rm -f "$tmpf" 2>/dev/null || asl_exec "rm -f '$tmpf'"
                 return $res
             else
-                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -l -c '$cmd'"
+                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c '$cmd'"
             fi
             ;;
         shizuku)
@@ -268,3 +268,17 @@ asl_log_ok()    { printf '%s[✓] %s%s\n' "$C_GREEN$C_BOLD" "$*" "$C_RESET"; }
 asl_log_warn()  { printf '%s[!] %s%s\n' "$C_YELLOW$C_BOLD" "$*" "$C_RESET"; }
 asl_log_error() { printf '%s[✗] %s%s\n' "$C_RED$C_BOLD" "$*" "$C_RESET" >&2; }
 asl_log_hint()  { printf '%s    💡 Hint: %s%s\n' "$C_YELLOW" "$*" "$C_RESET"; }
+
+# Auto-detect performance CPU core affinity mask (big.LITTLE topology)
+asl_get_perf_cpu_mask() {
+    local ncpu
+    ncpu=$(nproc 2>/dev/null || echo 8)
+    if [ "$ncpu" -ge 8 ]; then
+        printf '4-7'
+    elif [ "$ncpu" -ge 4 ]; then
+        printf '2-%d' "$((ncpu - 1))"
+    else
+        printf '0-%d' "$((ncpu - 1))"
+    fi
+}
+

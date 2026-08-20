@@ -2,6 +2,8 @@
 # Termux Droid compatibility helpers for the unified ASL workflow.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ASL_BIN="${ASL_DIR:-$SCRIPT_DIR}/bin/asl"
+[ -f "$ASL_BIN" ] || ASL_BIN=$(command -v asl || echo "$SCRIPT_DIR/bin/asl")
 
 termux_droid_help() {
     cat <<'EOF'
@@ -47,14 +49,14 @@ termux_droid() {
     case "${1:-help}" in
         setup) termux_droid_setup ;;
         start)
-            bash "$SCRIPT_DIR/bin/asl" start && bash "$SCRIPT_DIR/bin/asl" desktop start
+            bash "$ASL_BIN" start && bash "$ASL_BIN" desktop start
             ;;
         stop)
-            bash "$SCRIPT_DIR/bin/asl" desktop stop || true
-            bash "$SCRIPT_DIR/bin/asl" stop
+            bash "$ASL_BIN" desktop stop || true
+            bash "$ASL_BIN" stop
             ;;
-        status) bash "$SCRIPT_DIR/bin/asl" status ;;
-        sync-apps) bash "$SCRIPT_DIR/bin/asl" desktop sync-apps ;;
+        status) bash "$ASL_BIN" status ;;
+        sync-apps) bash "$ASL_BIN" desktop sync-apps ;;
         bridge) termux_droid_bridge ;;
         help|-h|--help) termux_droid_help ;;
         *)

@@ -206,7 +206,7 @@ if [ ! -d "$TARGET_DIR/.git" ]; then
 fi
 
 # 3. Interactive Distro Edition Selection
-if ([ -t 0 ] || [ -c /dev/tty ]) && [ "$DISTRO_TYPE" = "auto" ]; then
+if { [ -t 0 ] || [ -c /dev/tty ]; } && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "\n${CYAN}====================================================${RESET}"
     echo -e "${CYAN} 🐧 Select Linux Subsystem Distribution / Edition:   ${RESET}"
     echo -e "${CYAN}====================================================${RESET}"
@@ -353,7 +353,7 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                         echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
                         echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
                         ensure_chroot_unmounted_for_replace || exit 1
-                        local tar_flags="--no-same-owner --no-same-permissions"
+                        tar_flags="--no-same-owner --no-same-permissions"
                         if [ "${ASL_EXEC_MODE:-root}" = "root" ] || [ "${ASL_EXEC_MODE:-root}" = "shizuku" ]; then
                             tar_flags="--numeric-owner"
                         fi

@@ -160,6 +160,11 @@ asl_exec "
 
     if [ -d /sdcard ]; then
         domount_bind /sdcard \"$DEBIANPATH/sdcard\"
+        mkdir -p \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
+        if ! is_mounted \"$DEBIANPATH/storage/emulated/0\"; then
+            mount --bind /sdcard \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
+            mount --make-rslave \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
+        fi
     fi
 
     mkdir -p \"$TERMUX_TMP\"
@@ -174,7 +179,7 @@ asl_exec "
         mount --make-rslave \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" 2>/dev/null || true
     fi
     domount_tmpfs \"$DEBIANPATH/run\" rw,nosuid,nodev,mode=0755,noatime
-    domount_tmpfs \"$DEBIANPATH/dev/shm\" rw,nosuid,nodev,noatime,size=2G
+    domount_tmpfs \"$DEBIANPATH/dev/shm\" rw,nosuid,nodev,noatime,mode=1777,size=2G
 
     if [ -d \"$DEBIANPATH/var\" ] && [ ! -L \"$DEBIANPATH/var/lock\" ]; then
         domount_tmpfs \"$DEBIANPATH/var/lock\" rw,nosuid,nodev,mode=1777,noatime
@@ -226,33 +231,33 @@ translate_pkgs() {
     echo \"\${args[@]}\"
 }
 
-if [ "\$1" = "install" ] || [ "\$1" = "in" ]; then
+if [ \"\$1\" = \"install\" ] || [ \"\$1\" = \"in\" ]; then
     shift
     pkgs=\$(translate_pkgs \"\$@\")
     apt-get update && exec apt-get install -y \$pkgs
-elif [ "\$1" = "upgrade" ] || [ "\$1" = "up" ]; then
+elif [ \"\$1\" = \"upgrade\" ] || [ \"\$1\" = \"up\" ]; then
     shift
-    apt-get update && exec apt-get dist-upgrade -y "\$@"
-elif [ "\$1" = "show" ] || [ "\$1" = "info" ]; then
+    apt-get update && exec apt-get dist-upgrade -y \"\$@\"
+elif [ \"\$1\" = \"show\" ] || [ \"\$1\" = \"info\" ]; then
     shift
-    exec apt-cache show "\$@"
-elif [ "\$1" = "search" ]; then
+    exec apt-cache show \"\$@\"
+elif [ \"\$1\" = \"search\" ]; then
     shift
-    exec apt-cache search "\$@"
-elif [ "\$1" = "uninstall" ] || [ "\$1" = "remove" ]; then
+    exec apt-cache search \"\$@\"
+elif [ \"\$1\" = \"uninstall\" ] || [ \"\$1\" = \"remove\" ]; then
     shift
-    exec apt-get remove -y "\$@"
-elif [ "\$1" = "list-installed" ]; then
+    exec apt-get remove -y \"\$@\"
+elif [ \"\$1\" = \"list-installed\" ]; then
     shift
-    exec dpkg -l "\$@"
-elif [ "\$1" = "reinstall" ]; then
+    exec dpkg -l \"\$@\"
+elif [ \"\$1\" = \"reinstall\" ]; then
     shift
     pkgs=\$(translate_pkgs \"\$@\")
     apt-get update && exec apt-get install --reinstall -y \$pkgs
-elif [ "\$1" = "clean" ]; then
+elif [ \"\$1\" = \"clean\" ]; then
     exec apt-get clean
 else
-    exec apt-get "\$@"
+    exec apt-get \"\$@\"
 fi
 EOFSHIM
     chmod +x \"$DEBIANPATH/usr/local/bin/pkg\" 2>/dev/null || true
