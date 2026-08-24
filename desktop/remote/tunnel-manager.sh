@@ -30,7 +30,8 @@ ensure_tunnel() {
         -o ConnectTimeout=15 \
         -o TCPKeepAlive=yes \
         -o Compression=no \
-        -R 2222:127.0.0.1:8022 \
+        -R *:2222:127.0.0.1:8022 \
+        -R 9119:127.0.0.1:9119 \
         ubuntu@130.210.19.7 > "$TUNNEL_LOG" 2>&1 &
     
     echo $! > "$TUNNEL_PID_FILE"

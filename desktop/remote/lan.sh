@@ -20,7 +20,7 @@ lan_control() {
             host=$(lan_host_ip)
             echo "[✓] LAN SSH Server active on port 8022."
             echo "    Connect command: ssh -p 8022 $(whoami)@$host"
-            echo "    Authentication:  SSH key only"
+            echo "    Authentication:  SSH key or host password"
             ;;
         stop)
             pkill -f "sshd -p 8022" 2>/dev/null || true
@@ -30,7 +30,7 @@ lan_control() {
             if pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1; then
                 echo "LAN SSH:      RUNNING (port 8022)"
                 echo "    Connect:  ssh -p 8022 $(whoami)@$(lan_host_ip)"
-                echo "    Authentication: SSH key only"
+                echo "    Authentication: SSH key or host password"
             else
                 echo "LAN SSH:      STOPPED"
             fi

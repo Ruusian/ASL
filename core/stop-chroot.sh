@@ -82,6 +82,7 @@ MOUNTS="\$(
         echo "$DEBIANPATH/dev/input"
         echo "$DEBIANPATH/dev/pts"
         echo "$DEBIANPATH/dev/shm"
+        echo "$DEBIANPATH/data/data/com.termux"
         echo "$DEBIANPATH/data/data/com.termux/files/usr/tmp"
         echo "$DEBIANPATH/var/lock"
         echo "$DEBIANPATH/storage/emulated/0"

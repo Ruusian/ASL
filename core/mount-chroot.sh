@@ -69,6 +69,11 @@ EOFSHIM
             chmod +x "$DEBIANPATH/usr/bin/pkg" 2>/dev/null || true
             cp -f "$DEBIANPATH/usr/local/bin/pkg" "$DEBIANPATH/bin/pkg" 2>/dev/null || true
             chmod +x "$DEBIANPATH/bin/pkg" 2>/dev/null || true
+
+    # Fix invalid backslash escaping in asl-wine-launch WINEPREFIX if present
+    if [ -f "$DEBIANPATH/usr/local/bin/asl-wine-launch" ]; then
+        sed -i 's|export WINEPREFIX="\\/root/.wine"|export WINEPREFIX="/root/.wine"|g' "$DEBIANPATH/usr/local/bin/asl-wine-launch" 2>/dev/null || true
+    fi
         fi
         echo "[✓] PRoot user-space subsystem active — environment ready at $DEBIANPATH."
         exit 0
@@ -95,7 +100,7 @@ asl_exec "
 
     cleanup_on_error() {
         echo '[!] Mount error encountered; rolling back partial mounts...' >&2
-        for m in \"$DEBIANPATH/proc/sys/fs/binfmt_misc\" \"$DEBIANPATH/dev/pts\" \"$DEBIANPATH/proc\" \"$DEBIANPATH/sys\" \"$DEBIANPATH/dev/shm\" \"$DEBIANPATH/run\" \"$DEBIANPATH/var/lock\" \"$DEBIANPATH/tmp\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" \"$DEBIANPATH/storage/emulated/0\" \"$DEBIANPATH/sdcard\" \"$DEBIANPATH/dev\" \"$DEBIANPATH\"; do
+        for m in \"$DEBIANPATH/proc/sys/fs/binfmt_misc\" \"$DEBIANPATH/dev/pts\" \"$DEBIANPATH/proc\" \"$DEBIANPATH/sys\" \"$DEBIANPATH/dev/shm\" \"$DEBIANPATH/run\" \"$DEBIANPATH/var/lock\" \"$DEBIANPATH/tmp\" \"$DEBIANPATH/data/data/com.termux\" \"$DEBIANPATH/storage/emulated/0\" \"$DEBIANPATH/sdcard\" \"$DEBIANPATH/dev\" \"$DEBIANPATH\"; do
             grep -q -F \" \$m \" /proc/mounts 2>/dev/null && umount -l \"\$m\" 2>/dev/null || true
         done
     }
@@ -134,7 +139,14 @@ asl_exec "
         fi
     }
 
-    domount_bind /dev \"$DEBIANPATH/dev\"
+    if ! is_mounted \"$DEBIANPATH/dev\" || [ ! -c \"$DEBIANPATH/dev/null\" ]; then
+        umount -l \"$DEBIANPATH/dev/pts\" \"$DEBIANPATH/dev/shm\" \"$DEBIANPATH/dev\" 2>/dev/null || true
+        mkdir -p \"$DEBIANPATH/dev\"
+        mount --bind /dev \"$DEBIANPATH/dev\"
+        mount --make-rslave \"$DEBIANPATH/dev\" 2>/dev/null || true
+    fi
+    chmod 666 /dev/null /dev/zero /dev/urandom /dev/random /dev/full 2>/dev/null || true
+    chmod 666 \"$DEBIANPATH/dev/null\" \"$DEBIANPATH/dev/zero\" \"$DEBIANPATH/dev/urandom\" \"$DEBIANPATH/dev/random\" \"$DEBIANPATH/dev/full\" 2>/dev/null || true
     # Android's graphics group (GID 1003) owns /dev/input nodes; grant that
     # group rw access for the chroot instead of making devices world-writable
     # (0666 lets any host or chroot process inject input events). Original
@@ -165,6 +177,12 @@ asl_exec "
             mount --bind /sdcard \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
             mount --make-rslave \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
         fi
+    fi
+
+    if [ -d /data/data/com.termux ]; then
+        domount_bind /data/data/com.termux \"$DEBIANPATH/data/data/com.termux\"
+        ln -sfn /data/data/com.termux \"$DEBIANPATH/termux\" 2>/dev/null || true
+        ln -sfn /data/data/com.termux/files/home \"$DEBIANPATH/termux-home\" 2>/dev/null || true
     fi
 
     mkdir -p \"$TERMUX_TMP\"
@@ -206,6 +224,66 @@ asl_exec "
             printf '\n# ASL Environment Isolation\nunset PREFIX TERMUX_VERSION TERMUX_APP_PID TERMUX_MAIN_PACKAGE_NAME TERMUX__PREFIX TERMUX__HOME TERMUX__ROOTFS_DIR TMPDIR\n' >> \"\$rc\" 2>/dev/null || true
         fi
     done
+
+    # Provision kernel close_range workaround shim to prevent Android kernel 4.14 close_range spin locks in Python 3.13 / glibc
+    mkdir -p \"$DEBIANPATH/usr/local/lib\" \"$DEBIANPATH/etc\" 2>/dev/null || true
+    if [ ! -f \"$DEBIANPATH/usr/local/lib/libdisable_close_range.so\" ] && command -v gcc >/dev/null 2>&1; then
+        cat <<'EOFCR' > \"$DEBIANPATH/tmp/libdisable_close_range.c\"
+#define _GNU_SOURCE
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <errno.h>
+#include <stdarg.h>
+#include <dlfcn.h>
+
+#ifndef __NR_close_range
+#define __NR_close_range 436
+#endif
+
+typedef long (*syscall_fn_t)(long number, ...);
+static syscall_fn_t real_syscall = NULL;
+
+int close_range(unsigned int first, unsigned int last, int flags) {
+    errno = ENOSYS;
+    return -1;
+}
+
+void closefrom(int lowfd) {
+}
+
+long syscall(long number, ...) {
+    if (number == __NR_close_range) {
+        errno = ENOSYS;
+        return -1;
+    }
+    if (!real_syscall) {
+        real_syscall = (syscall_fn_t)dlsym(RTLD_NEXT, \"syscall\");
+    }
+    va_list args;
+    va_start(args, number);
+    long a0 = va_arg(args, long);
+    long a1 = va_arg(args, long);
+    long a2 = va_arg(args, long);
+    long a3 = va_arg(args, long);
+    long a4 = va_arg(args, long);
+    long a5 = va_arg(args, long);
+    va_end(args);
+
+    if (real_syscall) {
+        return real_syscall(number, a0, a1, a2, a3, a4, a5);
+    }
+    errno = ENOSYS;
+    return -1;
+}
+EOFCR
+        chroot \"$DEBIANPATH\" gcc -shared -fPIC -O2 /tmp/libdisable_close_range.c -o /usr/local/lib/libdisable_close_range.so -ldl 2>/dev/null || true
+        rm -f \"$DEBIANPATH/tmp/libdisable_close_range.c\" 2>/dev/null || true
+    fi
+    if [ -f \"$DEBIANPATH/usr/local/lib/libdisable_close_range.so\" ]; then
+        if ! grep -q \"libdisable_close_range.so\" \"$DEBIANPATH/etc/ld.so.preload\" 2>/dev/null; then
+            echo \"/usr/local/lib/libdisable_close_range.so\" >> \"$DEBIANPATH/etc/ld.so.preload\" 2>/dev/null || true
+        fi
+    fi
 
     # Create pkg -> apt compatibility shim inside Debian chroot for third-party scripts
     mkdir -p \"$DEBIANPATH/usr/local/bin\" \"$DEBIANPATH/usr/bin\" \"$DEBIANPATH/bin\" 2>/dev/null || true
@@ -265,6 +343,11 @@ EOFSHIM
     chmod +x \"$DEBIANPATH/usr/bin/pkg\" 2>/dev/null || true
     cp -f \"$DEBIANPATH/usr/local/bin/pkg\" \"$DEBIANPATH/bin/pkg\" 2>/dev/null || true
     chmod +x \"$DEBIANPATH/bin/pkg\" 2>/dev/null || true
+
+    # Fix invalid backslash escaping in asl-wine-launch WINEPREFIX if present
+    if [ -f "$DEBIANPATH/usr/local/bin/asl-wine-launch" ]; then
+        sed -i 's|export WINEPREFIX="\\/root/.wine"|export WINEPREFIX="/root/.wine"|g' "$DEBIANPATH/usr/local/bin/asl-wine-launch" 2>/dev/null || true
+    fi
 
     trap - ERR
 " || {

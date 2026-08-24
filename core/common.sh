@@ -128,9 +128,13 @@ asl_chroot_exec() {
                 tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
                 (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
                 tmpbase=${tmpf##*/}
-                printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || asl_exec "cat << 'ASLEOF' > '$tmpf'
+                if [ -w "$DEBIANPATH/tmp" ]; then
+                    printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null
+                else
+                    asl_exec "cat << 'ASLEOF' > '$tmpf'
 $cmd
 ASLEOF"
+                fi
                 chmod 700 "$tmpf" 2>/dev/null || asl_exec "chmod 700 '$tmpf'"
                 su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash /tmp/$tmpbase"
                 local res=$?
@@ -207,9 +211,16 @@ asl_acquire_lock() {
             return 0
         fi
         holder=$(cat "$lock/pid" 2>/dev/null)
-        if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
-            rm -rf "$lock" 2>/dev/null
-            continue
+        if [ -n "$holder" ]; then
+            if ! kill -0 "$holder" 2>/dev/null; then
+                rm -rf "$lock" 2>/dev/null
+                continue
+            fi
+        else
+            if [ "$tries" -gt 4 ]; then
+                rm -rf "$lock" 2>/dev/null
+                continue
+            fi
         fi
         tries=$((tries + 1))
         [ "$tries" -ge 60 ] && return 1

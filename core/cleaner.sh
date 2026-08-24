@@ -28,7 +28,8 @@ asl_clean_status() {
     ensure_chroot_mounted 2>/dev/null || true
     echo "--- ASL Storage Usage & Cleanable Cache ---"
     local du_root du_apt du_tmp du_wine
-    du_root=$(du -sh "$DEBIANPATH" 2>/dev/null | cut -f1)
+    du_root=$(asl_exec "du -sh '$DEBIANPATH' 2>/dev/null" | cut -f1)
+    [ -n "$du_root" ] || du_root=$(du -sh "$DEBIANPATH" 2>/dev/null | cut -f1)
     du_apt=$(asl_exec "du -sh '$DEBIANPATH/var/cache/apt/archives' 2>/dev/null" | cut -f1)
     du_tmp=$(asl_exec "du -sh '$DEBIANPATH/tmp' 2>/dev/null" | cut -f1)
     du_wine=$(asl_exec "du -sh '$DEBIANPATH/root/.cache' 2>/dev/null" | cut -f1)
@@ -91,8 +92,8 @@ asl_clean_run() {
         esac
     "
 
-    # Also clean host side Mesa shader cache if present
-    rm -rf /dev/shm/mesa_shader_cache/* /tmp/.mesa_cache/* 2>/dev/null || true
+    # Also clean host side Mesa shader cache and temporary execution wrappers if present
+    rm -rf /dev/shm/mesa_shader_cache/* /tmp/.mesa_cache/* "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.asl_cmd_"*.sh 2>/dev/null || true
 
     echo "[✓] Storage cleanup completed successfully."
 }

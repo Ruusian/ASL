@@ -41,9 +41,9 @@ fi
 status_label() {
     local state="$1"
     case "$state" in
-        ACTIVE|RUNNING|READY|ON) printf '%s[%s]%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
-        INACTIVE|STOPPED|OFF) printf '%s[%s]%s' "$C_DIM" "$state" "$C_RESET" ;;
-        *) printf '%s[%s]%s' "$C_YELLOW$C_BOLD" "$state" "$C_RESET" ;;
+        ACTIVE|RUNNING|READY|ON|ENABLED) printf '%s● %s%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
+        INACTIVE|STOPPED|OFF|DISABLED) printf '%s○ %s%s' "$C_DIM" "$state" "$C_RESET" ;;
+        *) printf '%s● %s%s' "$C_YELLOW$C_BOLD" "$state" "$C_RESET" ;;
     esac
 }
 
@@ -332,8 +332,10 @@ show_help() {
 }
 
 pause_dashboard() {
+    printf "\033[?1049l\033[?25h" 2>/dev/null || true
     echo ""
     read -r -p "Press Enter to return to the dashboard..." _
+    printf "\033[?1049h\033[2J\033[3J\033[H\033[?25l" 2>/dev/null || true
 }
 
 draw_bar() {
@@ -478,12 +480,34 @@ asl_wan_ping_cached() {
     printf '%s' "$cache_ping"
 }
 
+asl_oracle_info() {
+    local o_host="130.210.19.7" o_user="ubuntu" o_port="2222" o_key="$HOME/.ssh/oracle_vps.key"
+    if [ -f "$HOME/.asl/oracle_vps.conf" ]; then
+        local key_v host_v user_v port_v
+        key_v=$(grep -E '^ORACLE_KEY=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        host_v=$(grep -E '^ORACLE_HOST=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        user_v=$(grep -E '^ORACLE_USER=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        port_v=$(grep -E '^ORACLE_PORT=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        [ -n "$key_v" ] && o_key="$key_v"
+        [ -n "$host_v" ] && o_host="$host_v"
+        [ -n "$user_v" ] && o_user="$user_v"
+        [ -n "$port_v" ] && o_port="$port_v"
+    fi
+    [ -n "${ASL_ORACLE_KEY:-}" ] && o_key="$ASL_ORACLE_KEY"
+    [ -n "${ASL_ORACLE_HOST:-}" ] && o_host="$ASL_ORACLE_HOST"
+    [ -n "${ASL_ORACLE_USER:-}" ] && o_user="$ASL_ORACLE_USER"
+    [ -n "${ASL_ORACLE_PORT:-}" ] && o_port="$ASL_ORACLE_PORT"
+    printf '%s %s %s %s' "$o_host" "$o_user" "$o_port" "$o_key"
+}
+
 asl_remote_summary() {
     local active=()
-    if pgrep -f "sshd" >/dev/null 2>&1; then active+=("LAN:8022"); fi
-    if [ -f "$PREFIX/tmp/asl-oracle.state" ] && pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then active+=("Oracle"); fi
-    if [ -f "$PREFIX/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then active+=("Serveo"); fi
-    if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then active+=("Ngrok"); fi
+    local o_host o_user o_port o_key
+    read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
+    if pgrep -x sshd >/dev/null 2>&1 || pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f sshd" >/dev/null 2>&1; then active+=("LAN:8022"); fi
+    if [ -f "$PREFIX/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then active+=("Oracle"); fi
+    if [ -f "$PREFIX/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then active+=("Serveo"); fi
+    if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && (pgrep -x ngrok >/dev/null 2>&1 || su -c "pgrep -x ngrok" >/dev/null 2>&1); then active+=("Ngrok"); fi
     if [ ${#active[@]} -gt 0 ]; then
         printf '%s' "${active[*]}"
     else
@@ -493,8 +517,9 @@ asl_remote_summary() {
 
 asl_remote_details() {
     local details=()
-    local user pass host_ip
+    local user pass host_ip o_host o_user o_port o_key
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+    read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
     user=$(whoami 2>/dev/null || echo "user")
     if [ -f "$HOME/.asl/remote_password" ]; then
         pass="configured"
@@ -503,24 +528,27 @@ asl_remote_details() {
     fi
     host_ip=$(asl_host_ip)
 
-    if pgrep -f "sshd" >/dev/null 2>&1; then
+    if pgrep -x sshd >/dev/null 2>&1 || pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f sshd" >/dev/null 2>&1; then
         details+=("  • LAN SSH (Host):   ssh -p 8022 ${user}@${host_ip}")
     fi
-    if [ -f "$prefix/tmp/asl-oracle.state" ] && pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then
-        details+=("  • Oracle VPS Tunnel: ssh -J ubuntu@130.210.19.7 -p 2222 ${user}@127.0.0.1")
-    elif [ -f "$HOME/.ssh/oracle_vps.key" ]; then
-        details+=("  • Oracle VPS Tunnel: Standby (Run 'asl remote oracle start')")
+    if [ -f "$prefix/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then
+        details+=("  • Oracle VPS Tunnel: ssh -J ${o_user}@${o_host} -p ${o_port} ${user}@127.0.0.1")
+        details+=("  • Hermes Web UI:    http://${o_host}")
+    elif [ -f "$o_key" ]; then
+        details+=("  • Oracle VPS Tunnel: Standby (Host: ${o_host}:${o_port}, Run 'asl remote oracle start')")
     fi
-    if [ -f "$prefix/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
+    if [ -f "$prefix/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then
         local s_alias="asl-${user}"
-        if [ -f "$HOME/.asl/serveo_alias.txt" ] && [ -s "$HOME/.asl/serveo_alias.txt" ]; then
+        if [ -f "$prefix/tmp/asl-serveo-active.alias" ] && [ -s "$prefix/tmp/asl-serveo-active.alias" ]; then
+            s_alias=$(cat "$prefix/tmp/asl-serveo-active.alias" 2>/dev/null)
+        elif [ -f "$HOME/.asl/serveo_alias.txt" ] && [ -s "$HOME/.asl/serveo_alias.txt" ]; then
             s_alias=$(cat "$HOME/.asl/serveo_alias.txt" 2>/dev/null)
         elif [ -n "${ASL_SERVEO_ALIAS:-}" ]; then
             s_alias="$ASL_SERVEO_ALIAS"
         fi
         details+=("  • Serveo Tunnel:    ssh -J serveo.net ${user}@${s_alias}")
     fi
-    if [ -f "$prefix/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then
+    if [ -f "$prefix/tmp/asl-ngrok.state" ] && (pgrep -x ngrok >/dev/null 2>&1 || su -c "pgrep -x ngrok" >/dev/null 2>&1); then
         local ng_url ng_host ng_port ng_json ng_status_json ng_lat ng_region ng_conns
         local now ng_cache cache_time
         now=$(date +%s 2>/dev/null || echo 0)
@@ -553,53 +581,17 @@ asl_remote_details() {
         ng_region=$(echo "$ng_status_json" | grep -oE '"region":"[^"]+"' | cut -d'"' -f4)
         ng_conns=$(echo "$ng_json" | grep -oE '"count":[0-9]+' | head -1 | cut -d':' -f2)
         if [ -n "$ng_lat" ] || [ -n "$ng_region" ]; then
-            details+=("    - Tunnel Performance: Region: ${ng_region:-global} | Ping: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
-        fi
-
-        # Add Token Quota Breakdown to Console Dashboard
-        local tok_file="$HOME/.asl/ngrok_tokens.txt"
-        local exh_file="$HOME/.asl/ngrok_exhausted.txt"
-        local curr_tok_file="$prefix/tmp/asl-ngrok-current.token"
-        local total_toks=0 exh_toks=0 active_toks=0 curr_tok="" masked_curr=""
-        [ -f "$tok_file" ] && total_toks=$(grep -c . "$tok_file" 2>/dev/null || echo 0)
-        [ -f "$exh_file" ] && exh_toks=$(grep -c . "$exh_file" 2>/dev/null || echo 0)
-        active_toks=$((total_toks - exh_toks))
-        [ "$active_toks" -lt 0 ] && active_toks=0
-        curr_tok=$(cat "$curr_tok_file" 2>/dev/null || true)
-        if [ -z "$curr_tok" ]; then
-            curr_tok=$(grep -E 'authtoken:' "$HOME/.config/ngrok/ngrok.yml" "$HOME/.ngrok2/ngrok.yml" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
-        fi
-
-        details+=("    - Bandwidth Quota:  [██████░░░░] 60% (600 MB / 1000 MB Left)")
-        if [ -f "$tok_file" ] && [ -s "$tok_file" ]; then
-            details+=("    - Token Pool Quota: ${active_toks}/${total_toks} Active Keys")
-            local exh_content=""
-            [ -f "$exh_file" ] && exh_content=$(cat "$exh_file" 2>/dev/null || true)
-            while IFS= read -r tok || [ -n "$tok" ]; do
-                [ -n "$tok" ] || continue
-                local st="ACTIVE"
-                if [ -n "$exh_content" ] && [[ "$exh_content" == *"$tok"* ]]; then
-                    st="CARD REQUIRED (ERR_NGROK_8013)"
-                elif [ "$tok" = "$curr_tok" ]; then
-                    st="ACTIVE & VERIFIED (In Use)"
-                fi
-                local m="$tok"
-                [ "${#tok}" -gt 10 ] && m="${tok:0:6}...${tok: -4}"
-                details+=("      ◦ Key ${m}: [${st}]")
-            done < "$tok_file"
-        elif [ -n "$curr_tok" ]; then
-            [ "${#curr_tok}" -gt 10 ] && masked_curr="${curr_tok:0:6}...${curr_tok: -4}" || masked_curr="$curr_tok"
-            details+=("    - Token Key Quota: 1/1 Active Key (${masked_curr})")
+            details+=("    - Performance: Region: ${ng_region:-global} | Latency: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
         fi
     fi
 
     if [ ${#details[@]} -gt 0 ]; then
-        printf '  %s[SSH Remote Access Details]%s (Password: %s%s%s)\n' "$C_YELLOW$C_BOLD" "$C_RESET" "$C_GREEN$C_BOLD" "$pass" "$C_RESET"
+        printf '  %s[SSH Tunnels Active]%s (Password: %s%s%s)\033[K\n' "$C_YELLOW$C_BOLD" "$C_RESET" "$C_GREEN$C_BOLD" "$pass" "$C_RESET"
         local d
         for d in "${details[@]}"; do
-            printf '%s%s%s\n' "$C_CYAN" "$d" "$C_RESET"
+            printf '%s%s%s\033[K\n' "$C_CYAN" "$d" "$C_RESET"
         done
-        printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
+        printf '%s──────────────────────────────────────────────────────────────────────────%s\033[K\n' "$C_SHADOW" "$C_RESET"
     fi
 }
 
@@ -608,7 +600,7 @@ overview() {
     local mem_total mem_avail mem_used mem_pct disk_data load_avg
     local swap_total swap_free swap_used swap_pct governor
     local batt_level batt_temp cpu_temp batt_str cpu_str host_ip wlock_status
-    local up_str freq_str swap_from_zram remote_summary audio_status
+    local up_str freq_str swap_from_zram remote_summary audio_status chroot_disk=""
 
     host_ip=$(asl_host_ip)
 
@@ -666,8 +658,16 @@ overview() {
     fi
 
     governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
-    disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')
+    disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free / " $2}')
     [ -n "$disk_data" ] || disk_data="unknown"
+    free_kb=$(df -k /data 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$free_kb" ] && [ "$free_kb" -lt 1048576 ]; then
+        disk_data="${C_RED}${C_BOLD}${disk_data} [LOW STORAGE]${C_RESET}${C_CYAN}"
+    fi
+    if is_mounted; then
+        chroot_disk=$(df -h "$DEBIANPATH" 2>/dev/null | awk 'NR==2 {print $4}')
+        [ -n "$chroot_disk" ] && disk_data="${disk_data} (Rootfs: ${chroot_disk} free)"
+    fi
     load_avg=$(cat /proc/loadavg 2>/dev/null || asl_exec "cat /proc/loadavg" 2>/dev/null)
     load_avg=$(printf '%s' "$load_avg" | cut -d' ' -f1-3)
     [ -n "$load_avg" ] || load_avg="unknown"
@@ -716,17 +716,19 @@ overview() {
     fi
     wan_ping=$(asl_wan_ping_cached)
 
-    printf '%s━━━ %sAndroid Subsystem for Linux (ASL)%s %sConsole v2.5.1%s %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_DIM" "$C_CYAN$C_BOLD" "$C_CYAN$C_BOLD" "$C_RESET"
-    printf '  %sChroot:%s %s   %sDesktop:%s %s   %sGPU:%s %s%s\n' "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE$C_RESET"
-    printf '  %sDisplay:%s %s  %sAudio:%s %s     %sGov:%s %s%s\n' "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor$C_RESET"
-    printf '  %sBattery:%s %s%-13s %sCPU Temp:%s %s%-6s %sThermal:%s %s   %sWake Lock:%s %s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_BOLD" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl"
-    printf '  %sHost IP:%s %s%-13s %sWAN Ping:%s %s%-8s %sRemote:%s %s%-10s %sStorage:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data$C_RESET"
-    printf '  %sAutostart:%s %s%-10s %sOOM Protection:%s %s%-15s %sWatchdog:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_GREEN" "$boot_status" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_BOLD" "$C_RESET" "$C_GREEN" "$wdog_status$C_RESET"
-    printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
+    printf '%s╭──────────────────────────────────────────────────────────────────────────╮%s\033[K\n' "$C_CYAN$C_BOLD" "$C_RESET"
+    printf '%s│  %s🐧 Android Subsystem for Linux (ASL)%s %sControl Console v2.5.1%s             %s│%s\033[K\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_DIM" "$C_CYAN$C_BOLD" "$C_CYAN$C_BOLD" "$C_RESET"
+    printf '%s╰──────────────────────────────────────────────────────────────────────────╯%s\033[K\n' "$C_CYAN$C_BOLD" "$C_RESET"
+    printf '  %sChroot:%s %s   %sDesktop:%s %s   %sGPU:%s %s%s\033[K\n' "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE$C_RESET"
+    printf '  %sDisplay:%s %s  %sAudio:%s %s     %sGov:%s %s%s\033[K\n' "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor$C_RESET"
+    printf '  %sBattery:%s %s%-13s %sCPU Temp:%s %s%-6s %sThermal:%s %s   %sWake Lock:%s %s\033[K\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_BOLD" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl"
+    printf '  %sHost IP:%s %s%-13s %sWAN Ping:%s %s%-8s %sRemote:%s %s%-10s %sStorage:%s %s%s\033[K\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data$C_RESET"
+    printf '  %sAutostart:%s %s%-10s %sOOM Protection:%s %s%-15s %sWatchdog:%s %s%s\033[K\n' "$C_BOLD" "$C_RESET" "$C_GREEN" "$boot_status" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_BOLD" "$C_RESET" "$C_GREEN" "$wdog_status$C_RESET"
+    printf '%s──────────────────────────────────────────────────────────────────────────%s\033[K\n' "$C_SHADOW" "$C_RESET"
     asl_remote_details
-    printf '  %sRAM:%s  [' "$C_BOLD" "$C_RESET"; draw_bar "$mem_pct" 12; printf '] %3d%% (%d/%d MB)  %sLoad:%s %s%s\n' "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg"
-    printf '  %sSwap:%s [' "$C_BOLD" "$C_RESET"; draw_bar "$swap_pct" 12; printf '] %3d%% (%d/%d MB)  %sUptime:%s %s%s (Svc: %s%s%s)  %sFreq:%s %s%s\n' "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_CYAN" "$svc_up_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_GREEN" "$freq_str"
-    printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+    printf '  %sRAM:%s  [' "$C_BOLD" "$C_RESET"; draw_bar "$mem_pct" 12; printf '] %3d%% (%d/%d MB)  %sLoad:%s %s%s\033[K\n' "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg"
+    printf '  %sSwap:%s [' "$C_BOLD" "$C_RESET"; draw_bar "$swap_pct" 12; printf '] %3d%% (%d/%d MB)  %sUptime:%s %s%s (Svc: %s%s%s)  %sFreq:%s %s%s\033[K\n' "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_CYAN" "$svc_up_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_GREEN" "$freq_str"
+    printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\033[K\n' "$C_CYAN$C_BOLD" "$C_RESET"
 }
 
 is_safe_target_pid() {
@@ -824,10 +826,10 @@ process_manager() {
 }
 
 watch_dashboard() {
-    trap 'printf "\033[?25h"; break' INT
-    printf "\033[?25l" 2>/dev/null || true
+    trap 'printf "\033[?1049l\033[?25h"; break' INT
+    printf "\033[?1049h\033[2J\033[3J\033[H\033[?25l" 2>/dev/null || true
     while true; do
-        printf "\033[H\033[J" 2>/dev/null || true
+        printf "\033[H" 2>/dev/null || true
         overview
         echo ""
         printf '%sTop Processes by CPU Usage%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
@@ -835,12 +837,13 @@ watch_dashboard() {
         asl_exec "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || ps aux | head -n 9 | tail -n +2 || true
         echo ""
         printf '%s[LIVE MONITOR - %s] Host Up %s (Svc %s) | Press "q" or Ctrl+C to return%s\n' "$C_CYAN$C_BOLD" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$(asl_svc_uptime)" "$C_RESET"
+        printf "\033[J" 2>/dev/null || true
         read -rsn1 -t 1.5 key 2>/dev/null || true
         if [ "$key" = "q" ] || [ "$key" = "Q" ] || [ "$key" = $'\x1b' ]; then
             break
         fi
     done
-    printf "\033[?25h" 2>/dev/null || true
+    printf "\033[?1049l\033[?25h" 2>/dev/null || true
     trap - INT
 }
 
@@ -849,6 +852,7 @@ show_host_apps_menu() {
 }
 
 dashboard() {
+    export ASL_DASHBOARD_MODE=1
     local C_SHADOW=$'\033[90m'
     local sel=1
     local choice=""
@@ -857,11 +861,14 @@ dashboard() {
 
     cleanup_tui() {
         stty echo icanon 2>/dev/null || true
-        printf "\033[?25h" 2>/dev/null || true
+        printf "\033[?1049l\033[?25h" 2>/dev/null || true
     }
 
     # Trap Ctrl+C (SIGINT) to cleanly exit to Termux prompt
     trap 'cleanup_tui; printf "\n\n\033[1;32m[✓]\033[0m Exited ASL Dashboard.\n"; trap - INT; return 0 2>/dev/null || exit 0' INT
+
+    # Switch terminal to isolated alternate screen buffer & hide cursor
+    printf "\033[?1049h\033[2J\033[3J\033[H\033[?25l" 2>/dev/null || true
 
     render_opt() {
         local idx="$1"
@@ -893,34 +900,32 @@ dashboard() {
 
     render_frame() {
         printf "\033[?25l\033[H" 2>/dev/null || true
-        echo "$overview_cache"
-        echo ""
-        printf '  %s[ 🐧 Linux Chroot ]%s                 %s[ 🖥️ Desktop & Remote ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        render_opt 1 "s" "Start / Mount Chroot" "$sel" 35; printf '   '; render_opt 7 "d" "Start XFCE4 Desktop" "$sel" 35; echo ""
-        render_opt 2 "x" "Stop & Unmount Chroot" "$sel" 35; printf '   '; render_opt 8 "" "Desktop Status / Stop" "$sel" 35; echo ""
-        render_opt 3 "" "Open Root Shell" "$sel" 35; printf '   '; render_opt 9 "" "Theme & Resolution" "$sel" 35; echo ""
-        render_opt 4 "" "Run Single Command" "$sel" 35; printf '   '; render_opt 10 "v" "Remote Tunnels & Manager" "$sel" 35; echo ""
-        render_opt 5 "" "Snapshots & Backups" "$sel" 35; printf '   '; render_opt 11 "" "PulseAudio Control" "$sel" 35; echo ""
-        render_opt 6 "a" "Android AID Group Setup" "$sel" 35; printf '   '; render_opt 12 "" "Sync Debian Launchers" "$sel" 35; echo ""
-        echo ""
-        printf '  %s[ 🎮 Gaming Engine ]%s                %s[ 📱 Android Bridge ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        render_opt 13 "g" "Run Windows .exe" "$sel" 35; printf '   '; render_opt 16 "k" "CPU Wake Lock Toggle" "$sel" 35; echo ""
-        render_opt 14 "m" "Performance Mode" "$sel" 35; printf '   '; render_opt 17 "o" "Open File in Host App" "$sel" 35; echo ""
-        render_opt 15 "" "Setup Wine / Box64" "$sel" 35; printf '   '; render_opt 18 "c" "System Clipboard Sync" "$sel" 35; echo ""
-        printf '                                      '; render_opt 19 "n" "Send Toast Notice" "$sel" 35; echo ""
-        echo ""
-        printf '  %s[ 📊 Diagnostics & Tools ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        render_opt 20 "p" "Resource Manager" "$sel" 35; printf '   '; render_opt 22 "" "Environment Check" "$sel" 35; echo ""
-        render_opt 21 "t" "Thermal Monitor" "$sel" 35; printf '   '; render_opt 23 "" "GPU Hardware Profile" "$sel" 35; echo ""
-        render_opt 24 "" "Host Apps Launcher" "$sel" 35; printf '   '; render_opt 25 "z" "Guided Setup Wizard" "$sel" 35; echo ""
-        echo ""
-        printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
-        printf '  %s[h]%s Help   %s[r]%s Refresh   %s[w]%s Watch Live   %s[q]%s Exit   %s[↑↓←→]%s Navigate   %s[↵]%s Select\n\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_GREEN" "$C_RESET"
+        printf '%s\n' "$overview_cache"
+        printf '\033[K\n'
+        printf '  %s[ 🐧 Linux Chroot Environment ]%s         %s[ 🖥️ Desktop & Remote Access ]%s\033[K\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
+        render_opt 1 "s" "Start / Mount Chroot" "$sel" 35; printf '   '; render_opt 7 "d" "Start XFCE4 Desktop" "$sel" 35; printf '\033[K\n'
+        render_opt 2 "x" "Stop & Unmount Chroot" "$sel" 35; printf '   '; render_opt 8 "f" "Desktop Status / Stop" "$sel" 35; printf '\033[K\n'
+        render_opt 3 "e" "Open Interactive Shell" "$sel" 35; printf '   '; render_opt 9 "y" "Theme & Resolution" "$sel" 35; printf '\033[K\n'
+        render_opt 4 "r" "Run Single Command" "$sel" 35; printf '   '; render_opt 10 "v" "Remote Tunnels & VPS" "$sel" 35; printf '\033[K\n'
+        render_opt 5 "b" "Snapshots & Backups" "$sel" 35; printf '   '; render_opt 11 "u" "PulseAudio Sound Server" "$sel" 35; printf '\033[K\n'
+        render_opt 6 "a" "Android AID Group Setup" "$sel" 35; printf '   '; render_opt 12 "l" "Sync Desktop Launchers" "$sel" 35; printf '\033[K\n'
+        printf '\033[K\n'
+        printf '  %s[ 🎮 Gaming & Performance ]%s             %s[ 📊 Diagnostics, Tools & Suites ]%s\033[K\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
+        render_opt 13 "g" "Run Windows .exe" "$sel" 35; printf '   '; render_opt 19 "n" "Send Toast / Notification" "$sel" 35; printf '\033[K\n'
+        render_opt 14 "m" "Performance Profile Mode" "$sel" 35; printf '   '; render_opt 20 "p" "Resource & Process Manager" "$sel" 35; printf '\033[K\n'
+        render_opt 15 "w" "Setup Wine & Box64 Engine" "$sel" 35; printf '   '; render_opt 21 "t" "Thermal & CPU Monitor" "$sel" 35; printf '\033[K\n'
+        render_opt 16 "k" "CPU Wake Lock Toggle" "$sel" 35; printf '   '; render_opt 22 "i" "ASL Environment Check" "$sel" 35; printf '\033[K\n'
+        render_opt 17 "o" "Open File in Host App" "$sel" 35; printf '   '; render_opt 23 "j" "GPU Acceleration Profile" "$sel" 35; printf '\033[K\n'
+        render_opt 18 "c" "System Clipboard Sync" "$sel" 35; printf '   '; render_opt 24 "z" "Guided Setup Wizard" "$sel" 35; printf '\033[K\n'
+        printf '\033[K\n'
+        printf '%s──────────────────────────────────────────────────────────────────────────%s\033[K\n' "$C_SHADOW" "$C_RESET"
+        printf '  %s[h]%s Help   %s[R]%s Refresh   %s[W]%s Watch Live   %s[q]%s Exit   %s[↑↓←→]%s Navigate   %s[↵]%s Select\033[K\n\033[K\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_GREEN" "$C_RESET"
         printf "\033[J\033[?25h" 2>/dev/null || true
     }
 
     while true; do
         if [ "$need_refresh" -eq 1 ] || [ -z "$overview_cache" ]; then
+            printf "\033[2J\033[3J\033[H" 2>/dev/null || true
             overview_cache=$(overview 2>/dev/null || true)
             need_refresh=0
         fi
@@ -954,7 +959,7 @@ dashboard() {
 
             case "$key" in
                 IDLE_TICK)
-                    need_refresh=1
+                    overview_cache=$(overview 2>/dev/null || true)
                     continue
                     ;;
                 UP)
@@ -962,17 +967,11 @@ dashboard() {
                         2|3|4|5|6) sel=$(( sel - 1 )) ;;
                         1) sel=24 ;;
                         8|9|10|11|12) sel=$(( sel - 1 )) ;;
-                        7) sel=25 ;;
-                        14|15) sel=$(( sel - 1 )) ;;
-                        13) sel=6 ;;
-                        17|18|19) sel=$(( sel - 1 )) ;;
-                        16) sel=12 ;;
-                        21) sel=20 ;;
-                        24) sel=21 ;;
-                        20) sel=15 ;;
-                        23) sel=22 ;;
-                        25) sel=23 ;;
-                        22) sel=19 ;;
+                        7) sel=6 ;;
+                        14|15|16|17|18) sel=$(( sel - 1 )) ;;
+                        13) sel=12 ;;
+                        20|21|22|23|24) sel=$(( sel - 1 )) ;;
+                        19) sel=18 ;;
                         *) sel=1 ;;
                     esac
                     continue
@@ -980,19 +979,13 @@ dashboard() {
                 DOWN)
                     case "$sel" in
                         1|2|3|4|5) sel=$(( sel + 1 )) ;;
-                        6) sel=13 ;;
+                        6) sel=7 ;;
                         7|8|9|10|11) sel=$(( sel + 1 )) ;;
-                        12) sel=16 ;;
-                        13|14) sel=$(( sel + 1 )) ;;
-                        15) sel=20 ;;
-                        16|17|18) sel=$(( sel + 1 )) ;;
-                        19) sel=22 ;;
-                        20) sel=21 ;;
-                        21) sel=24 ;;
+                        12) sel=13 ;;
+                        13|14|15|16|17) sel=$(( sel + 1 )) ;;
+                        18) sel=19 ;;
+                        19|20|21|22|23) sel=$(( sel + 1 )) ;;
                         24) sel=1 ;;
-                        22) sel=23 ;;
-                        23) sel=25 ;;
-                        25) sel=7 ;;
                         *) sel=1 ;;
                     esac
                     continue
@@ -1001,15 +994,8 @@ dashboard() {
                     case "$sel" in
                         1|2|3|4|5|6) sel=$(( sel + 6 )) ;;
                         7|8|9|10|11|12) sel=$(( sel - 6 )) ;;
-                        13|14|15) sel=$(( sel + 3 )) ;;
-                        16|17|18) sel=$(( sel - 3 )) ;;
-                        19) sel=15 ;;
-                        20) sel=22 ;;
-                        21) sel=23 ;;
-                        24) sel=25 ;;
-                        22) sel=20 ;;
-                        23) sel=21 ;;
-                        25) sel=24 ;;
+                        13|14|15|16|17|18) sel=$(( sel + 6 )) ;;
+                        19|20|21|22|23|24) sel=$(( sel - 6 )) ;;
                         *) sel=1 ;;
                     esac
                     continue
@@ -1029,21 +1015,31 @@ dashboard() {
                     ;;
                 s|S) choice="1"; need_refresh=1 ;;
                 x|X) choice="2"; need_refresh=1 ;;
+                e|E) choice="3"; need_refresh=1 ;;
+                r) choice="4"; need_refresh=1 ;;
+                b|B) choice="5"; need_refresh=1 ;;
                 a|A) choice="6"; need_refresh=1 ;;
                 d|D) choice="7"; need_refresh=1 ;;
+                f|F) choice="8"; need_refresh=1 ;;
+                y|Y) choice="9"; need_refresh=1 ;;
                 v|V) choice="10"; need_refresh=1 ;;
+                u|U) choice="11"; need_refresh=1 ;;
+                l|L) choice="12"; need_refresh=1 ;;
                 g|G) choice="13"; need_refresh=1 ;;
                 m|M) choice="14"; need_refresh=1 ;;
+                w) choice="15"; need_refresh=1 ;;
                 k|K) choice="16"; need_refresh=1 ;;
                 o|O) choice="17"; need_refresh=1 ;;
                 c|C) choice="18"; need_refresh=1 ;;
                 n|N) choice="19"; need_refresh=1 ;;
                 p|P) choice="20"; need_refresh=1 ;;
                 t|T) choice="21"; need_refresh=1 ;;
-                z|Z) choice="25"; need_refresh=1 ;;
+                i|I) choice="22"; need_refresh=1 ;;
+                j|J) choice="23"; need_refresh=1 ;;
+                z|Z) choice="24"; need_refresh=1 ;;
                 h|H) show_help; pause_dashboard; need_refresh=1; continue ;;
-                r|R) need_refresh=1; continue ;;
-                w|W) watch_dashboard; need_refresh=1; continue ;;
+                R) overview_cache=$(overview 2>/dev/null || true); continue ;;
+                W) watch_dashboard; need_refresh=1; continue ;;
                 q|Q)
                     trap - INT
                     cleanup_tui
@@ -1111,24 +1107,39 @@ dashboard() {
             10|v|V)
                 echo "Remote Manager:"
                 echo "  1) Start All Tunnels (Oracle + Serveo + Ngrok + LAN + AutoConnect)"
-                echo "  2) Oracle VPS Tunnel Start / Stop / Status"
-                echo "  3) Serveo Tunnel Start / Stop"
-                echo "  4) Ngrok Tunnel Start / Stop"
-                echo "  5) Manage Ngrok Auth Tokens (Add / List / Reset)"
+                echo "  2) Oracle VPS Dedicated Tunnel & Key Management"
+                echo "  3) Serveo Jump Host Tunnel"
+                echo "  4) Ngrok TCP Tunnel"
+                echo "  5) Manage Ngrok Auth Tokens Pool"
                 echo "  6) Show Remote VNC / Desktop Tunnel Instructions"
                 echo "  7) LAN SSH Server Start / Stop"
                 echo "  8) Auto-Connect Daemon Start / Stop"
-                echo "  9) Configure Remote SSH Password (optional)"
-                echo " 10) Show Connection Info & Status"
-                read -r -p "Select action [1-10]: " r_act
+                echo "  9) Configure Remote SSH Password"
+                echo " 10) Authorized SSH Public Keys (List / Add / Import GitHub / Clear)"
+                echo " 11) Show Connection Info & Status"
+                read -r -p "Select action [1-11]: " r_act
                 case "$r_act" in
                     1) bash "$REAL_SCRIPT" remote all ;;
                     2)
-                        echo "Oracle VPS: 1) Start  2) Stop  3) Status"
-                        read -r -p "Choice: " o_choice
+                        echo "Oracle VPS Options:"
+                        echo "  1) Start Tunnel              2) Stop Tunnel              3) Show Status"
+                        echo "  4) Set VPS Host IP/Domain    5) Set VPS SSH User         6) Set VPS Remote Port"
+                        echo "  7) Import Private Key        8) Generate Dedicated Key   9) Show Private Key Info"
+                        echo " 10) Push Host Key to VPS     11) Remove Private Key      12) Remove Oracle Config"
+                        read -r -p "Choice [1-12]: " o_choice
                         case "$o_choice" in
                             1) bash "$REAL_SCRIPT" remote oracle start ;;
                             2) bash "$REAL_SCRIPT" remote oracle stop ;;
+                            3) bash "$REAL_SCRIPT" remote oracle status ;;
+                            4) read -r -p "Host IP or Domain: " o_h; [ -n "$o_h" ] && bash "$REAL_SCRIPT" remote oracle config host "$o_h" ;;
+                            5) read -r -p "SSH User [ubuntu]: " o_u; [ -n "$o_u" ] && bash "$REAL_SCRIPT" remote oracle config user "$o_u" ;;
+                            6) read -r -p "Remote Port [2222]: " o_p; [ -n "$o_p" ] && bash "$REAL_SCRIPT" remote oracle config port "$o_p" ;;
+                            7) read -r -p "Key File Path or Key String: " o_k; [ -n "$o_k" ] && bash "$REAL_SCRIPT" remote oracle add-key "$o_k" ;;
+                            8) bash "$REAL_SCRIPT" remote oracle gen-key ;;
+                            9) bash "$REAL_SCRIPT" remote oracle show-key ;;
+                            10) bash "$REAL_SCRIPT" remote oracle push-pubkey ;;
+                            11) bash "$REAL_SCRIPT" remote oracle remove-key ;;
+                            12) bash "$REAL_SCRIPT" remote oracle remove ;;
                             *) bash "$REAL_SCRIPT" remote oracle status ;;
                         esac
                         ;;
@@ -1195,6 +1206,17 @@ dashboard() {
                         elif [ -n "$new_ssh_pass" ]; then
                             bash "$REAL_SCRIPT" remote password set "$new_ssh_pass"
                         fi
+                        ;;
+                    10)
+                        echo "Authorized Keys: 1) List  2) Add Pubkey  3) Import from GitHub  4) Clear All"
+                        read -r -p "Choice: " k_choice
+                        case "$k_choice" in
+                            1) bash "$REAL_SCRIPT" remote keys list ;;
+                            2) read -r -p "SSH Public Key String: " k_str; [ -n "$k_str" ] && bash "$REAL_SCRIPT" remote keys add "$k_str" ;;
+                            3) read -r -p "GitHub Username: " gh_u; [ -n "$gh_u" ] && bash "$REAL_SCRIPT" remote keys import-github "$gh_u" ;;
+                            4) bash "$REAL_SCRIPT" remote keys clear ;;
+                            *) bash "$REAL_SCRIPT" remote keys list ;;
+                        esac
                         ;;
                     *) bash "$REAL_SCRIPT" remote status ;;
                 esac
@@ -1279,10 +1301,10 @@ dashboard() {
                 pause_dashboard ;;
             20|p|P) process_manager ;;
             21|t|T) bash "$REAL_SCRIPT" thermal; pause_dashboard ;;
-            22) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
-            23) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
-            24|apps|host) show_host_apps_menu ;;
-            25|z|Z|wizard|init) bash "$REAL_SCRIPT" wizard; pause_dashboard ;;
+            22|i|I) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
+            23|j|J) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
+            24|z|Z) bash "$REAL_SCRIPT" wizard; pause_dashboard ;;
+            apps|host) show_host_apps_menu ;;
             h|H) show_help; pause_dashboard ;;
             r|R|"") ;;
             w|W) watch_dashboard ;;
@@ -1455,7 +1477,7 @@ case "${1:-}" in
     desktop)
         shift
         DESKTOP_ACTION="${1:-start}"
-        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, or refresh-x11."; exit 1 ;; esac
+        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch|novnc|webvnc) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, novnc, or refresh-x11."; exit 1 ;; esac
         if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = restart || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]]; then
             ensure_mounted
         fi
@@ -1612,6 +1634,14 @@ case "${1:-}" in
         ;;
     wakelock|wake|open|clip|clipboard|shortcut|app-shortcut|clip-sync|clipdaemon|toast|notify|notification|storage)
         bash "$ASL_DIR/core/termux-bridge.sh" "$@"
+        ;;
+    swap|memory|mem)
+        shift
+        bash "$ASL_DIR/core/swap-manager.sh" "$@"
+        ;;
+    openclaude|claude)
+        shift
+        bash "$ASL_DIR/core/openclaude-setup.sh" "$@"
         ;;
     aid|gids)
         shift

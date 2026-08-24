@@ -10,12 +10,14 @@ SERVEO_STATE="$PREFIX/tmp/asl-serveo.state"
 SERVEO_ALIAS_FILE="$CONFIG_DIR/serveo_alias.txt"
 
 get_serveo_alias() {
-    if [ -f "$SERVEO_ALIAS_FILE" ] && [ -s "$SERVEO_ALIAS_FILE" ]; then
+    if [ -f "$PREFIX/tmp/asl-serveo-active.alias" ] && [ -s "$PREFIX/tmp/asl-serveo-active.alias" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
+        cat "$PREFIX/tmp/asl-serveo-active.alias" 2>/dev/null
+    elif [ -f "$SERVEO_ALIAS_FILE" ] && [ -s "$SERVEO_ALIAS_FILE" ]; then
         cat "$SERVEO_ALIAS_FILE" 2>/dev/null
     elif [ -n "${ASL_SERVEO_ALIAS:-}" ]; then
         echo "$ASL_SERVEO_ALIAS"
     else
-        echo "asl-$(whoami 2>/dev/null || echo user)"
+        echo "asl-termux-8022"
     fi
 }
 
@@ -28,8 +30,17 @@ ensure_serveo_key() {
 }
 
 serveo_running() {
-    [ -f "$SERVEO_STATE" ] && pgrep -f "serveo.net" >/dev/null 2>&1 && \
-        ! tail -n 10 "$SERVEO_LOG" 2>/dev/null | grep -qE "remote port forwarding failed|Permission denied|Connection closed|Connection refused|Host key verification failed|kex_exchange_identification"
+    if [ -f "$SERVEO_LOG" ] && [ "$(wc -c < "$SERVEO_LOG" 2>/dev/null || echo 0)" -gt 102400 ]; then
+        tail -n 200 "$SERVEO_LOG" > "$SERVEO_LOG.tmp" 2>/dev/null && mv "$SERVEO_LOG.tmp" "$SERVEO_LOG" 2>/dev/null || true
+    fi
+    if [ -f "$SERVEO_STATE" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
+        if tail -n 10 "$SERVEO_LOG" 2>/dev/null | grep -qE "remote port forwarding failed|Permission denied|Connection closed|Host key verification failed|Timeout, server|broken pipe|No route to host|Network is unreachable|Software caused connection abort|Connection reset"; then
+            pkill -9 -f "serveo.net" 2>/dev/null || true
+            return 1
+        fi
+        return 0
+    fi
+    return 1
 }
 
 serveo_control() {
@@ -58,19 +69,35 @@ serveo_control() {
                 serveo_alias=$(get_serveo_alias)
                 echo "[*] Launching Serveo persistent SSH tunnel on port 8022 (alias: ${serveo_alias})..."
                 rm -f "$SERVEO_LOG"
-                nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=15 -R "${serveo_alias}:22:127.0.0.1:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
+                nohup ssh -i "$SERVEO_KEY" -T -N \
+                    -o StrictHostKeyChecking=accept-new \
+                    -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+                    -o ServerAliveInterval=10 \
+                    -o ServerAliveCountMax=3 \
+                    -o ExitOnForwardFailure=yes \
+                    -o ConnectTimeout=10 \
+                    -R "${serveo_alias}:22:127.0.0.1:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
                 echo $! > "$SERVEO_STATE"
                 sleep 4
+                echo "$serveo_alias" > "$PREFIX/tmp/asl-serveo-active.alias" 2>/dev/null || true
                 if ! serveo_running; then
-                    if grep -q "remote port forwarding failed" "$SERVEO_LOG" 2>/dev/null; then
+                    if grep -qE "remote port forwarding failed|alias" "$SERVEO_LOG" 2>/dev/null; then
                         local dev_suffix
                         dev_suffix=$(sha256sum /proc/sys/kernel/random/boot_id 2>/dev/null | cut -c1-4 || echo "$RANDOM")
                         serveo_alias="${serveo_alias}-${dev_suffix}"
                         echo "[!] Primary alias in use. Retrying with device fallback alias: ${serveo_alias}..."
                         pkill -f "serveo.net" 2>/dev/null || true
                         rm -f "$SERVEO_LOG"
-                        nohup ssh -i "$SERVEO_KEY" -T -N -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o ConnectTimeout=15 -R "${serveo_alias}:22:127.0.0.1:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
+                        nohup ssh -i "$SERVEO_KEY" -T -N \
+                            -o StrictHostKeyChecking=accept-new \
+                            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+                            -o ServerAliveInterval=10 \
+                            -o ServerAliveCountMax=3 \
+                            -o ExitOnForwardFailure=yes \
+                            -o ConnectTimeout=10 \
+                            -R "${serveo_alias}:22:127.0.0.1:8022" serveo.net > "$SERVEO_LOG" 2>&1 &
                         echo $! > "$SERVEO_STATE"
+                        echo "$serveo_alias" > "$PREFIX/tmp/asl-serveo-active.alias" 2>/dev/null || true
                         sleep 4
                     fi
                 fi
@@ -105,10 +132,18 @@ serveo_status() {
         echo "Serveo Tunnel: RUNNING (Persistent Fixed Key)"
         local s_alias user
         user=$(whoami 2>/dev/null || echo "user")
-        s_alias=$(get_serveo_alias)
+        if [ -f "$PREFIX/tmp/asl-serveo-active.alias" ] && [ -s "$PREFIX/tmp/asl-serveo-active.alias" ]; then
+            s_alias=$(cat "$PREFIX/tmp/asl-serveo-active.alias" 2>/dev/null)
+        else
+            s_alias=$(get_serveo_alias)
+        fi
         echo "    Connect:  ssh -J serveo.net ${user}@${s_alias}"
         echo "    Authentication: SSH key or configured remote credential"
     else
         echo "Serveo Tunnel: STOPPED"
     fi
 }
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    serveo_control "$@"
+fi

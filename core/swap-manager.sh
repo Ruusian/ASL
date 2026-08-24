@@ -23,9 +23,9 @@ asl_swap_status() {
     echo "ZRAM Status:"
     if [ -d /sys/block/zram0 ]; then
         local zram_size zram_used zram_comp algo
-        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null | tr -d '[:space:]')
-        zram_used=$(cat /sys/block/zram0/mm_stat 2>/dev/null | awk '{print $3}' | tr -d '[:space:]')
-        algo=$(cat /sys/block/zram0/comp_algorithm 2>/dev/null || echo "unknown")
+        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || su -c "cat /sys/block/zram0/disksize" 2>/dev/null | tr -d '[:space:]')
+        zram_used=$(cat /sys/block/zram0/mm_stat 2>/dev/null | awk '{print $3}' || su -c "cat /sys/block/zram0/mm_stat" 2>/dev/null | awk '{print $3}' | tr -d '[:space:]')
+        algo=$(cat /sys/block/zram0/comp_algorithm 2>/dev/null || su -c "cat /sys/block/zram0/comp_algorithm" 2>/dev/null || echo "unknown")
         [[ "$zram_size" =~ ^[0-9]+$ ]] || zram_size=0
         [[ "$zram_used" =~ ^[0-9]+$ ]] || zram_used=0
 
@@ -47,7 +47,7 @@ asl_swap_status() {
     echo ""
     echo "File Swap:"
     local swap_info
-    swap_info=$(swapon --show 2>/dev/null | grep -v "Name" || true)
+    swap_info=$(su -c "cat /proc/swaps" 2>/dev/null | grep -v "^Filename" || true)
     if [ -n "$swap_info" ]; then
         echo "$swap_info"
     else
@@ -74,28 +74,35 @@ asl_swap_status() {
 }
 
 asl_swap_setup() {
-    echo "[*] Setting up memory optimization..."
+    local target_size="${1:-5G}"
+    echo "[*] Setting up $target_size swap pool..."
 
-    # Create 2GB swap file if it doesn't exist
-    local swapfile="$HOME/swapfile"
+    local swapfile="/data/local/tmp/asl_swap.img"
     if [ ! -f "$swapfile" ]; then
-        echo "[*] Creating 2GB swap file..."
-        fallocate -l 2G "$swapfile" 2>/dev/null || dd if=/dev/zero of="$swapfile" bs=1M count=2048 2>/dev/null
-        chmod 600 "$swapfile"
-        mkswap "$swapfile" 2>/dev/null
-        echo "[✓] Swap file created"
+        echo "[*] Creating $target_size swap image..."
+        su -c "swapoff -a 2>/dev/null || true"
+        su -c "fallocate -l $target_size '$swapfile' || dd if=/dev/zero of='$swapfile' bs=1M count=5120" 2>/dev/null || true
+        su -c "chmod 600 '$swapfile' && mkswap '$swapfile'" 2>/dev/null || true
+        echo "[✓] $target_size swap image created."
     fi
 
-    # Enable swap if not already active
-    if ! swapon --show 2>/dev/null | grep -q "$swapfile"; then
-        echo "[*] Enabling swap..."
-        if [ "$(id -u)" -eq 0 ]; then
-            swapon "$swapfile" 2>/dev/null && echo "[✓] Swap enabled" || echo "[!] swapon failed."
-        elif su -c "id" >/dev/null 2>&1; then
-            su -c "swapon '$swapfile'" 2>/dev/null && echo "[✓] Swap enabled (via root)" || echo "[!] swapon failed."
-        else
-            echo "[!] Warning: swapon requires root privileges on Android. Run with root to enable."
+    # Ensure only ONE loop device is attached and active for the swap image
+    local active_swap_loops
+    active_swap_loops=$(su -c "losetup -j '$swapfile'" 2>/dev/null | cut -d: -f1 || true)
+    local count=0
+    for dev in $active_swap_loops; do
+        count=$((count + 1))
+        if [ $count -gt 1 ]; then
+            echo "[*] Detaching duplicate swap loop device $dev..."
+            su -c "swapoff '$dev' 2>/dev/null || true; losetup -d '$dev' 2>/dev/null || true"
         fi
+    done
+
+    if ! su -c "cat /proc/swaps" 2>/dev/null | grep -q "$swapfile\|loop"; then
+        echo "[*] Attaching 5GB swap loop device..."
+        su -c "loopdev=\$(losetup -f) && losetup \$loopdev '$swapfile' && swapon \$loopdev" 2>/dev/null && echo "[✓] 5GB Swap enabled." || echo "[!] Swap mount skipped or active."
+    else
+        echo "[✓] Swap already active."
     fi
 
     # Set swappiness (prefer keeping Linux processes in RAM)
@@ -107,7 +114,9 @@ asl_swap_setup() {
     local critical_pids
     critical_pids=$(pgrep -f "(box64|wine|pulseaudio|sshd)" 2>/dev/null || true)
     for pid in $critical_pids; do
-        echo -1000 > "/proc/$pid/oom_score_adj" 2>/dev/null || true
+        if [ -n "$pid" ]; then
+            su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || echo -1000 > "/proc/$pid/oom_score_adj" 2>/dev/null || true
+        fi
     done
 
     echo "[✓] Memory optimization complete"

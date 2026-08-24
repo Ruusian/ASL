@@ -24,6 +24,14 @@ asl_repair_run() {
     [ "$target" = "run" ] && target="all"
     echo "[*] Running ASL Automated Repair & Recovery (target: $target)..."
 
+    local was_desktop_running=0
+    if pgrep -f "xfce4-session|xfwm4" >/dev/null 2>&1; then
+        was_desktop_running=1
+        echo "[!] Active desktop session detected — saving session state for auto-restart after repair..."
+    fi
+
+    ensure_chroot_mounted 2>/dev/null || true
+
     # Step 1: Repair mounts & stale unmounts
     if [ "$target" = "mounts" ] || [ "$target" = "all" ]; then
         echo "[1/4] Checking and unmounting stale chroot mount points..."
@@ -60,11 +68,11 @@ asl_repair_run() {
         echo "[3/4] Repairing Debian DPKG / APT lock states & dynamic linker bindings (ldconfig)..."
         asl_chroot_exec "
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            if pgrep -x 'apt|apt-get|dpkg' >/dev/null 2>&1; then
+            if pgrep -f '^(apt|apt-get|dpkg)$' >/dev/null 2>&1; then
                 echo '[!] Active APT/DPKG process detected; terminating stuck package managers...'
-                pkill -x 'apt|apt-get|dpkg' 2>/dev/null || true
+                pkill -f '^(apt|apt-get|dpkg)$' 2>/dev/null || true
                 sleep 1
-                pkill -9 -x 'apt|apt-get|dpkg' 2>/dev/null || true
+                pkill -9 -f '^(apt|apt-get|dpkg)$' 2>/dev/null || true
             fi
             rm -f /var/lib/dpkg/lock* /var/cache/apt/archives/lock* /var/lib/apt/lists/lock*
             dpkg --configure -a 2>/dev/null || true
@@ -78,6 +86,13 @@ asl_repair_run() {
         echo "[4/4] Resynchronizing dynamic profile.d GPU/HUD environment variables..."
         source "$SCRIPT_DIR/core/gpu-profile.sh"
         asl_sync_chroot_env
+    fi
+
+    if [ "$was_desktop_running" -eq 1 ]; then
+        echo "[*] Auto-restoring XFCE4 desktop session post-repair..."
+        if [ -f "$SCRIPT_DIR/desktop/start-desktop.sh" ]; then
+            bash "$SCRIPT_DIR/desktop/start-desktop.sh" start >/dev/null 2>&1 || true
+        fi
     fi
 
     echo "[✓] ASL Integrity Repair completed successfully."
