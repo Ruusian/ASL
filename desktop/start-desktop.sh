@@ -290,13 +290,14 @@ done
 export DISPLAY=:0
 export XAUTHORITY=/tmp/.Xauthority
 export TMPDIR=/tmp
-export PULSE_SERVER=unix:/tmp/pulse-socket,tcp:127.0.0.1
+export PULSE_SERVER=127.0.0.1:4713
 export TERM=xterm-256color
 export LANG=C.UTF-8
 export HOME=$target_home
 export USER=$asl_target_user
 export SHELL=/bin/bash
 export XDG_RUNTIME_DIR=/run/user/$target_uid
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
 export XDG_MENU_PREFIX=xfce-
 export XDG_DATA_DIRS=/usr/local/share:/usr/share
 export XDG_CONFIG_DIRS=/etc/xdg
@@ -308,24 +309,48 @@ export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
 $gpu_exports
 
-mkdir -p /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
+mkdir -p /etc/pulse "$target_home/.config/pulse" /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
+[ -f /tmp/.Xauthority ] && cp -f /tmp/.Xauthority "$target_home/.Xauthority" 2>/dev/null && chmod 600 "$target_home/.Xauthority" 2>/dev/null || true
+ln -sf /usr/share/applications/org.pulseaudio.pavucontrol.desktop /usr/share/applications/pavucontrol.desktop 2>/dev/null || true
+cat << 'PULSE_CONF_EOF' > /etc/pulse/client.conf
+default-server = 127.0.0.1:4713
+autospawn = no
+enable-shm = no
+PULSE_CONF_EOF
+cp /etc/pulse/client.conf "$target_home/.config/pulse/client.conf" 2>/dev/null || true
+cat << 'ALSA_CONF_EOF' > /etc/asound.conf
+pcm.!default {
+    type pulse
+}
+ctl.!default {
+    type pulse
+}
+ALSA_CONF_EOF
 chmod 700 /run/user/$target_uid 2>/dev/null
 if [ "$asl_target_user" != "root" ]; then
-    chown "$asl_target_user:$asl_target_user" "/run/user/$target_uid" 2>/dev/null || true
+    chown "$asl_target_user:$asl_target_user" "/run/user/$target_uid" "$target_home/.Xauthority" 2>/dev/null || true
+    chown -R "$asl_target_user:$asl_target_user" "$target_home/.config/pulse" 2>/dev/null || true
 fi
 mkdir -p /tmp/.cache 2>/dev/null
 
-# Start the D-Bus system bus (the session bus is started below via dbus-run-session).
-mkdir -p /run/dbus 2>/dev/null
+# Start system and session D-Bus daemons on standard socket paths
+mkdir -p /run/dbus /run/user/$target_uid 2>/dev/null
+chmod 700 /run/user/$target_uid 2>/dev/null
 if ! pgrep -f "dbus-daemon --system" >/dev/null 2>&1; then
     rm -f /run/dbus/system_bus_socket 2>/dev/null
     /usr/bin/dbus-daemon --system >/tmp/dbus-system.log 2>&1 &
 fi
 
+rm -f /run/user/$target_uid/bus 2>/dev/null
+/usr/bin/dbus-daemon --session --address=unix:path=/run/user/$target_uid/bus >/tmp/dbus-session.log 2>&1 &
+sleep 0.5
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
+
 rm -f /tmp/xfce-keepalive 2>/dev/null
 (
     sleep 3
     export DISPLAY=:0
+    export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
     xrandr --newmode "1280x720" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
     xrandr --addmode builtin "1280x720" 2>/dev/null || true
     xrandr --newmode "1600x900" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true
@@ -342,30 +367,26 @@ rm -f /tmp/xfce-keepalive 2>/dev/null
     xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xsettings -p /Net/IconThemeName -s Papirus-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s Papirus-Dark 2>/dev/null || true
-    xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark 2>/dev/null || xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Arc-Dark 2>/dev/null || true
-    xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Breeze_Light 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Breeze_Light 2>/dev/null || true
     xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 28 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeSize -n -t int -s 28 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/HintStyle -s hintslight 2>/dev/null || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/RGBA -s rgb 2>/dev/null || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /usr/share/backgrounds/xfce/xfce-blue.jpg 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -n -t int -s 5 2>/dev/null || true
 ) &
 
 rm -f /etc/xdg/autostart/light-locker.desktop "$HOME/.config/autostart/light-locker.desktop" 2>/dev/null || true
 
-if command -v startxfce4 >/dev/null 2>&1; then
-    exec dbus-run-session startxfce4
-elif command -v xfce4-session >/dev/null 2>&1; then
-    exec dbus-run-session xfce4-session
+if [ -x /usr/bin/startxfce4 ]; then
+    exec /usr/bin/startxfce4
+elif [ -x /usr/bin/xfce4-session ]; then
+    exec /usr/bin/xfce4-session
 else
-    exec dbus-run-session xfwm4
+    exec /usr/bin/xfwm4
 fi
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
-    cp -f "$launcher_script" "$termux_tmp/asl-start-xfce.sh" 2>/dev/null || true
+    cp -f "$launcher_script" "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
+    chmod 755 "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
     LAUNCHER_PID=
     case "${ASL_EXEC_MODE:-root}" in
         proot|shizuku)

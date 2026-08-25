@@ -53,11 +53,10 @@ asl_service_start() {
     fi
 
     # 4. Check & restore Omniroute / local AI proxy on port 20128 if installed
-    local omniroute_bin="$HOME/.omniroute/bin/omniroute"
-    if [ -x "$omniroute_bin" ] || command -v omniroute >/dev/null 2>&1; then
-        if ! pgrep -f "omniroute" >/dev/null 2>&1 && ! netstat -tulpn 2>/dev/null | grep -q ":20128"; then
+    if [ -x "$HOME/omniroute-daemon.sh" ] || command -v omniroute >/dev/null 2>&1; then
+        if ! pgrep -f "omniroute" >/dev/null 2>&1 && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
             echo "[*] Starting Omniroute local AI proxy on port 20128..."
-            nohup omniroute start >/dev/null 2>&1 &
+            su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
         fi
     fi
 
@@ -114,10 +113,13 @@ while [ $retry -lt 15 ]; do
     retry=$((retry + 1))
 done
 
-# Locate ASL directory
-ASL_PATH="/data/data/com.termux/files/home/ASL"
-if [ -f "$ASL_PATH/bin/asl" ]; then
-    bash "$ASL_PATH/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
+# Locate ASL CLI executable
+if [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ]; then
+    "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
+elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/bin/asl" ]; then
+    bash "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
+elif [ -f "$HOME/ASL/bin/asl" ]; then
+    bash "$HOME/ASL/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
 fi
 BOOT_EOF
     chmod 755 "$BOOT_SCRIPT"
@@ -129,8 +131,10 @@ BOOT_EOF
             cat << 'BASHRC_EOF' >> "$BASHRC"
 
 # ASL 24/7 Auto-Start Hook
-if [ -f "$HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
-    (nohup bash "$HOME/ASL/bin/asl" service start >/dev/null 2>&1 &) disown 2>/dev/null || true
+if [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
+    ((nohup "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start </dev/null >/dev/null 2>&1 &) &) 2>/dev/null
+elif [ -f "$HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
+    ((nohup bash "$HOME/ASL/bin/asl" service start </dev/null >/dev/null 2>&1 &) &) 2>/dev/null
 fi
 BASHRC_EOF
             echo "[✓] Added shell auto-start hook to $BASHRC"
@@ -203,6 +207,9 @@ asl_service_status() {
 
     local ssh_pid ssh_mem
     ssh_pid=$(pgrep -f "sshd" 2>/dev/null | head -1 || true)
+    if [ -z "$ssh_pid" ] && su -c "id -u" >/dev/null 2>&1; then
+        ssh_pid=$(su -c "pgrep -f sshd 2>/dev/null | head -1" 2>/dev/null || true)
+    fi
     if [ -n "$ssh_pid" ]; then
         ssh_mem=$(fmt_mem "$ssh_pid")
         echo " LAN SSH Server: ACTIVE (Port 8022, PID: $ssh_pid, RAM: $ssh_mem)"
@@ -239,6 +246,9 @@ asl_service_status() {
 
     local omni_pid omni_mem
     omni_pid=$(pgrep -f "omniroute" 2>/dev/null | head -1 || true)
+    if [ -z "$omni_pid" ] && su -c "id -u" >/dev/null 2>&1; then
+        omni_pid=$(su -c "pgrep -f omniroute 2>/dev/null | head -1" 2>/dev/null || true)
+    fi
     if [ -n "$omni_pid" ]; then
         omni_mem=$(fmt_mem "$omni_pid")
         echo " Omniroute Proxy: ACTIVE (Port 20128, PID: $omni_pid, RAM: $omni_mem)"
@@ -278,9 +288,11 @@ asl_service_check() {
 
     # 1. SSH Server Check (process & socket probe)
     local ssh_alive=0
-    if pgrep -f "sshd" >/dev/null 2>&1; then
-        if command -v nc >/dev/null 2>&1; then
-            nc -z 127.0.0.1 8022 >/dev/null 2>&1 && ssh_alive=1
+    if asl_is_sshd_running; then
+        if (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8022') 2>/dev/null; then
+            ssh_alive=1
+        elif command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 8022 >/dev/null 2>&1; then
+            ssh_alive=1
         else
             ssh_alive=1
         fi
@@ -316,6 +328,15 @@ asl_service_check() {
         echo "[!] Serveo tunnel state ACTIVE but process down — restoring tunnel..."
         if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
             bash "$SCRIPT_DIR/desktop/remote.sh" serveo start >/dev/null 2>&1 || true
+            healed=$((healed + 1))
+        fi
+    fi
+
+    # 4.5. OmniRoute Local AI Proxy Check
+    if [ -x "$HOME/omniroute-daemon.sh" ] || command -v omniroute >/dev/null 2>&1; then
+        if ! pgrep -f "omniroute" >/dev/null 2>&1 && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
+            echo "[!] OmniRoute AI proxy down — starting as root..."
+            su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
             healed=$((healed + 1))
         fi
     fi
@@ -390,6 +411,7 @@ asl_service_loop() {
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
     mkdir -p "$prefix/tmp" 2>/dev/null || true
     local mgr_path="$SCRIPT_DIR/core/service-manager.sh"
+    [ -f "$mgr_path" ] || mgr_path="${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/service-manager.sh"
     [ -f "$mgr_path" ] || mgr_path="$HOME/ASL/core/service-manager.sh"
 
     nohup bash -c '

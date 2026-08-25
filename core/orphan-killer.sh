@@ -13,19 +13,29 @@ asl_orphan_kill() {
     local rogue_pids=()
     local pid comm cmd
 
-    # Find processes matching rogue patterns or high-cpu spin loops
-    while read -r pid comm cmd; do
-        [ -n "$pid" ] || continue
-        # Exclude self and openclaude agent
-        [ "$pid" -eq "$$" ] 2>/dev/null && continue
-        echo "$cmd" | grep -q "openclaude" && continue
+    local ps_output
+    if su -c "id -u" >/dev/null 2>&1; then
+        ps_output=$(su -c "ps -ef 2>/dev/null" || ps -ef)
+    else
+        ps_output=$(ps -ef)
+    fi
 
-        if echo "$cmd" | grep -qE "hermes-agent|ensurepip|render_dashboard_header" || \
-           ([ "$comm" = "python" ] && echo "$cmd" | grep -q "default-pip"); then
+    # Find processes matching rogue patterns or high-cpu spin loops
+    while read -r line; do
+        [ -n "$line" ] || continue
+        # Exclude self and openclaude agent
+        echo "$line" | grep -qE "openclaude|grep|awk|orphan-killer" && continue
+
+        pid=$(echo "$line" | awk '{print $2}')
+        [ -n "$pid" ] && [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        [ "$pid" -eq "$$" ] 2>/dev/null && continue
+
+        if echo "$line" | grep -qE "hermes-agent|ensurepip|render_dashboard_header" || \
+           (echo "$line" | grep -q "python" && echo "$line" | grep -q "default-pip"); then
             rogue_pids+=("$pid")
-            echo "[!] Detected rogue process: PID $pid ($comm) -> $cmd"
+            echo "[!] Detected rogue process: PID $pid -> $line"
         fi
-    done < <(ps -ef | awk 'NR>1 {print $2, $8, $0}')
+    done <<< "$ps_output"
 
     if [ ${#rogue_pids[@]} -eq 0 ]; then
         echo "[✓] No rogue orphan processes detected."

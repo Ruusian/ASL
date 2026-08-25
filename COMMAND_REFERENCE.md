@@ -587,6 +587,117 @@ asl update --from-source            # Build from source
 
 ---
 
+## 🤖 AI, Background Services & Automation
+
+### `asl service`
+Manage 24/7 background daemons, Termux:Boot autostart, and health watchdog.
+
+```bash
+asl service status                  # Check 24/7 service and daemon status
+asl service start                   # Start background services (SSH, Tunnels, OmniRoute)
+asl service stop                    # Stop background services
+asl service restart                 # Restart background services
+asl service check                   # Run self-healing health watchdog
+asl service loop                    # Start autonomous background watchdog daemon (180s interval)
+asl service enable                  # Enable Termux:Boot autostart & shell hook
+asl service disable                 # Disable boot autostart
+```
+
+---
+
+### `asl omniroute`
+Manage OmniRoute local AI API gateway running on port 20128 (root-isolated to bypass Android netd DNS restrictions).
+
+```bash
+asl omniroute status                # Check proxy health and endpoint
+asl omniroute start                 # Start OmniRoute daemon as root
+asl omniroute stop                  # Stop OmniRoute daemon
+asl omniroute restart               # Restart OmniRoute daemon
+asl omniroute logs                  # Tail recent OmniRoute proxy logs
+```
+
+---
+
+## 💾 Storage, Memory & Maintenance
+
+### `asl swap`
+Manage virtual swap pool and zRAM swap files with 5GB safety bounds.
+
+```bash
+asl swap status                     # Show swap usage, zRAM state & swapfile stats
+asl swap create [size_in_mb]        # Create virtual swapfile (default: 4096MB)
+asl swap enable                     # Activate virtual swapfile
+asl swap disable                    # Deactivate virtual swapfile
+asl swap auto                       # Automatically size swapfile based on RAM & free storage
+asl swap remove                     # Deactivate and delete virtual swapfile
+```
+
+---
+
+### `asl clean`
+Purge cache files, package archives, and temporary artifacts to free internal storage.
+
+```bash
+asl clean status                    # Show cleanable storage breakdown
+asl clean all                       # Clean APT cache, /tmp, and Wine shader cache
+asl clean apt                       # Clean Debian APT package archives
+asl clean tmp                       # Clean container temporary files
+asl clean wine                      # Clean Wine prefix cache and shaders
+```
+
+---
+
+### `asl repair`
+Automated system integrity repair and recovery for corrupted locks or mount states.
+
+```bash
+asl repair all                      # Run full self-healing recovery suite
+asl repair mounts                   # Fix stale or corrupted chroot mounts
+asl repair perms                    # Restore file permissions and Android AID mappings
+asl repair dpkg                     # Recover from interrupted DPKG / APT lock states
+asl repair dbus                     # Reset D-Bus socket and daemon
+```
+
+---
+
+## 🛠️ Developer & Security Suites
+
+### `asl dev-suite`
+Deploy pre-configured developer toolchains inside the Debian chroot.
+
+```bash
+asl dev-suite list                  # List available development toolchains
+asl dev-suite install python        # Install Python 3, pip, venv, and development headers
+asl dev-suite install webdev        # Install Node.js, npm, yarn, and TypeScript
+asl dev-suite install neovim        # Install Neovim with modern Lua configuration
+asl dev-suite install vscode        # Install VS Code Server (web-accessible code editor)
+asl dev-suite install golang        # Install Go compiler and toolchain
+asl dev-suite install rust          # Install Rust toolchain via rustup
+```
+
+---
+
+### `asl security-suite`
+Install defensive network auditing and security analysis tools.
+
+```bash
+asl security-suite list             # List available security packages
+asl security-suite install basic    # Install nmap, netcat, socat, tcpdump
+asl security-suite install audit    # Install Wireshark/TShark, Nikto, Gobuster
+```
+
+---
+
+### `asl hub` / `asl gui`
+Launch native GTK3 Control Center desktop application inside XFCE4 session.
+
+```bash
+asl hub                             # Launch ASL Control Center GTK3 app
+asl gui                             # Alias for asl hub
+```
+
+---
+
 ## 🎓 Advanced Usage
 
 ### Chaining Commands

@@ -84,11 +84,11 @@ ensure_host_sshd() {
     if [ -s "$PASS_FILE" ]; then
         pass_opts="-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes"
     fi
-    if ! pgrep -f "sshd -p 8022" >/dev/null 2>&1 && ! su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1; then
+    if ! asl_is_sshd_running; then
         echo "[*] Starting Termux host SSH daemon on port 8022..."
         sshd -p 8022 $pass_opts 2>/dev/null || return 1
     fi
-    pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1 || return 1
+    asl_is_sshd_running || return 1
 }
 
 password_control() {

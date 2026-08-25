@@ -434,22 +434,31 @@ EOF
 fi
 
 # 5. Global Binary Linking & Android AID setup
-echo -e "${GREEN}[*] Registering 'asl' CLI executable...${RESET}"
-chmod +x "$TARGET_DIR/bin/asl" 2>/dev/null || true
-find "$TARGET_DIR" -maxdepth 3 -name "*.sh" -exec chmod +x {} + 2>/dev/null || true
+echo -e "${GREEN}[*] Installing ASL system runtime to ${PREFIX:-/data/data/com.termux/files/usr}/share/asl...${RESET}"
+INSTALL_DIR="${PREFIX:-/data/data/com.termux/files/usr}/share/asl"
+mkdir -p "$INSTALL_DIR"
+for d in bin core desktop gaming tools; do
+    if [ -d "$TARGET_DIR/$d" ]; then
+        mkdir -p "$INSTALL_DIR/$d"
+        cp -a "$TARGET_DIR/$d/." "$INSTALL_DIR/$d/"
+    fi
+done
+
+chmod +x "$TARGET_DIR/bin/asl" "$INSTALL_DIR/bin/asl" 2>/dev/null || true
+find "$TARGET_DIR" "$INSTALL_DIR" -maxdepth 3 -name "*.sh" -exec chmod +x {} + 2>/dev/null || true
 
 mkdir -p "$PREFIX/bin"
-ln -sf "$TARGET_DIR/bin/asl" "$PREFIX/bin/asl"
+ln -sf "$INSTALL_DIR/bin/asl" "$PREFIX/bin/asl"
 
 echo -e "${GREEN}[*] Applying Android GID mappings...${RESET}"
-if ! "$TARGET_DIR/core/android-aid.sh" setup; then
+if ! "$INSTALL_DIR/core/android-aid.sh" setup; then
     echo -e "${RED}[!] Android GID mapping failed. Installation cannot continue safely.${RESET}"
     exit 1
 fi
 
 echo -e "${GREEN}[*] Provisioning auto-configured SoC GPU drivers & hardware acceleration...${RESET}"
 if ! (
-    source "$TARGET_DIR/core/gpu-profile.sh"
+    source "$INSTALL_DIR/core/gpu-profile.sh"
     asl_gpu_install_drivers
 ); then
     echo -e "${RED}[!] GPU driver provisioning failed. Installation cannot continue safely.${RESET}"
@@ -457,8 +466,8 @@ if ! (
 fi
 
 echo -e "${GREEN}[*] Provisioning OpenClaude AI agent environment...${RESET}"
-if [ -f "$TARGET_DIR/core/openclaude-setup.sh" ]; then
-    bash "$TARGET_DIR/core/openclaude-setup.sh" || true
+if [ -f "$INSTALL_DIR/core/openclaude-setup.sh" ]; then
+    bash "$INSTALL_DIR/core/openclaude-setup.sh" || true
 fi
 
 echo -e "${CYAN}====================================================${RESET}"

@@ -104,13 +104,8 @@ asl_exec "
     is_mounted() {
         local target
         target=\$(readlink -f \"\$1\" 2>/dev/null || echo \"\$1\")
-        grep -q -F \" \$target \" /proc/mounts 2>/dev/null
+        awk -v t=\"\$target\" '\$2 == t { found=1; exit } END { exit !found }' /proc/mounts 2>/dev/null
     }
-
-    if ! is_mounted \"$DEBIANPATH\"; then
-        mount --bind \"$DEBIANPATH\" \"$DEBIANPATH\"
-    fi
-    mount --make-rprivate \"$DEBIANPATH\" 2>/dev/null || true
 
     domount_bind() {
         if ! is_mounted \"\$2\"; then
@@ -160,24 +155,13 @@ asl_exec "
 
     if [ "${ASL_MOUNT_SDCARD:-1}" = "1" ] && [ -d /sdcard ]; then
         domount_bind /sdcard \"$DEBIANPATH/sdcard\"
-        mkdir -p \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
-        if ! is_mounted \"$DEBIANPATH/storage/emulated/0\"; then
-            mount --bind /sdcard \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
-            mount --make-rslave \"$DEBIANPATH/storage/emulated/0\" 2>/dev/null || true
-        fi
+        domount_bind /sdcard \"$DEBIANPATH/storage/emulated/0\"
     fi
 
     mkdir -p \"$TERMUX_TMP\"
     chmod 1777 \"$TERMUX_TMP\"
-    if ! is_mounted \"$DEBIANPATH/tmp\"; then
-        mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/tmp\"
-        mount --make-rslave \"$DEBIANPATH/tmp\" 2>/dev/null || true
-    fi
-    mkdir -p \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
-    if ! is_mounted \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"; then
-        mount --bind \"$TERMUX_TMP\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
-        mount --make-rslave \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\" 2>/dev/null || true
-    fi
+    domount_bind \"$TERMUX_TMP\" \"$DEBIANPATH/tmp\"
+    domount_bind \"$TERMUX_TMP\" \"$DEBIANPATH/data/data/com.termux/files/usr/tmp\"
     domount_tmpfs \"$DEBIANPATH/run\" rw,nosuid,nodev,mode=0755,noatime
     domount_tmpfs \"$DEBIANPATH/dev/shm\" rw,nosuid,nodev,noatime,mode=1777,size=2G
 
@@ -281,6 +265,11 @@ if ! is_mounted "$DEBIANPATH/proc"; then
     echo "[!] Chroot mount verification failed - /proc not mounted."
     echo "    Verify: grep $DEBIANPATH /proc/mounts"
     exit 1
+fi
+
+# Ensure 5GB virtual swap pool is active
+if [ -f "$SCRIPT_DIR/core/swap-manager.sh" ]; then
+    bash "$SCRIPT_DIR/core/swap-manager.sh" setup >/dev/null 2>&1 || true
 fi
 
 echo "[✓] Chroot mounted successfully."

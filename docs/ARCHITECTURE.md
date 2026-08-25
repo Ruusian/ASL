@@ -59,5 +59,15 @@ Subsystem execution is transparently routed via helper functions:
 ### 4. Memory and Swap Topology
 - **ZRAM:** 2.0 GB compressed zram swap (`/dev/block/zram0`)
 - **File Swap:** 2.0 GB swap file (`/data/swapfile`)
-- **Total Active Swap:** 4.0 GB tuned for Android gaming stability without excessive storage wear.
+- **Total Active Swap:** 4.0 GB tuned for Android gaming stability without excessive storage wear (capped at 5.0 GB limit).
 - **Swappiness Target:** `vm.swappiness=10` during active gaming session to protect low latency execution.
+
+### 5. Runtime vs Source Repository Separation
+- **Source Repository (`~/ASL`):** Houses git tracking, source development tree, test suites, and documentation.
+- **Installed Runtime (`$PREFIX/share/asl`):** Dedicated system installation target deployed by `install.sh`.
+- **Binary Symlink (`$PREFIX/bin/asl`):** Points to `$PREFIX/share/asl/bin/asl` and resolves paths dynamically via `readlink -f`.
+- **Subshell Detachment:** Background daemons spawn via `((nohup bash ... &) &) 2>/dev/null` to prevent shell job control notifications.
+
+### 6. Terminal Display & TUI Architecture
+- **DEC Mode 1049 Buffer (`\033[?1049h` / `\033[?1049l`):** TUI views (`dashboard`, `watch`, `process_manager`) run in the terminal's alternate screen buffer. Screen redraws and timer ticks do not leak into the terminal scrollback history.
+- **74-Column Box Drawing Grid:** UI frames are strictly constrained to 74 columns with ANSI escapes formatted outside string measurement routines to ensure pixel-perfect rendering across terminal emulators.

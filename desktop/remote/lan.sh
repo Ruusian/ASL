@@ -13,24 +13,29 @@ lan_host_ip() {
 
 lan_control() {
     local action="${1:-status}"
+    local auth_desc="SSH key only"
+    if [ -s "$PASS_FILE" ] || [ -n "$(get_password 2>/dev/null)" ]; then
+        auth_desc="SSH key or configured remote password"
+    fi
+
     case "$action" in
         start)
-            ensure_host_sshd || { echo "Error: Failed to start host SSH in key-only mode."; return 1; }
+            ensure_host_sshd || { echo "Error: Failed to start host SSH daemon."; return 1; }
             local host
             host=$(lan_host_ip)
             echo "[✓] LAN SSH Server active on port 8022."
             echo "    Connect command: ssh -p 8022 $(whoami)@$host"
-            echo "    Authentication:  SSH key only"
+            echo "    Authentication:  $auth_desc"
             ;;
         stop)
-            pkill -f "sshd -p 8022" 2>/dev/null || true
+            pkill -f "sshd" 2>/dev/null || su -c "pkill -f sshd" 2>/dev/null || asl_exec "pkill -f sshd" 2>/dev/null || true
             echo "[✓] LAN SSH Server stopped."
             ;;
         status|"")
-            if pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1; then
+            if asl_is_sshd_running; then
                 echo "LAN SSH:      RUNNING (port 8022)"
                 echo "    Connect:  ssh -p 8022 $(whoami)@$(lan_host_ip)"
-                echo "    Authentication: SSH key only"
+                echo "    Authentication: $auth_desc"
             else
                 echo "LAN SSH:      STOPPED"
             fi

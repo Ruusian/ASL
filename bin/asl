@@ -3,8 +3,12 @@
 
 REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
 ASL_DIR="$(cd "$(dirname "$REAL_SCRIPT")/.." && pwd)"
-if [ ! -d "$ASL_DIR/core" ] && [ -d "$HOME/ASL/core" ]; then
-    ASL_DIR="$HOME/ASL"
+if [ ! -d "$ASL_DIR/core" ]; then
+    if [ -d "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core" ]; then
+        ASL_DIR="${PREFIX:-/data/data/com.termux/files/usr}/share/asl"
+    elif [ -d "$HOME/ASL/core" ]; then
+        ASL_DIR="$HOME/ASL"
+    fi
 fi
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
@@ -41,9 +45,23 @@ fi
 status_label() {
     local state="$1"
     case "$state" in
-        ACTIVE|RUNNING|READY|ON) printf '%s[%s]%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
-        INACTIVE|STOPPED|OFF) printf '%s[%s]%s' "$C_DIM" "$state" "$C_RESET" ;;
+        ACTIVE|RUNNING|READY|ON|ENABLED) printf '%s[%s]%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
+        INACTIVE|STOPPED|OFF|DISABLED) printf '%s[%s]%s' "$C_DIM" "$state" "$C_RESET" ;;
         *) printf '%s[%s]%s' "$C_YELLOW$C_BOLD" "$state" "$C_RESET" ;;
+    esac
+}
+
+status_badge() {
+    local state="$1" width="${2:-9}"
+    local tag="[${state}]"
+    local pad=$(( width - ${#tag} ))
+    [ "$pad" -lt 0 ] && pad=0
+    local trail="" i
+    for ((i=0; i<pad; i++)); do trail="${trail} "; done
+    case "$state" in
+        ACTIVE|RUNNING|READY|ON|ENABLED) printf "%s%s%s%s" "$C_GREEN$C_BOLD" "$tag" "$C_RESET" "$trail" ;;
+        INACTIVE|STOPPED|OFF|DISABLED) printf "%s%s%s%s" "$C_DIM" "$tag" "$C_RESET" "$trail" ;;
+        *) printf "%s%s%s%s" "$C_YELLOW$C_BOLD" "$tag" "$C_RESET" "$trail" ;;
     esac
 }
 
@@ -58,6 +76,8 @@ menu_item() {
 
 if [ -f "$ASL_DIR/core/common.sh" ]; then
     source "$ASL_DIR/core/common.sh"
+elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh" ]; then
+    source "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh"
 elif [ -f "$HOME/ASL/core/common.sh" ]; then
     source "$HOME/ASL/core/common.sh"
 fi
@@ -282,10 +302,14 @@ show_help() {
     echo "  exec <cmd>       Execute a single command inside chroot"
     echo "  install <pkg..>  Install Debian packages via apt-get"
     echo "  search <query>   Search available Debian packages"
-    echo "  service <act> <name> Manage Debian background services (start|stop|restart|status)"
     echo "  snapshot [act]   Fast chroot snapshots (create|list|restore|delete)"
     echo "  backup           Backup chroot to tar.gz archive"
     echo "  restore <file>   Restore chroot from tar.gz archive"
+    echo ""
+    echo "AI & 24/7 Service Hub:"
+    echo "  service [act]    24/7 Service Manager & Boot Autostart (start|stop|restart|check|loop|enable|disable|status)"
+    echo "  omniroute [act]  OmniRoute Local Multi-Model AI Proxy (start|stop|restart|logs|status)"
+    echo "  ps, top          Interactive Process & Resource Manager"
     echo ""
     echo "MoBox Gaming Commands:"
     echo "  setup-gaming     Auto-install Wine, Box64, DXVK, and VKD3D dependencies"
@@ -478,9 +502,17 @@ asl_wan_ping_cached() {
     printf '%s' "$cache_ping"
 }
 
+asl_is_sshd_running() {
+    pgrep -f "sshd" >/dev/null 2>&1 || su -c "pgrep -f sshd" >/dev/null 2>&1 || asl_exec "pgrep -f sshd" >/dev/null 2>&1
+}
+
+asl_is_omniroute_running() {
+    pgrep -f "omniroute" >/dev/null 2>&1 || su -c "pgrep -f omniroute" >/dev/null 2>&1 || (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null
+}
+
 asl_remote_summary() {
     local active=()
-    if pgrep -f "sshd" >/dev/null 2>&1; then active+=("LAN:8022"); fi
+    if asl_is_sshd_running; then active+=("LAN:8022"); fi
     if [ -f "$PREFIX/tmp/asl-oracle.state" ] && pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then active+=("Oracle"); fi
     if [ -f "$PREFIX/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then active+=("Serveo"); fi
     if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then active+=("Ngrok"); fi
@@ -503,13 +535,13 @@ asl_remote_details() {
     fi
     host_ip=$(asl_host_ip)
 
-    if pgrep -f "sshd" >/dev/null 2>&1; then
-        details+=("  • LAN SSH (Host):   ssh -p 8022 ${user}@${host_ip}")
+    if asl_is_sshd_running; then
+        details+=("* LAN SSH (Host):  ssh -p 8022 ${user}@${host_ip}")
     fi
     if [ -f "$prefix/tmp/asl-oracle.state" ] && pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then
-        details+=("  • Oracle VPS Tunnel: ssh -J ubuntu@130.210.19.7 -p 2222 ${user}@127.0.0.1")
-    elif [ -f "$HOME/.ssh/oracle_vps.key" ]; then
-        details+=("  • Oracle VPS Tunnel: Standby (Run 'asl remote oracle start')")
+        details+=("* Oracle VPS:  ssh -J ubuntu@130.210.19.7 -p 2222 ${user}@127.0.0.1")
+    elif [ -f "$HOME/.ssh/oracle_vps.key" ] && [ -f "$prefix/tmp/asl-oracle.state" ]; then
+        details+=("* Oracle VPS:      Standby (Run 'asl remote oracle start')")
     fi
     if [ -f "$prefix/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
         local s_alias="asl-${user}"
@@ -518,97 +550,42 @@ asl_remote_details() {
         elif [ -n "${ASL_SERVEO_ALIAS:-}" ]; then
             s_alias="$ASL_SERVEO_ALIAS"
         fi
-        details+=("  • Serveo Tunnel:    ssh -J serveo.net ${user}@${s_alias}")
+        details+=("* Serveo Tunnel:   ssh -J serveo.net ${user}@${s_alias}")
     fi
     if [ -f "$prefix/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then
-        local ng_url ng_host ng_port ng_json ng_status_json ng_lat ng_region ng_conns
-        local now ng_cache cache_time
-        now=$(date +%s 2>/dev/null || echo 0)
-        ng_cache="${prefix}/tmp/.asl_ngrok_api_cache"
-        if [ -f "$ng_cache" ]; then
-            read -r cache_time < "$ng_cache" 2>/dev/null || true
-            if [ -n "$cache_time" ] && [[ "$cache_time" =~ ^[0-9]+$ ]] && [ "$((now - cache_time))" -lt 5 ]; then
-                ng_json=$(sed -n '2p' "$ng_cache" 2>/dev/null || true)
-                ng_status_json=$(sed -n '3p' "$ng_cache" 2>/dev/null || true)
-            fi
-        fi
-        if [ -z "$ng_json" ]; then
-            ng_json=$(curl -s --max-time 0.2 --connect-timeout 0.2 http://127.0.0.1:4040/api/tunnels 2>/dev/null)
-            ng_status_json=$(curl -s --max-time 0.2 --connect-timeout 0.2 http://127.0.0.1:4040/api/status 2>/dev/null)
-            if [ -n "$ng_json" ]; then
-                printf '%s\n%s\n%s\n' "$now" "$(echo "$ng_json" | tr -d '\n')" "$(echo "$ng_status_json" | tr -d '\n')" > "$ng_cache" 2>/dev/null || true
-            fi
-        fi
-
+        local ng_url ng_host ng_port ng_json
+        ng_json=$(curl -s --max-time 0.2 --connect-timeout 0.2 http://127.0.0.1:4040/api/tunnels 2>/dev/null)
         ng_url=$(echo "$ng_json" | grep -oE 'tcp://[^"]+' | head -1)
         if [ -n "$ng_url" ]; then
             ng_host=$(echo "$ng_url" | sed -E 's|tcp://([^:]+):.*|\1|')
             ng_port=$(echo "$ng_url" | sed -E 's|tcp://([^:]+:([0-9]+))|\1|' | sed -E 's|.*:||')
-            details+=("  • Ngrok Tunnel:     ssh -p ${ng_port} ${user}@${ng_host}")
+            details+=("* Ngrok Tunnel:      ssh -p ${ng_port} ${user}@${ng_host}")
         else
-            details+=("  • Ngrok Tunnel:     Active (Fetching tunnel URL...)")
-        fi
-
-        ng_lat=$(echo "$ng_status_json" | grep -oE '"latency":"[^"]+"' | cut -d'"' -f4)
-        ng_region=$(echo "$ng_status_json" | grep -oE '"region":"[^"]+"' | cut -d'"' -f4)
-        ng_conns=$(echo "$ng_json" | grep -oE '"count":[0-9]+' | head -1 | cut -d':' -f2)
-        if [ -n "$ng_lat" ] || [ -n "$ng_region" ]; then
-            details+=("    - Tunnel Performance: Region: ${ng_region:-global} | Ping: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
-        fi
-
-        # Add Token Quota Breakdown to Console Dashboard
-        local tok_file="$HOME/.asl/ngrok_tokens.txt"
-        local exh_file="$HOME/.asl/ngrok_exhausted.txt"
-        local curr_tok_file="$prefix/tmp/asl-ngrok-current.token"
-        local total_toks=0 exh_toks=0 active_toks=0 curr_tok="" masked_curr=""
-        [ -f "$tok_file" ] && total_toks=$(grep -c . "$tok_file" 2>/dev/null || echo 0)
-        [ -f "$exh_file" ] && exh_toks=$(grep -c . "$exh_file" 2>/dev/null || echo 0)
-        active_toks=$((total_toks - exh_toks))
-        [ "$active_toks" -lt 0 ] && active_toks=0
-        curr_tok=$(cat "$curr_tok_file" 2>/dev/null || true)
-        if [ -z "$curr_tok" ]; then
-            curr_tok=$(grep -E 'authtoken:' "$HOME/.config/ngrok/ngrok.yml" "$HOME/.ngrok2/ngrok.yml" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '"' | tr -d "'" || true)
-        fi
-
-        details+=("    - Bandwidth Quota:  [██████░░░░] 60% (600 MB / 1000 MB Left)")
-        if [ -f "$tok_file" ] && [ -s "$tok_file" ]; then
-            details+=("    - Token Pool Quota: ${active_toks}/${total_toks} Active Keys")
-            local exh_content=""
-            [ -f "$exh_file" ] && exh_content=$(cat "$exh_file" 2>/dev/null || true)
-            while IFS= read -r tok || [ -n "$tok" ]; do
-                [ -n "$tok" ] || continue
-                local st="ACTIVE"
-                if [ -n "$exh_content" ] && [[ "$exh_content" == *"$tok"* ]]; then
-                    st="CARD REQUIRED (ERR_NGROK_8013)"
-                elif [ "$tok" = "$curr_tok" ]; then
-                    st="ACTIVE & VERIFIED (In Use)"
-                fi
-                local m="$tok"
-                [ "${#tok}" -gt 10 ] && m="${tok:0:6}...${tok: -4}"
-                details+=("      ◦ Key ${m}: [${st}]")
-            done < "$tok_file"
-        elif [ -n "$curr_tok" ]; then
-            [ "${#curr_tok}" -gt 10 ] && masked_curr="${curr_tok:0:6}...${curr_tok: -4}" || masked_curr="$curr_tok"
-            details+=("    - Token Key Quota: 1/1 Active Key (${masked_curr})")
+            details+=("* Ngrok Tunnel:      Active (Fetching tunnel URL...)")
         fi
     fi
 
     if [ ${#details[@]} -gt 0 ]; then
-        printf '  %s[SSH Remote Access Details]%s (Password: %s%s%s)\n' "$C_YELLOW$C_BOLD" "$C_RESET" "$C_GREEN$C_BOLD" "$pass" "$C_RESET"
+        local d_title="Remote Access Endpoints (Password: ${pass})"
+        local dash_cnt=$(( 74 - 7 - ${#d_title} ))
+        local dashes=""
+        for ((i=0; i<dash_cnt; i++)); do dashes="${dashes}─"; done
+        printf "%s├── %sRemote Access Endpoints%s (Password: %s%s%s) %s%s─┤%s\n" \
+            "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_GREEN$C_BOLD" "$pass" "$C_CYAN" "$C_SHADOW" "$dashes" "$C_RESET"
         local d
         for d in "${details[@]}"; do
-            printf '%s%s%s\n' "$C_CYAN" "$d" "$C_RESET"
+            printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$d" "$C_CYAN" "$C_RESET"
         done
-        printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
     fi
 }
 
 overview() {
+    local mode="${1:-full}"
     local desktop_state desktop_status x11_socket
     local mem_total mem_avail mem_used mem_pct disk_data load_avg
     local swap_total swap_free swap_used swap_pct governor
     local batt_level batt_temp cpu_temp batt_str cpu_str host_ip wlock_status
-    local up_str freq_str swap_from_zram remote_summary audio_status
+    local up_str freq_str swap_from_zram remote_summary audio_status omni_lbl
 
     host_ip=$(asl_host_ip)
 
@@ -616,10 +593,8 @@ overview() {
     local wlock_lbl=""
     if dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" || su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         wlock_status="ON"
-        wlock_lbl="${C_GREEN}ON${C_RESET}"
-    else
-        wlock_lbl="${C_YELLOW}[OFF (Sleep Risk)]${C_RESET}"
     fi
+    wlock_lbl="$(status_badge "$wlock_status" 4)"
 
     x11_socket="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0"
     desktop_state=$(bash "$ASL_DIR/desktop/start-desktop.sh" status 2>/dev/null | tr '\n' ' ')
@@ -692,41 +667,77 @@ overview() {
     local max_temp=0 thermal_badge=""
     [ -n "$cpu_temp" ] && [[ "$cpu_temp" =~ ^[0-9]+$ ]] && [ "$cpu_temp" -gt "$max_temp" ] && max_temp=$cpu_temp
     [ -n "$batt_temp" ] && [[ "$batt_temp" =~ ^[0-9]+$ ]] && [ "$batt_temp" -gt "$max_temp" ] && max_temp=$batt_temp
+
     if [ "$max_temp" -ge 75 ]; then
         thermal_badge="${C_RED}${C_BOLD}[THROTTLED]${C_RESET}"
     elif [ "$max_temp" -ge 60 ]; then
-        thermal_badge="${C_YELLOW}${C_BOLD}[WARM]${C_RESET}"
+        thermal_badge="${C_YELLOW}${C_BOLD}[WARM]${C_RESET}     "
     else
-        thermal_badge="${C_GREEN}${C_BOLD}[COOL]${C_RESET}"
+        thermal_badge="${C_GREEN}${C_BOLD}[COOL]${C_RESET}     "
     fi
 
     if pgrep -x pulseaudio >/dev/null 2>&1; then audio_status="RUNNING"; else audio_status="STOPPED"; fi
 
     local chroot_lbl desktop_lbl x11_lbl audio_lbl
-    if is_mounted; then chroot_lbl="$(status_label ACTIVE)"; else chroot_lbl="$(status_label INACTIVE)"; fi
-    desktop_lbl="$(status_label "${desktop_status:-UNKNOWN}")"
-    if [ -S "$x11_socket" ]; then x11_lbl="$(status_label READY)"; else x11_lbl="$(status_label STOPPED)"; fi
-    audio_lbl="$(status_label "$audio_status")"
+    if is_mounted; then chroot_lbl="$(status_badge ACTIVE 8)"; else chroot_lbl="$(status_badge INACTIVE 8)"; fi
+    desktop_lbl="$(status_badge "${desktop_status:-STOPPED}" 9)"
+    if [ -S "$x11_socket" ]; then x11_lbl="$(status_badge READY 7)"; else x11_lbl="$(status_badge STOPPED 7)"; fi
+    audio_lbl="$(status_badge "$audio_status" 9)"
 
     local boot_status="DISABLED" oom_status="OFF" wdog_status="INACTIVE" wan_ping=""
     [ -f "$HOME/.termux/boot/00-asl-autostart.sh" ] && boot_status="ENABLED"
-    if pgrep -f "autoconnect" >/dev/null 2>&1 || pgrep -f "sshd" >/dev/null 2>&1 || pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
-        oom_status="ACTIVE (-1000)"
+    if pgrep -f "autoconnect" >/dev/null 2>&1 || asl_is_sshd_running || pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
+        oom_status="ACTIVE(-1000)"
         wdog_status="RUNNING"
     fi
     wan_ping=$(asl_wan_ping_cached)
 
-    printf '%s━━━ %sAndroid Subsystem for Linux (ASL)%s %sConsole v2.5.1%s %s━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW$C_BOLD" "$C_CYAN$C_BOLD" "$C_DIM" "$C_CYAN$C_BOLD" "$C_CYAN$C_BOLD" "$C_RESET"
-    printf '  %sChroot:%s %s   %sDesktop:%s %s   %sGPU:%s %s%s\n' "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE$C_RESET"
-    printf '  %sDisplay:%s %s  %sAudio:%s %s     %sGov:%s %s%s\n' "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor$C_RESET"
-    printf '  %sBattery:%s %s%-13s %sCPU Temp:%s %s%-6s %sThermal:%s %s   %sWake Lock:%s %s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_BOLD" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl"
-    printf '  %sHost IP:%s %s%-13s %sWAN Ping:%s %s%-8s %sRemote:%s %s%-10s %sStorage:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data$C_RESET"
-    printf '  %sAutostart:%s %s%-10s %sOOM Protection:%s %s%-15s %sWatchdog:%s %s%s\n' "$C_BOLD" "$C_RESET" "$C_GREEN" "$boot_status" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_BOLD" "$C_RESET" "$C_GREEN" "$wdog_status$C_RESET"
-    printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
+    if asl_is_omniroute_running; then
+        omni_lbl="$(status_badge ACTIVE 8)"
+    else
+        omni_lbl="$(status_badge INACTIVE 8)"
+    fi
+
+    local boot_lbl="$(status_badge "$boot_status" 9)"
+    local wdog_lbl="$(status_badge "$wdog_status" 9)"
+
+    if [ "$mode" = "compact" ]; then
+        printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sChroot:%s %s  %sDesktop:%s %s  %sGPU:%s %s%-25.25s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sDisplay:%s %s   %sAudio:%s %s  %sGov:%s %s%-26.26s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sBattery:%s %s%-12.12s %sCPU:%s %s%-5.5s %s  %sWake-Lock:%s %s%8s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl" "" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sHost IP:%s %s%-15.15s  %sWAN:%s %s%-7.7s  %sOmniRoute:%s %s%9s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$omni_lbl" "" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sRAM:%s  [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
+        draw_bar "$mem_pct" 8
+        printf "] %3d%%   %sSwap:%s [" "$mem_pct" "$C_BOLD" "$C_RESET"
+        draw_bar "$swap_pct" 8
+        printf "] %3d%%   %sUptime:%s %s%-12.12s%s  %s│%s\n" "$swap_pct" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_RESET" "$C_CYAN" "$C_RESET"
+        asl_remote_details
+        printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
+        return 0
+    fi
+
+    printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sChroot:%s %s  %sDesktop:%s %s  %sGPU:%s %s%-25.25s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sDisplay:%s %s   %sAudio:%s %s  %sGov:%s %s%-26.26s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sBattery:%s %s%-12.12s %sCPU:%s %s%-5.5s %s  %sWake-Lock:%s %s%8s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl" "" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sHost IP:%s %s%-15.15s  %sWAN:%s %s%-7.7s  %sOmniRoute:%s %s%9s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$omni_lbl" "" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sAutostart:%s %s  %sOOM:%s %s%-13.13s  %sWatchdog:%s %s%7s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$boot_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_BOLD" "$C_RESET" "$wdog_lbl" "" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sStorage:%s %s%-22.22s   %sRemote:%s %s%-26.26s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_CYAN" "$C_RESET"
+
     asl_remote_details
-    printf '  %sRAM:%s  [' "$C_BOLD" "$C_RESET"; draw_bar "$mem_pct" 12; printf '] %3d%% (%d/%d MB)  %sLoad:%s %s%s\n' "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg"
-    printf '  %sSwap:%s [' "$C_BOLD" "$C_RESET"; draw_bar "$swap_pct" 12; printf '] %3d%% (%d/%d MB)  %sUptime:%s %s%s (Svc: %s%s%s)  %sFreq:%s %s%s\n' "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_CYAN" "$svc_up_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_GREEN" "$freq_str"
-    printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
+
+    printf "%s├── %sSystem Resource Metrics%s %s─────────────────────────────────────────────%s┤%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sRAM:%s  [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
+    draw_bar "$mem_pct" 10
+    printf "] %3d%% (%4d/%4d MB)   %sLoad:%s %s%-21.21s  %s│%s\n" "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg" "$C_CYAN" "$C_RESET"
+
+    local up_field
+    up_field=$(printf "%s (Svc %s)" "$up_str" "$svc_up_str")
+    printf "%s│%s  %sSwap:%s [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
+    draw_bar "$swap_pct" 10
+    printf "] %3d%% (%4d/%4d MB)   %sUptime:%s %s%-20.20s %s│%s\n" "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_field" "$C_CYAN" "$C_RESET"
+    printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
 }
 
 is_safe_target_pid() {
@@ -750,26 +761,28 @@ is_safe_target_pid() {
 
 process_manager() {
     local sort_mode="cpu"
+    trap 'printf "\033[?1049l\033[?25h"; trap - INT; return 0 2>/dev/null || exit 0' INT
+    printf "\033[?1049h\033[?25l" 2>/dev/null || true
     while true; do
-        clear 2>/dev/null || true
-        printf '%s============================================================%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '%s           ASL Resource & Process Manager%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '%s============================================================%s\n\n' "$C_CYAN$C_BOLD" "$C_RESET"
+        printf "\033[H\033[J" 2>/dev/null || true
+        printf "%s╭─── %sASL Resource & Process Manager%s %s────────────────────────────╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
         if [ "$sort_mode" = "mem" ]; then
-            printf '%sTop Processes by RAM / Memory Usage (%s%s%s):%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %MEM" "$C_CYAN$C_BOLD" "$C_RESET"
+            printf "%s│%s  %sTop Processes by RAM / Memory Usage (%s%s%s):%s                        %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %MEM" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "$C_RESET"
+        else
+            printf "%s│%s  %sTop Processes by CPU Usage (%s%s%s):%s                               %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %CPU" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "$C_RESET"
+        fi
+        printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_CYAN" "$C_RESET"
+        if [ "$sort_mode" = "mem" ]; then
             asl_exec "ps -eo pid,user,%cpu,%mem,rss,comm --sort=-%mem | head -n 12" 2>/dev/null || ps aux | head -n 12
         else
-            printf '%sTop Processes by CPU Usage (%s%s%s):%s\n' "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %CPU" "$C_CYAN$C_BOLD" "$C_RESET"
             asl_exec "ps -eo pid,user,%cpu,%mem,rss,comm --sort=-%cpu | head -n 12" 2>/dev/null || ps aux | head -n 12
         fi
         echo ""
-        echo "Actions:"
-        echo "  1) Refresh list"
-        echo "  2) Toggle sort mode (CPU <-> RAM)"
-        echo "  3) Terminate process (SIGTERM)"
-        echo "  4) Force kill process (SIGKILL)"
-        echo "  5) Return to menu"
-        echo ""
+        printf "%s╭── Actions ─────────────────────────────────────────────────────────────╮%s\n" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  [1] Refresh  [2] Toggle Sort (CPU <-> RAM)  [3] Terminate  [4] Kill   %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  [5] Return to Dashboard                                              %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_CYAN" "$C_RESET"
+        printf "\033[?25h" 2>/dev/null || true
         read -r -p "Select action [1-5]: " pm_act
         case "$pm_act" in
             2)
@@ -820,15 +833,17 @@ process_manager() {
             1) continue ;;
             5|*) break ;;
         esac
-        done
+    done
+    printf "\033[?1049l\033[?25h" 2>/dev/null || true
+    trap - INT
 }
 
 watch_dashboard() {
-    trap 'printf "\033[?25h"; break' INT
-    printf "\033[?25l" 2>/dev/null || true
+    trap 'printf "\033[?1049l\033[?25h"; trap - INT; return 0 2>/dev/null || exit 0' INT
+    printf "\033[?1049h\033[?25l" 2>/dev/null || true
     while true; do
         printf "\033[H\033[J" 2>/dev/null || true
-        overview
+        overview compact
         echo ""
         printf '%sTop Processes by CPU Usage%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
         printf '%s%-7s %-8s %7s %6s  %s%s\n' "$C_DIM" "PID" "USER" "%CPU" "%MEM" "COMMAND" "$C_RESET"
@@ -840,7 +855,7 @@ watch_dashboard() {
             break
         fi
     done
-    printf "\033[?25h" 2>/dev/null || true
+    printf "\033[?1049l\033[?25h" 2>/dev/null || true
     trap - INT
 }
 
@@ -857,18 +872,20 @@ dashboard() {
 
     cleanup_tui() {
         stty echo icanon 2>/dev/null || true
-        printf "\033[?25h" 2>/dev/null || true
+        printf "\033[?1049l\033[?25h" 2>/dev/null || true
     }
 
     # Trap Ctrl+C (SIGINT) to cleanly exit to Termux prompt
-    trap 'cleanup_tui; printf "\n\n\033[1;32m[✓]\033[0m Exited ASL Dashboard.\n"; trap - INT; return 0 2>/dev/null || exit 0' INT
+    trap 'cleanup_tui; printf "\n\033[1;32m[✓]\033[0m Exited ASL Dashboard.\n"; trap - INT; return 0 2>/dev/null || exit 0' INT
+
+    # Switch to DEC 1049 Alternate Screen Buffer (prevents scrollback history repetition)
+    printf "\033[?1049h\033[?25l" 2>/dev/null || true
 
     render_opt() {
         local idx="$1"
         local hk="$2"
         local label="$3"
         local current_sel="$4"
-        local pad="${5:-35}"
         local plain_str="" padded="" colored=""
 
         if [ -n "$hk" ]; then
@@ -877,51 +894,54 @@ dashboard() {
             plain_str=$(printf "%2d.     %s" "$idx" "$label")
         fi
 
-        padded=$(printf "%-${pad}.${pad}s" "$plain_str")
+        padded=$(printf "%-30.30s" "$plain_str")
 
         if [ "$idx" -eq "$current_sel" ]; then
-            printf "\033[1;30;46m ▶ %s\033[0m" "$padded"
+            printf "%s│\033[1;30;46m ▶ %-30.30s \033[0m%s│%s" "$C_CYAN" "$plain_str" "$C_CYAN" "$C_RESET"
         else
             if [ -n "$hk" ]; then
                 colored="${padded/\[$hk\]/${C_YELLOW}[${hk}]${C_RESET}}"
-                printf "   %s" "$colored"
+                printf "%s│%s  %s  %s│%s" "$C_CYAN" "$C_RESET" "$colored" "$C_CYAN" "$C_RESET"
             else
-                printf "   %s" "$padded"
+                printf "%s│%s  %s  %s│%s" "$C_CYAN" "$C_RESET" "$padded" "$C_CYAN" "$C_RESET"
             fi
         fi
     }
 
     render_frame() {
-        printf "\033[?25l\033[H" 2>/dev/null || true
+        printf "\033[?1049h\033[?25l\033[H\033[J" 2>/dev/null || true
         echo "$overview_cache"
         echo ""
-        printf '  %s[ 🐧 Linux Chroot ]%s                 %s[ 🖥️ Desktop & Remote ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        render_opt 1 "s" "Start / Mount Chroot" "$sel" 35; printf '   '; render_opt 7 "d" "Start XFCE4 Desktop" "$sel" 35; echo ""
-        render_opt 2 "x" "Stop & Unmount Chroot" "$sel" 35; printf '   '; render_opt 8 "" "Desktop Status / Stop" "$sel" 35; echo ""
-        render_opt 3 "" "Open Root Shell" "$sel" 35; printf '   '; render_opt 9 "" "Theme & Resolution" "$sel" 35; echo ""
-        render_opt 4 "" "Run Single Command" "$sel" 35; printf '   '; render_opt 10 "v" "Remote Tunnels & Manager" "$sel" 35; echo ""
-        render_opt 5 "" "Snapshots & Backups" "$sel" 35; printf '   '; render_opt 11 "" "PulseAudio Control" "$sel" 35; echo ""
-        render_opt 6 "a" "Android AID Group Setup" "$sel" 35; printf '   '; render_opt 12 "" "Sync Debian Launchers" "$sel" 35; echo ""
-        echo ""
-        printf '  %s[ 🎮 Gaming Engine ]%s                %s[ 📱 Android Bridge ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN$C_BOLD" "$C_RESET"
-        render_opt 13 "g" "Run Windows .exe" "$sel" 35; printf '   '; render_opt 16 "k" "CPU Wake Lock Toggle" "$sel" 35; echo ""
-        render_opt 14 "m" "Performance Mode" "$sel" 35; printf '   '; render_opt 17 "o" "Open File in Host App" "$sel" 35; echo ""
-        render_opt 15 "" "Setup Wine / Box64" "$sel" 35; printf '   '; render_opt 18 "c" "System Clipboard Sync" "$sel" 35; echo ""
-        printf '                                      '; render_opt 19 "n" "Send Toast Notice" "$sel" 35; echo ""
-        echo ""
-        printf '  %s[ 📊 Diagnostics & Tools ]%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        render_opt 20 "p" "Resource Manager" "$sel" 35; printf '   '; render_opt 22 "" "Environment Check" "$sel" 35; echo ""
-        render_opt 21 "t" "Thermal Monitor" "$sel" 35; printf '   '; render_opt 23 "" "GPU Hardware Profile" "$sel" 35; echo ""
-        render_opt 24 "" "Host Apps Launcher" "$sel" 35; printf '   '; render_opt 25 "z" "Guided Setup Wizard" "$sel" 35; echo ""
-        echo ""
-        printf '%s──────────────────────────────────────────────────────────────────────────%s\n' "$C_SHADOW" "$C_RESET"
-        printf '  %s[h]%s Help   %s[r]%s Refresh   %s[w]%s Watch Live   %s[q]%s Exit   %s[↑↓←→]%s Navigate   %s[↵]%s Select\n\n' "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_GREEN" "$C_RESET"
+        printf "%s╭── Linux Chroot ──────────────────╮%s  %s╭── Desktop & Remote ──────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        render_opt 1 "s" "Start / Mount Chroot" "$sel"; printf "  "; render_opt 7 "d" "Start XFCE4 Desktop" "$sel"; echo ""
+        render_opt 2 "x" "Stop & Unmount Chroot" "$sel"; printf "  "; render_opt 8 "" "Desktop Status / Stop" "$sel"; echo ""
+        render_opt 3 "" "Open Root Shell" "$sel"; printf "  "; render_opt 9 "" "Theme & Resolution" "$sel"; echo ""
+        render_opt 4 "" "Run Single Command" "$sel"; printf "  "; render_opt 10 "v" "Remote Access Manager" "$sel"; echo ""
+        render_opt 5 "" "Snapshots & Backups" "$sel"; printf "  "; render_opt 11 "" "PulseAudio Control" "$sel"; echo ""
+        render_opt 6 "a" "Android AID Groups" "$sel"; printf "  "; render_opt 12 "" "Sync Debian Launchers" "$sel"; echo ""
+        printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s╭── Gaming Engine ─────────────────╮%s  %s╭── Android Bridge ────────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        render_opt 13 "g" "Run Windows .exe" "$sel"; printf "  "; render_opt 17 "k" "CPU Wake Lock Toggle" "$sel"; echo ""
+        render_opt 14 "m" "Performance Profile" "$sel"; printf "  "; render_opt 18 "o" "Open File in Host App" "$sel"; echo ""
+        render_opt 15 "" "Setup Wine / Box64" "$sel"; printf "  "; render_opt 19 "c" "System Clipboard Sync" "$sel"; echo ""
+        render_opt 16 "" "MangoHud & Gamepad" "$sel"; printf "  "; render_opt 20 "n" "Notification / Toast" "$sel"; echo ""
+        printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s╭── Diagnostics & System ──────────╮%s  %s╭── AI & Service Hub ──────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        render_opt 21 "p" "Resource Manager" "$sel"; printf "  "; render_opt 25 "" "Host Apps Launcher" "$sel"; echo ""
+        render_opt 22 "t" "Thermal Monitor" "$sel"; printf "  "; render_opt 26 "z" "Guided Setup Wizard" "$sel"; echo ""
+        render_opt 23 "" "Environment Doctor" "$sel"; printf "  "; render_opt 27 "i" "OmniRoute AI Proxy" "$sel"; echo ""
+        render_opt 24 "" "GPU Hardware Profile" "$sel"; printf "  "; render_opt 28 "b" "24/7 Service Manager" "$sel"; echo ""
+        printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %s[h]%s Help  %s[r]%s Refresh  %s[w]%s Watch  %s[q]%s Exit  %s[↑↓←→]%s Move  %s[↵]%s Select   %s│%s\n" \
+            "$C_CYAN" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
         printf "\033[J\033[?25h" 2>/dev/null || true
     }
 
     while true; do
         if [ "$need_refresh" -eq 1 ] || [ -z "$overview_cache" ]; then
-            overview_cache=$(overview 2>/dev/null || true)
+            overview_cache=$(overview compact 2>/dev/null || true)
             need_refresh=0
         fi
 
@@ -929,7 +949,7 @@ dashboard() {
 
         choice=""
         if [ ! -t 0 ]; then
-            read -r choice || { trap - INT; return 0; }
+            read -r choice || { cleanup_tui; return 0; }
         else
             key=""
             if read -rsn1 -t 1.5 raw_key 2>/dev/null; then
@@ -962,17 +982,15 @@ dashboard() {
                         2|3|4|5|6) sel=$(( sel - 1 )) ;;
                         1) sel=24 ;;
                         8|9|10|11|12) sel=$(( sel - 1 )) ;;
-                        7) sel=25 ;;
-                        14|15) sel=$(( sel - 1 )) ;;
+                        7) sel=28 ;;
+                        14|15|16) sel=$(( sel - 1 )) ;;
                         13) sel=6 ;;
-                        17|18|19) sel=$(( sel - 1 )) ;;
-                        16) sel=12 ;;
-                        21) sel=20 ;;
-                        24) sel=21 ;;
-                        20) sel=15 ;;
-                        23) sel=22 ;;
-                        25) sel=23 ;;
-                        22) sel=19 ;;
+                        18|19|20) sel=$(( sel - 1 )) ;;
+                        17) sel=12 ;;
+                        22|23|24) sel=$(( sel - 1 )) ;;
+                        21) sel=16 ;;
+                        26|27|28) sel=$(( sel - 1 )) ;;
+                        25) sel=20 ;;
                         *) sel=1 ;;
                     esac
                     continue
@@ -982,17 +1000,15 @@ dashboard() {
                         1|2|3|4|5) sel=$(( sel + 1 )) ;;
                         6) sel=13 ;;
                         7|8|9|10|11) sel=$(( sel + 1 )) ;;
-                        12) sel=16 ;;
-                        13|14) sel=$(( sel + 1 )) ;;
-                        15) sel=20 ;;
-                        16|17|18) sel=$(( sel + 1 )) ;;
-                        19) sel=22 ;;
-                        20) sel=21 ;;
-                        21) sel=24 ;;
+                        12) sel=17 ;;
+                        13|14|15) sel=$(( sel + 1 )) ;;
+                        16) sel=21 ;;
+                        17|18|19) sel=$(( sel + 1 )) ;;
+                        20) sel=25 ;;
+                        21|22|23) sel=$(( sel + 1 )) ;;
                         24) sel=1 ;;
-                        22) sel=23 ;;
-                        23) sel=25 ;;
-                        25) sel=7 ;;
+                        25|26|27) sel=$(( sel + 1 )) ;;
+                        28) sel=7 ;;
                         *) sel=1 ;;
                     esac
                     continue
@@ -1001,15 +1017,10 @@ dashboard() {
                     case "$sel" in
                         1|2|3|4|5|6) sel=$(( sel + 6 )) ;;
                         7|8|9|10|11|12) sel=$(( sel - 6 )) ;;
-                        13|14|15) sel=$(( sel + 3 )) ;;
-                        16|17|18) sel=$(( sel - 3 )) ;;
-                        19) sel=15 ;;
-                        20) sel=22 ;;
-                        21) sel=23 ;;
-                        24) sel=25 ;;
-                        22) sel=20 ;;
-                        23) sel=21 ;;
-                        25) sel=24 ;;
+                        13|14|15|16) sel=$(( sel + 4 )) ;;
+                        17|18|19|20) sel=$(( sel - 4 )) ;;
+                        21|22|23|24) sel=$(( sel + 4 )) ;;
+                        25|26|27|28) sel=$(( sel - 4 )) ;;
                         *) sel=1 ;;
                     esac
                     continue
@@ -1018,13 +1029,17 @@ dashboard() {
                     choice="$sel"
                     need_refresh=1
                     ;;
-                1|2|3|4|5|6|7|8|9)
-                    read -rsn1 -t 0.1 sub_digit 2>/dev/null || sub_digit=""
+                1|2)
+                    read -rsn1 -t 0.15 sub_digit 2>/dev/null || sub_digit=""
                     if [[ "$sub_digit" =~ [0-9] ]]; then
                         choice="${key}${sub_digit}"
                     else
                         choice="$key"
                     fi
+                    need_refresh=1
+                    ;;
+                3|4|5|6|7|8|9)
+                    choice="$key"
                     need_refresh=1
                     ;;
                 s|S) choice="1"; need_refresh=1 ;;
@@ -1034,19 +1049,32 @@ dashboard() {
                 v|V) choice="10"; need_refresh=1 ;;
                 g|G) choice="13"; need_refresh=1 ;;
                 m|M) choice="14"; need_refresh=1 ;;
-                k|K) choice="16"; need_refresh=1 ;;
-                o|O) choice="17"; need_refresh=1 ;;
-                c|C) choice="18"; need_refresh=1 ;;
-                n|N) choice="19"; need_refresh=1 ;;
-                p|P) choice="20"; need_refresh=1 ;;
-                t|T) choice="21"; need_refresh=1 ;;
-                z|Z) choice="25"; need_refresh=1 ;;
-                h|H) show_help; pause_dashboard; need_refresh=1; continue ;;
+                k|K) choice="17"; need_refresh=1 ;;
+                o|O) choice="18"; need_refresh=1 ;;
+                c|C) choice="19"; need_refresh=1 ;;
+                n|N) choice="20"; need_refresh=1 ;;
+                p|P) choice="21"; need_refresh=1 ;;
+                t|T) choice="22"; need_refresh=1 ;;
+                z|Z) choice="26"; need_refresh=1 ;;
+                i|I) choice="27"; need_refresh=1 ;;
+                b|B) choice="28"; need_refresh=1 ;;
+                h|H)
+                    printf "\033[?1049l\033[?25h" 2>/dev/null || true
+                    show_help
+                    pause_dashboard
+                    need_refresh=1
+                    continue
+                    ;;
                 r|R) need_refresh=1; continue ;;
-                w|W) watch_dashboard; need_refresh=1; continue ;;
+                w|W)
+                    watch_dashboard
+                    need_refresh=1
+                    continue
+                    ;;
                 q|Q)
                     trap - INT
                     cleanup_tui
+                    printf "\033[1;32m[✓]\033[0m Exited ASL Dashboard.\n"
                     return 0 2>/dev/null || exit 0
                     ;;
                 *)
@@ -1056,7 +1084,8 @@ dashboard() {
             esac
         fi
 
-        printf "\033[?25h" 2>/dev/null || true
+        # Switch to primary buffer for running sub-commands
+        printf "\033[?1049l\033[?25h" 2>/dev/null || true
 
         case "$choice" in
             1|s|S) bash "$REAL_SCRIPT" start; pause_dashboard ;;
@@ -1231,8 +1260,8 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             14|m|M)
-                echo "Modes: 1) gaming  2) performance  3) balanced"
-                read -r -p "Select mode [1-3]: " m_act
+                echo "Performance Profile: 1) gaming  2) performance  3) balanced  4) status"
+                read -r -p "Select mode [1-4]: " m_act
                 case "$m_act" in
                     1) bash "$REAL_SCRIPT" mode gaming ;;
                     2) bash "$REAL_SCRIPT" mode performance ;;
@@ -1241,7 +1270,32 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             15) bash "$REAL_SCRIPT" setup-gaming; pause_dashboard ;;
-            16|k|K)
+            16)
+                echo "Gaming Overlay & Input: 1) MangoHud HUD toggle  2) Gamepad / Joystick status & test"
+                read -r -p "Select option [1-2]: " g_opt
+                case "$g_opt" in
+                    1)
+                        echo "MangoHud: 1) Toggle  2) On  3) Off  4) Status"
+                        read -r -p "Choice: " hud_c
+                        case "$hud_c" in
+                            1) bash "$REAL_SCRIPT" hud toggle ;;
+                            2) bash "$REAL_SCRIPT" hud on ;;
+                            3) bash "$REAL_SCRIPT" hud off ;;
+                            *) bash "$REAL_SCRIPT" hud status ;;
+                        esac
+                        ;;
+                    2)
+                        echo "Gamepad: 1) Status  2) Sync bluetooth evdev  3) Input test"
+                        read -r -p "Choice: " gp_c
+                        case "$gp_c" in
+                            2) bash "$REAL_SCRIPT" gamepad sync ;;
+                            3) bash "$REAL_SCRIPT" gamepad test ;;
+                            *) bash "$REAL_SCRIPT" gamepad status ;;
+                        esac
+                        ;;
+                esac
+                pause_dashboard ;;
+            17|k|K)
                 echo "Wake lock actions: 1) status  2) enable (on)  3) disable (off)"
                 read -r -p "Select action [1-3]: " w_act
                 case "$w_act" in
@@ -1250,11 +1304,11 @@ dashboard() {
                     *) bash "$REAL_SCRIPT" wakelock status ;;
                 esac
                 pause_dashboard ;;
-            17|o|O)
+            18|o|O)
                 read -r -p "Enter file path or URL to open in Android host: " target_open
                 if [ -n "$target_open" ]; then bash "$REAL_SCRIPT" open "$target_open"; fi
                 pause_dashboard ;;
-            18|c|C)
+            19|c|C)
                 echo "Clipboard actions: 1) paste (read)  2) copy (write)"
                 read -r -p "Select action [1-2]: " c_act
                 case "$c_act" in
@@ -1262,7 +1316,7 @@ dashboard() {
                     *) bash "$REAL_SCRIPT" clip paste ;;
                 esac
                 pause_dashboard ;;
-            19|n|N)
+            20|n|N)
                 echo "Notification actions: 1) Toast popup  2) Banner notification"
                 read -r -p "Select action [1-2]: " n_act
                 case "$n_act" in
@@ -1277,12 +1331,97 @@ dashboard() {
                         ;;
                 esac
                 pause_dashboard ;;
-            20|p|P) process_manager ;;
-            21|t|T) bash "$REAL_SCRIPT" thermal; pause_dashboard ;;
-            22) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
-            23) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
-            24|apps|host) show_host_apps_menu ;;
-            25|z|Z|wizard|init) bash "$REAL_SCRIPT" wizard; pause_dashboard ;;
+            21|p|P) process_manager ;;
+            22|t|T) bash "$REAL_SCRIPT" thermal; pause_dashboard ;;
+            23) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
+            24) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
+            25|apps|host) show_host_apps_menu ;;
+            26|z|Z|wizard|init) bash "$REAL_SCRIPT" wizard; pause_dashboard ;;
+            27|i|I)
+                echo "OmniRoute Local AI Proxy (Port 20128):"
+                echo "  1) Start OmniRoute Daemon (as Root)"
+                echo "  2) Stop OmniRoute"
+                echo "  3) Restart OmniRoute"
+                echo "  4) OmniRoute Status & Port Check"
+                echo "  5) View OmniRoute Live Log"
+                read -r -p "Select action [1-5]: " omni_act
+                case "$omni_act" in
+                    1)
+                        if [ -x "$HOME/omniroute-daemon.sh" ]; then
+                            echo "[*] Starting OmniRoute AI proxy as root..."
+                            su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 &
+                            sleep 1
+                            if (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null || pgrep -f "omniroute" >/dev/null 2>&1 || su -c "pgrep -f omniroute" >/dev/null 2>&1; then
+                                echo "[✓] OmniRoute is ACTIVE on http://127.0.0.1:20128"
+                            else
+                                echo "[!] Notice: Starting in background. Check logs."
+                            fi
+                        else
+                            echo "[!] Error: $HOME/omniroute-daemon.sh not found."
+                        fi
+                        ;;
+                    2)
+                        echo "[*] Stopping OmniRoute daemon..."
+                        pkill -f "omniroute" 2>/dev/null || true
+                        su -c "pkill -f omniroute" 2>/dev/null || true
+                        echo "[✓] OmniRoute stopped."
+                        ;;
+                    3)
+                        echo "[*] Restarting OmniRoute daemon..."
+                        pkill -f "omniroute" 2>/dev/null || true
+                        su -c "pkill -f omniroute" 2>/dev/null || true
+                        sleep 1
+                        if [ -x "$HOME/omniroute-daemon.sh" ]; then
+                            su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 &
+                            echo "[✓] OmniRoute restarted."
+                        fi
+                        ;;
+                    4)
+                        echo "=== OmniRoute Local AI Proxy Status ==="
+                        if asl_is_omniroute_running; then
+                            echo " Status:  ACTIVE"
+                            echo " Port:    127.0.0.1:20128 (REST / SSE / OpenAI API / Anthropic API)"
+                            local opid
+                            opid=$(pgrep -f "omniroute" 2>/dev/null | head -n 1 || true)
+                            [ -z "$opid" ] && opid=$(su -c "pgrep -f omniroute 2>/dev/null | head -n 1" 2>/dev/null || true)
+                            echo " PID:     ${opid:-active}"
+                        else
+                            echo " Status:  INACTIVE"
+                            echo " Port:    127.0.0.1:20128 (Unbound)"
+                        fi
+                        ;;
+                    5)
+                        if [ -f "$HOME/omniroute.log" ]; then
+                            echo "=== Last 25 lines of $HOME/omniroute.log ==="
+                            tail -n 25 "$HOME/omniroute.log"
+                        else
+                            echo "[!] No log file found at $HOME/omniroute.log"
+                        fi
+                        ;;
+                esac
+                pause_dashboard ;;
+            28|b|B)
+                echo "ASL 24/7 Service Manager & Boot Autostart:"
+                echo "  1) Start All 24/7 Services"
+                echo "  2) Stop All Services"
+                echo "  3) Restart All Services"
+                echo "  4) Run Watchdog Service Health Check"
+                echo "  5) Start Autonomous Background Watchdog Loop (180s)"
+                echo "  6) Enable Boot Autostart (Termux:Boot & Shell Hook)"
+                echo "  7) Disable Boot Autostart"
+                echo "  8) Show 24/7 Service Status & Uptime"
+                read -r -p "Select action [1-8]: " svc_act
+                case "$svc_act" in
+                    1) bash "$REAL_SCRIPT" service start ;;
+                    2) bash "$REAL_SCRIPT" service stop ;;
+                    3) bash "$REAL_SCRIPT" service restart ;;
+                    4) bash "$REAL_SCRIPT" service check ;;
+                    5) bash "$REAL_SCRIPT" service loop ;;
+                    6) bash "$REAL_SCRIPT" service enable ;;
+                    7) bash "$REAL_SCRIPT" service disable ;;
+                    *) bash "$REAL_SCRIPT" service status ;;
+                esac
+                pause_dashboard ;;
             h|H) show_help; pause_dashboard ;;
             r|R|"") ;;
             w|W) watch_dashboard ;;
@@ -1319,7 +1458,7 @@ case "${1:-}" in
                 ;;
         esac
         ;;
-    dashboard|menu|ui)
+    dashboard|dash|menu|ui)
         dashboard
         ;;
     wizard|init|setup-wizard)
@@ -1327,7 +1466,8 @@ case "${1:-}" in
         bash "$ASL_DIR/core/wizard.sh" "$@"
         ;;
     overview)
-        overview
+        shift
+        overview "$@"
         ;;
     watch|monitor)
         watch_dashboard
@@ -1451,6 +1591,57 @@ case "${1:-}" in
     service|autostart|daemon|boot)
         shift
         bash "$ASL_DIR/core/service-manager.sh" "$@"
+        ;;
+    omniroute)
+        shift
+        OMNI_ACTION="${1:-status}"
+        case "$OMNI_ACTION" in
+            start)
+                if [ -x "$HOME/omniroute-daemon.sh" ]; then
+                    echo "[*] Starting OmniRoute AI proxy daemon as root..."
+                    su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 &
+                    sleep 1
+                    echo "[✓] OmniRoute daemon started."
+                else
+                    echo "[!] Error: $HOME/omniroute-daemon.sh not found."
+                fi
+                ;;
+            stop)
+                echo "[*] Stopping OmniRoute proxy..."
+                pkill -f "omniroute" 2>/dev/null || true
+                su -c "pkill -f omniroute" 2>/dev/null || true
+                echo "[✓] OmniRoute stopped."
+                ;;
+            restart)
+                pkill -f "omniroute" 2>/dev/null || true
+                su -c "pkill -f omniroute" 2>/dev/null || true
+                sleep 1
+                if [ -x "$HOME/omniroute-daemon.sh" ]; then
+                    su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 &
+                    echo "[✓] OmniRoute restarted."
+                fi
+                ;;
+            logs|log)
+                if [ -f "$HOME/omniroute.log" ]; then
+                    tail -n 50 "$HOME/omniroute.log"
+                else
+                    echo "[!] No log file found at $HOME/omniroute.log"
+                fi
+                ;;
+            status|"")
+                echo "=== OmniRoute Local AI Proxy Status ==="
+                if asl_is_omniroute_running; then
+                    echo " Status:   ACTIVE"
+                    echo " Endpoint: http://127.0.0.1:20128"
+                    opid=$(pgrep -f "omniroute" 2>/dev/null | head -n 1 || true)
+                    [ -z "$opid" ] && opid=$(su -c "pgrep -f omniroute 2>/dev/null | head -n 1" 2>/dev/null || true)
+                    echo " PID:      ${opid:-active}"
+                else
+                    echo " Status:   INACTIVE"
+                    echo " Endpoint: http://127.0.0.1:20128 (Down)"
+                fi
+                ;;
+        esac
         ;;
     desktop)
         shift
@@ -1576,24 +1767,13 @@ case "${1:-}" in
             fi
         fi
         ;;
-    service)
+    swap|memory)
         shift
-        ACTION="${1:-status}"
-        SVC="${2:-}"
-        if [ -z "$SVC" ]; then
-            echo "Usage: asl service <start|stop|restart|status> <service_name>"
-            exit 1
-        fi
-        case "$ACTION" in
-            start|stop|restart|status) ;;
-            *) echo "Error: Invalid service action: $ACTION"; exit 1 ;;
-        esac
-        if [[ ! "$SVC" =~ ^[A-Za-z0-9._-]+$ ]]; then
-            echo "Error: Invalid service name: $SVC"
-            exit 1
-        fi
-        ensure_mounted
-        run_in_chroot "service '$SVC' '$ACTION'"
+        bash "$ASL_DIR/core/swap-manager.sh" "$@"
+        ;;
+    kernel-check|kernel)
+        shift
+        bash "$ASL_DIR/core/kernel-check.sh" "$@"
         ;;
     audio)
         shift

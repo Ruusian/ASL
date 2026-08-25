@@ -43,15 +43,19 @@ asl_swap_status() {
         echo "  ZRAM not available"
     fi
 
-    # File swap status
+    # Active Swap Devices
     echo ""
-    echo "File Swap:"
-    local swap_info
-    swap_info=$(swapon --show 2>/dev/null | grep -v "Name" || true)
-    if [ -n "$swap_info" ]; then
-        echo "$swap_info"
+    echo "Active Swap Devices:"
+    local swaps_out=""
+    if [ "$(id -u)" -eq 0 ]; then
+        swaps_out=$(cat /proc/swaps 2>/dev/null || true)
+    elif su -c "id" >/dev/null 2>&1; then
+        swaps_out=$(su -c "cat /proc/swaps" 2>/dev/null || true)
+    fi
+    if [ -n "$swaps_out" ]; then
+        echo "$swaps_out"
     else
-        echo "  No file swap active"
+        echo "  No swap devices active"
     fi
 
     # OOM protection status
@@ -74,41 +78,52 @@ asl_swap_status() {
 }
 
 asl_swap_setup() {
-    echo "[*] Setting up memory optimization..."
+    echo "[*] Setting up memory optimization & 5GB virtual swap pool..."
 
-    # Create 2GB swap file if it doesn't exist
-    local swapfile="$HOME/swapfile"
-    if [ ! -f "$swapfile" ]; then
-        echo "[*] Creating 2GB swap file..."
-        fallocate -l 2G "$swapfile" 2>/dev/null || dd if=/dev/zero of="$swapfile" bs=1M count=2048 2>/dev/null
-        chmod 600 "$swapfile"
-        mkswap "$swapfile" 2>/dev/null
-        echo "[✓] Swap file created"
-    fi
-
-    # Enable swap if not already active
-    if ! swapon --show 2>/dev/null | grep -q "$swapfile"; then
-        echo "[*] Enabling swap..."
-        if [ "$(id -u)" -eq 0 ]; then
-            swapon "$swapfile" 2>/dev/null && echo "[✓] Swap enabled" || echo "[!] swapon failed."
-        elif su -c "id" >/dev/null 2>&1; then
-            su -c "swapon '$swapfile'" 2>/dev/null && echo "[✓] Swap enabled (via root)" || echo "[!] swapon failed."
-        else
-            echo "[!] Warning: swapon requires root privileges on Android. Run with root to enable."
+    local swapfile="/data/local/tmp/asl_swap.img"
+    local swap_cmd="
+        if [ ! -f '$swapfile' ]; then
+            echo '[*] Creating 5GB swap image at $swapfile...'
+            fallocate -l 5G '$swapfile' 2>/dev/null || dd if=/dev/zero of='$swapfile' bs=1M count=5120 2>/dev/null
+            chmod 600 '$swapfile'
         fi
+
+        # Check if already active
+        if ! grep -q '$swapfile' /proc/swaps 2>/dev/null; then
+            # Direct swapon or via loop device
+            if ! swapon '$swapfile' 2>/dev/null; then
+                # Find or associate loop device
+                LOOP=\$(losetup -j '$swapfile' 2>/dev/null | cut -d: -f1 | head -n1)
+                if [ -z \"\$LOOP\" ]; then
+                    LOOP=\$(losetup -f --show '$swapfile' 2>/dev/null || true)
+                fi
+                if [ -n \"\$LOOP\" ]; then
+                    mkswap \"\$LOOP\" 2>/dev/null || true
+                    swapon \"\$LOOP\" 2>/dev/null && echo '[✓] 5GB swap pool activated on '\$LOOP || echo '[!] Failed to activate swap on '\$LOOP
+                fi
+            else
+                echo '[✓] 5GB swap pool activated'
+            fi
+        else
+            echo '[✓] 5GB swap pool already active'
+        fi
+
+        # Set swappiness (prefer keeping Linux processes in RAM)
+        sysctl -w vm.swappiness=10 2>/dev/null || true
+
+        # Protect critical processes from OOM killer
+        for pid in \$(pgrep -f '(box64|wine|pulseaudio|sshd)' 2>/dev/null || true); do
+            echo -1000 > '/proc/'\$pid'/oom_score_adj' 2>/dev/null || true
+        done
+    "
+
+    if [ "$(id -u)" -eq 0 ]; then
+        eval "$swap_cmd"
+    elif su -c "id" >/dev/null 2>&1; then
+        su -c "$swap_cmd"
+    else
+        echo "[!] Warning: swapon requires root privileges on Android."
     fi
-
-    # Set swappiness (prefer keeping Linux processes in RAM)
-    echo "[*] Setting swappiness to 10..."
-    sysctl -w vm.swappiness=10 2>/dev/null || su -c "sysctl -w vm.swappiness=10" 2>/dev/null || echo "  Warning: Could not set swappiness (needs root)"
-
-    # Protect critical processes from OOM killer
-    echo "[*] Setting OOM protection for critical processes..."
-    local critical_pids
-    critical_pids=$(pgrep -f "(box64|wine|pulseaudio|sshd)" 2>/dev/null || true)
-    for pid in $critical_pids; do
-        echo -1000 > "/proc/$pid/oom_score_adj" 2>/dev/null || true
-    done
 
     echo "[✓] Memory optimization complete"
 }
@@ -148,11 +163,20 @@ asl_swap_optimize() {
 asl_swap_cleanup() {
     echo "[*] Cleaning up swap configuration..."
 
-    # Disable swap
-    local swapfile="$HOME/swapfile"
-    if [ -f "$swapfile" ]; then
-        swapoff "$swapfile" 2>/dev/null || true
-        echo "[✓] Swap disabled"
+    local swapfile="/data/local/tmp/asl_swap.img"
+    local cleanup_cmd="
+        for loop in \$(losetup -j '$swapfile' 2>/dev/null | cut -d: -f1); do
+            swapoff \"\$loop\" 2>/dev/null || true
+            losetup -d \"\$loop\" 2>/dev/null || true
+        done
+        swapoff '$swapfile' 2>/dev/null || true
+        echo '[✓] 5GB swap disabled and loop devices detached'
+    "
+
+    if [ "$(id -u)" -eq 0 ]; then
+        eval "$cleanup_cmd"
+    elif su -c "id" >/dev/null 2>&1; then
+        su -c "$cleanup_cmd"
     fi
 
     echo "[✓] Cleanup complete"

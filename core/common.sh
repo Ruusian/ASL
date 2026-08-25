@@ -280,16 +280,14 @@ asl_log_warn()  { printf '%s[!] %s%s\n' "$C_YELLOW$C_BOLD" "$*" "$C_RESET"; }
 asl_log_error() { printf '%s[✗] %s%s\n' "$C_RED$C_BOLD" "$*" "$C_RESET" >&2; }
 asl_log_hint()  { printf '%s    💡 Hint: %s%s\n' "$C_YELLOW" "$*" "$C_RESET"; }
 
-# Auto-detect performance CPU core affinity mask (big.LITTLE topology)
+# Auto-detect performance CPU core affinity mask (all CPU cores for maximum performance)
 asl_get_perf_cpu_mask() {
     local ncpu
     ncpu=$(nproc 2>/dev/null || echo 8)
-    if [ "$ncpu" -ge 8 ]; then
-        printf '4-7'
-    elif [ "$ncpu" -ge 4 ]; then
-        printf '2-%d' "$((ncpu - 1))"
-    else
-        printf '0-%d' "$((ncpu - 1))"
-    fi
+    printf '0-%d' "$((ncpu - 1))"
+}
+
+asl_is_sshd_running() {
+    pgrep -f "sshd" >/dev/null 2>&1 || su -c "pgrep -f sshd" >/dev/null 2>&1 || asl_exec "pgrep -f sshd" >/dev/null 2>&1
 }
 

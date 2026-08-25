@@ -28,7 +28,7 @@ asl_clean_status() {
     ensure_chroot_mounted 2>/dev/null || true
     echo "--- ASL Storage Usage & Cleanable Cache ---"
     local du_root du_apt du_tmp du_wine
-    du_root=$(du -sh "$DEBIANPATH" 2>/dev/null | cut -f1)
+    du_root=$(asl_exec "du -sh -x '$DEBIANPATH' 2>/dev/null" | cut -f1)
     du_apt=$(asl_exec "du -sh '$DEBIANPATH/var/cache/apt/archives' 2>/dev/null" | cut -f1)
     du_tmp=$(asl_exec "du -sh '$DEBIANPATH/tmp' 2>/dev/null" | cut -f1)
     du_wine=$(asl_exec "du -sh '$DEBIANPATH/root/.cache' 2>/dev/null" | cut -f1)
@@ -61,7 +61,7 @@ asl_clean_run() {
             tmp)
                 echo \"[*] Cleaning /tmp and /var/tmp...\"
                 if [ \"$x11_active\" = \"1\" ]; then
-                    find /tmp /var/tmp -mindepth 1 \( -name '.X11-unix' -o -name '.X0-lock' -o -name 'pulse-*' \) -prune -o -exec rm -rf {} + 2>/dev/null || true
+                    find /tmp /var/tmp -mindepth 1 ! -name '.X11-unix*' ! -name '.X0-lock' ! -name 'pulse*' ! -name '.asl*' -delete 2>/dev/null || true
                 else
                     rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
                 fi
@@ -76,7 +76,7 @@ asl_clean_run() {
                 rm -rf /var/lib/apt/lists/*
                 echo \"[*] Cleaning temporary files...\"
                 if [ \"$x11_active\" = \"1\" ]; then
-                    find /tmp /var/tmp -mindepth 1 \( -name '.X11-unix' -o -name '.X0-lock' -o -name 'pulse-*' \) -prune -o -exec rm -rf {} + 2>/dev/null || true
+                    find /tmp /var/tmp -mindepth 1 ! -name '.X11-unix*' ! -name '.X0-lock' ! -name 'pulse*' ! -name '.asl*' -delete 2>/dev/null || true
                 else
                     rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
                 fi
@@ -92,7 +92,8 @@ asl_clean_run() {
     "
 
     # Also clean host side Mesa shader cache if present
-    rm -rf /dev/shm/mesa_shader_cache/* /tmp/.mesa_cache/* 2>/dev/null || true
+    asl_exec "rm -rf /dev/shm/mesa_shader_cache/* /tmp/.mesa_cache/* '${PREFIX:-/data/data/com.termux/files/usr}/tmp/.mesa_cache'/* 2>/dev/null" || true
+    rm -rf "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.mesa_cache"/* 2>/dev/null || true
 
     echo "[✓] Storage cleanup completed successfully."
 }

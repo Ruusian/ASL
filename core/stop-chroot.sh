@@ -98,14 +98,15 @@ MOUNTS="\$(
 
 failed=0
 for mp in \$MOUNTS; do
-    if grep -q -E " \$mp([[:space:]]|\$)" /proc/mounts 2>/dev/null; then
+    while grep -q -E " \$mp([[:space:]]|\$)" /proc/mounts 2>/dev/null; do
         if ! umount "\$mp" 2>/dev/null; then
             if ! umount -l -f "\$mp" 2>/dev/null; then
                 echo "[!] Could not unmount: \$mp" >&2
                 failed=1
+                break
             fi
         fi
-    fi
+    done
 done
 exit \$failed
 STOP_EOF

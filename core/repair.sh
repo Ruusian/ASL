@@ -39,10 +39,10 @@ asl_repair_run() {
     # Step 2: Fix rootfs permissions & GPU/IPC sockets
     if [ "$target" = "permissions" ] || [ "$target" = "all" ]; then
         echo "[2/5] Repairing critical directory permissions, GPU device nodes, and stale IPC sockets..."
-        chmod 666 /dev/kgsl-3d0 2>/dev/null || true
-        chmod 666 /dev/dri/renderD128 2>/dev/null || true
-        chmod 666 /dev/dri/card0 2>/dev/null || true
         asl_exec "
+            chmod 666 /dev/kgsl-3d0 2>/dev/null || true
+            chmod 666 /dev/dri/renderD128 2>/dev/null || true
+            chmod 666 /dev/dri/card0 2>/dev/null || true
             chmod 1777 '$DEBIANPATH/tmp' 2>/dev/null || true
             chmod 1777 '$DEBIANPATH/var/tmp' 2>/dev/null || true
             chmod 1777 '$DEBIANPATH/dev/shm' 2>/dev/null || true
@@ -55,17 +55,22 @@ asl_repair_run() {
         "
     fi
 
-    # Step 3: Repair DPKG package manager locks & broken installs
+    # Step 3: Repair DPKG package manager locks, DNS & broken installs
     if [ "$target" = "dpkg" ] || [ "$target" = "all" ] || [ "$target" = "libs" ]; then
-        echo "[3/4] Repairing Debian DPKG / APT lock states & dynamic linker bindings (ldconfig)..."
+        echo "[3/4] Repairing Debian DPKG / APT lock states, DNS configuration & dynamic linker bindings (ldconfig)..."
+        # Ensure DNS in chroot
+        asl_exec "
+            if [ ! -s '$DEBIANPATH/etc/resolv.conf' ]; then
+                mkdir -p '$DEBIANPATH/etc'
+                printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > '$DEBIANPATH/etc/resolv.conf'
+            fi
+        "
         asl_chroot_exec "
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            if pgrep -x 'apt|apt-get|dpkg' >/dev/null 2>&1; then
-                echo '[!] Active APT/DPKG process detected; terminating stuck package managers...'
-                pkill -x 'apt|apt-get|dpkg' 2>/dev/null || true
-                sleep 1
-                pkill -9 -x 'apt|apt-get|dpkg' 2>/dev/null || true
-            fi
+            pkill -9 -x dpkg 2>/dev/null || true
+            pkill -9 -x apt 2>/dev/null || true
+            pkill -9 -x apt-get 2>/dev/null || true
+            pkill -9 -f 'apt-get|dpkg' 2>/dev/null || true
             rm -f /var/lib/dpkg/lock* /var/cache/apt/archives/lock* /var/lib/apt/lists/lock*
             dpkg --configure -a 2>/dev/null || true
             apt-get install -f -y 2>/dev/null || true

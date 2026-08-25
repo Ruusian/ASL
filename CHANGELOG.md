@@ -9,6 +9,32 @@ This repository is a continuously updated nightly development fork of
 Users can install and test it, but changes may be frequent and stability is not
 guaranteed while new features, fixes, and project updates are being developed.
 
+## [2.5.1] - 2026-08-25
+
+### 🚀 Terminal UI/UX Modernization, 24/7 Autostart & Architecture Separation
+
+- **Terminal TUI Alternate Screen Buffer Isolation**:
+  - Implemented DEC Private Mode 1049 alternate screen buffer switching (`\033[?1049h` / `\033[?1049l`) across `dashboard`, `watch`, and `process_manager`.
+  - Redraws and terminal refreshes execute exclusively in video memory without polluting terminal scrollback history.
+  - Eliminated screen repetitions, ghost boxes, and broken border artifacts on terminal refresh.
+
+- **Live Remote Endpoints & Untruncated SSH Commands**:
+  - Integrated real-time remote access endpoints directly into the dashboard overview header.
+  - Formatted LAN SSH (Port 8022), Oracle Cloud VPS relay (`ssh -J ubuntu@130.210.19.7 -p 2222`), Serveo tunnel, and Ngrok commands with exact 74-column alignment and zero string truncation.
+
+- **Subshell Detachment & Silent Service Autostart**:
+  - Upgraded background service invocation in `~/.bashrc` and `service-manager.sh` to detached double-fork subshells `((nohup bash ... &) &) 2>/dev/null`.
+  - Eliminated interactive shell job control notifications (`[1]+ Done nohup bash ...`) upon exiting dashboard or executing commands.
+
+- **Automated OmniRoute AI Gateway Integration**:
+  - Integrated OmniRoute local AI proxy (`port 20128`) into 24/7 background service manager, boot autostart, and health watchdog.
+  - OmniRoute executes as root with explicit Termux environment paths to circumvent Android 14 `netd` DNS / socket restrictions for Termux UID 10566.
+
+- **Architecture Separation (Source Repository vs System Runtime)**:
+  - Decoupled git development repository (`~/ASL`) from installed system runtime directory (`$PREFIX/share/asl`).
+  - `install.sh` installs and syncs runtime assets to `$PREFIX/share/asl`, linking `$PREFIX/bin/asl` to the runtime executable.
+  - CLI binary auto-detects execution context via `readlink -f` resolution with cascading fallback paths.
+
 ## [1.6] - 2026-08-20
 
 ### 🏗️ Modular Architecture & Performance Optimization

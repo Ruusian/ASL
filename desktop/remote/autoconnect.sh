@@ -35,10 +35,16 @@ autoconnect_daemon() {
                 echo "[Autoconnect $(date +%H:%M:%S)] Serveo tunnel offline. Re-establishing..." >> "$AUTOCONNECT_LOG"
                 bash "$script_path" serveo start >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi
+
+            # OmniRoute must run as root (netd blocks getaddrinfo for UID 10566)
+            if ! pgrep -f omniroute >/dev/null 2>&1; then
+                echo "[Autoconnect $(date +%H:%M:%S)] OmniRoute offline. Starting as root..." >> "$AUTOCONNECT_LOG"
+                su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> "$AUTOCONNECT_LOG" 2>&1 || true
+            fi
         fi
 
         if [ -f "$AUTOCONNECT_LOG" ] && [ "$(wc -c < "$AUTOCONNECT_LOG" 2>/dev/null || echo 0)" -gt 102400 ]; then
-            tail -n 200 "$AUTOCONNECT_LOG" > "$AUTOCONNECT_LOG.tmp" 2>/dev/null && mv "$AUTOCONNECT_LOG.tmp" "$AUTOCONNECT_LOG" 2>/dev/null || true
+            mv "$AUTOCONNECT_LOG" "${AUTOCONNECT_LOG}.old" 2>/dev/null || true
         fi
 
         sleep 30

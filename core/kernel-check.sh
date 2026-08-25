@@ -49,24 +49,24 @@ asl_kernel_check() {
         echo "GPU/Graphics:"
         check_config "CONFIG_DRM" "Direct Rendering Manager" "y"
         check_config "CONFIG_DRM_MSM" "MSM DRM driver (Adreno)" "y"
-        check_config "CONFIG_DRM Freedreno" "Freedreno DRM driver" "y"
-        
+        check_config "CONFIG_MSM_KGSL" "Qualcomm KGSL driver" "y"
+
         echo ""
         echo "Networking:"
         check_config "CONFIG_NET" "Networking support" "y"
         check_config "CONFIG_INET" "IPv4 networking" "y"
         check_config "CONFIG_IPV6" "IPv6 networking" "y"
-        
+
         echo ""
         echo "Security:"
         check_config "CONFIG_SECCOMP" "Seccomp filtering" "y"
         check_config "CONFIG_SECURITY" "Security framework" "y"
-        
+
         echo ""
         echo "Memory Management:"
         check_config "CONFIG_ZRAM" "ZRAM compression" "y"
         check_config "CONFIG_SWAP" "Swap support" "y"
-        
+
     else
         echo "Kernel Config: Not available (cannot read /proc/config.gz or /boot/config-*)"
         echo "  Some features may not be detectable"
@@ -75,19 +75,23 @@ asl_kernel_check() {
     # Check actual capabilities
     echo ""
     echo "Actual Capabilities:"
-    
+
     # Check if chroot works
-    if unshare --mount chroot / /bin/true 2>/dev/null; then
-        echo "  [✓] Chroot: Works"
+    if [ "$(id -u)" -eq 0 ] || su -c "id -u" >/dev/null 2>&1; then
+        if su -c "chroot / /bin/true 2>/dev/null || chroot / /system/bin/sh -c 'exit 0' 2>/dev/null" 2>/dev/null || [ "$(id -u)" -eq 0 ]; then
+            echo "  [✓] Chroot: Works (Superuser/Root available)"
+        else
+            echo "  [✗] Chroot: Blocked"
+        fi
     else
-        echo "  [✗] Chroot: Blocked (may need root or specific kernel config)"
+        echo "  [✗] Chroot: Superuser/Root not available"
     fi
-    
+
     # Check namespaces
-    if unshare --pid --fork /bin/true 2>/dev/null; then
+    if unshare --pid --fork /bin/true 2>/dev/null || su -c "unshare --pid --fork /bin/true" 2>/dev/null; then
         echo "  [✓] PID namespace: Works"
     else
-        echo "  [✗] PID namespace: Blocked"
+        echo "  [ ] PID namespace: Limited or unshare restricted"
     fi
     
     # Check GPU access

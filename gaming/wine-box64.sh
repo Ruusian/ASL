@@ -24,7 +24,7 @@ check_emulation_available() {
 }
 
 build_gaming_env_exports() {
-    local gpu_vars snippet dyn_mode fastround=1 fastnan=1 x87double=0 bigblock=2 strongmem=1 forward=1024 callret=2 weakbarrier=1 safeflags=1 aligned_atomics=0 bleeding_edge=1 dirty=2 esync_var="" fsync_var=""
+    local gpu_vars snippet dyn_mode fastround=1 fastnan=1 x87double=0 bigblock=3 strongmem=0 forward=1024 callret=1 weakbarrier=2 safeflags=2 aligned_atomics=0 bleeding_edge=1 dirty=2 esync_var="" fsync_var=""
     gpu_vars=$(asl_gpu_env_exports)
 
     if [ -e /proc/sys/fs/epoll ]; then
@@ -49,25 +49,28 @@ build_gaming_env_exports() {
     fi
 
     snippet=$(cat << EOF
-if [ -f /etc/asl_wine_version.conf ] && grep -q '^proton-ge' /etc/asl_wine_version.conf 2>/dev/null; then
+if [ -f /etc/asl_wine_version.conf ] && grep -q '^proton-ge' /etc/asl_wine_version.conf 2>/dev/null && [ -d /opt/proton-ge/bin ]; then
     export PATH=/opt/proton-ge/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
     [ -x /opt/proton-ge/bin/wineserver ] && export WINESERVER=/opt/proton-ge/bin/wineserver
     [ -x /opt/proton-ge/bin/wine ] && export WINELOADER=/opt/proton-ge/bin/wine
 elif [ -d /opt/wine-x64/bin ]; then
     export PATH=/usr/local/bin:/opt/wine-x64/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
     [ -x /opt/wine-x64/bin/wineserver-wrapper ] && export WINESERVER=/opt/wine-x64/bin/wineserver-wrapper
-    [ -x /usr/local/bin/wine64 ] && export WINELOADER=/usr/local/bin/wine64
+    [ -x /opt/wine-x64/bin/wine64 ] && export WINELOADER=/opt/wine-x64/bin/wine64
+elif [ -x /usr/lib/wine/wine64 ]; then
+    export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+    [ -x /usr/lib/wine/wineserver64 ] && export WINESERVER=/usr/lib/wine/wineserver64
+    export WINELOADER=/usr/lib/wine/wine64
+elif [ -x /usr/bin/wine64 ]; then
+    export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
+    export WINELOADER=/usr/bin/wine64
 else
     export PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
 fi
 export DISPLAY=:0
 export TMPDIR=/tmp
 export WINEARCH=win64
-if [ -d /root/.wine-x64 ]; then
-    export WINEPREFIX="\${WINEPREFIX:-/root/.wine-x64}"
-else
-    export WINEPREFIX="\${WINEPREFIX:-/root/.wine}"
-fi
+export WINEPREFIX="\${WINEPREFIX:-/root/.wine}"
 export XDG_RUNTIME_DIR=/run/user/0
 export SDL_GAMECONTROLLERCONFIG_FILE=/etc/gamecontrollerdb.txt
 export SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1
@@ -81,6 +84,7 @@ export MANGOHUD_CONFIG="fps,frametime,cpu_temp,gpu_temp,ram,vram,engine_version,
 ${esync_var}${fsync_var}@GPU_VARS@
 export PULSE_SERVER=unix:/tmp/pulse-socket,tcp:127.0.0.1
 export PULSE_LATENCY_MSEC=30
+[ -f /usr/lib/i386-linux-gnu/libtime64_shim.so ] && export BOX32_LD_PRELOAD=/usr/lib/i386-linux-gnu/libtime64_shim.so
 export BOX64_ALLOW_MISSING_LIBS=1
 export BOX64_NOBANNER=1
 export BOX64_DYNAREC=1
@@ -95,19 +99,22 @@ export BOX64_DYNAREC_WEAKBARRIER=$weakbarrier
 export BOX64_DYNAREC_SAFEFLAGS=$safeflags
 export BOX64_DYNAREC_ALIGNED_ATOMICS=$aligned_atomics
 export BOX64_DYNAREC_BLEEDING_EDGE=$bleeding_edge
-export BOX64_DYNAREC_WAIT=1
+export BOX64_DYNAREC_WAIT=0
 export BOX64_DYNAREC_DIRTY=$dirty
 export BOX64_DYNAREC_NATIVEFLAGS=1
 export BOX64_DYNAREC_METADIB=1
-export BOX64_DYNAREC_CALLRET=2
+export BOX64_DYNAREC_CALLRET=1
+export BOX64_DYNAREC_HOTPAGE=1
 export BOX64_DYNACACHE=1
 export BOX64_DYNACACHE_LIMIT=2147483648
-export BOX64_NOBANNER=1
-export BOX64_ALLOW_MISSING_LIBS=1
+export BOX64_MAXTHREADS=\$(nproc 2>/dev/null || echo 8)
 export DXVK_ASYNC=1
 export DXVK_STATE_CACHE=1
 export DXVK_LOG_LEVEL=none
+export DXVK_NUM_COMPILER_THREADS=\$(nproc 2>/dev/null || echo 8)
+export DXVK_NUM_ASYNC_THREADS=4
 export BOX64_LD_LIBRARY_PATH="/usr/local/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:${BOX64_LD_LIBRARY_PATH:-}"
+export BOX32_LD_LIBRARY_PATH="/usr/local/lib/i386-linux-gnu:/usr/lib/i386-linux-gnu:/lib/i386-linux-gnu:${BOX32_LD_LIBRARY_PATH:-}"
 [ -f /etc/box64.apps.conf ] && export BOX64_RCFILE=/etc/box64.apps.conf
 mkdir -p /run/user/0 /tmp/.mesa_cache 2>/dev/null || true
 EOF
@@ -129,7 +136,7 @@ asl_gaming_env_prep() {
 ensure_wine_desktop_launchers() {
     local env_exports launcher_b64 setup_script script_b64
     env_exports=$(build_gaming_env_exports)
-    launcher_b64=$(printf '%s\n%s\nif [ "$1" = "winetricks" ]; then\n    exec "$@"\nfi\nif [[ "$1" != "box64" ]] && command -v box64 >/dev/null 2>&1; then\n    if [ -f "$1" ] && file "$1" 2>/dev/null | grep -q "x86-64"; then\n        exec box64 "$@"\n    elif [[ "$1" == "/opt/wine-x64"* ]]; then\n        exec box64 "$@"\n    else\n        exec "$@"\n    fi\nelse\n    exec "$@"\nfi\n' "#!/bin/bash" "$env_exports" | base64 | tr -d '\n')
+    launcher_b64=$(printf '%s\n%s\nif [ "$1" = "winetricks" ]; then\n    exec "$@"\nfi\nNCORES=$(nproc 2>/dev/null || echo 8)\nCPU_MASK="0-$((NCORES - 1))"\ncase "$1" in\n    explorer)\n        shift\n        if [ $# -eq 0 ]; then\n            set -- "/desktop=WineDesktop,1280x720"\n        fi\n        if [ -n "$WINELOADER" ] && [ -x "$WINELOADER" ]; then\n            exec taskset -c "$CPU_MASK" box64 "$WINELOADER" explorer "$@"\n        elif [ -x /usr/lib/wine/wine64 ]; then\n            exec taskset -c "$CPU_MASK" box64 /usr/lib/wine/wine64 explorer "$@"\n        fi\n        ;;\n    winefile|winecfg|regedit|notepad|control|cmd|taskmgr|uninstaller|winemine|wineboot)\n        if [ -n "$WINELOADER" ] && [ -x "$WINELOADER" ]; then\n            exec taskset -c "$CPU_MASK" box64 "$WINELOADER" "$@"\n        elif [ -x /usr/lib/wine/wine64 ]; then\n            exec taskset -c "$CPU_MASK" box64 /usr/lib/wine/wine64 "$@"\n        fi\n        ;;\n    wine64|wine)\n        shift\n        if [ "$1" = "explorer" ]; then\n            shift\n            if [ $# -eq 0 ]; then\n                set -- "/desktop=WineDesktop,1280x720"\n            fi\n            if [ -n "$WINELOADER" ] && [ -x "$WINELOADER" ]; then\n                exec taskset -c "$CPU_MASK" box64 "$WINELOADER" explorer "$@"\n            elif [ -x /usr/lib/wine/wine64 ]; then\n                exec taskset -c "$CPU_MASK" box64 /usr/lib/wine/wine64 explorer "$@"\n            fi\n        else\n            if [ -n "$WINELOADER" ] && [ -x "$WINELOADER" ]; then\n                exec taskset -c "$CPU_MASK" box64 "$WINELOADER" "$@"\n            elif [ -x /usr/lib/wine/wine64 ]; then\n                exec taskset -c "$CPU_MASK" box64 /usr/lib/wine/wine64 "$@"\n            fi\n        fi\n        ;;\nesac\nif [[ "$1" != "box64" ]] && command -v box64 >/dev/null 2>&1; then\n    CMD_PATH="$(command -v "$1" 2>/dev/null || echo "$1")"\n    if [ -f "$CMD_PATH" ] && file "$CMD_PATH" 2>/dev/null | grep -q "x86-64"; then\n        exec taskset -c "$CPU_MASK" box64 "$@"\n    elif [[ "$CMD_PATH" == "/opt/wine"* ]]; then\n        exec taskset -c "$CPU_MASK" box64 "$@"\n    else\n        exec taskset -c "$CPU_MASK" "$@"\n    fi\nelse\n    exec taskset -c "$CPU_MASK" "$@"\nfi\n' "#!/bin/bash" "$env_exports" | base64 | tr -d '\n')
 
     setup_script=$(cat << 'EOF_SETUP'
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
@@ -140,18 +147,73 @@ chmod 755 /usr/local/bin/asl-wine-launch
 
 cat << 'EOF_ASLBIN' > /usr/local/bin/asl
 #!/bin/bash
-if [ "$1" = "game" ] || [ "$1" = "gaming" ] || [ -z "$1" ]; then
-    exec asl-wine-launch wine64 explorer
-else
-    exec asl-wine-launch "$@"
-fi
+# ASL In-Chroot Multi-Command Router
+
+case "$1" in
+    thermal|temp|temperature)
+        shift
+        if [ -x /usr/local/bin/sensors ]; then
+            exec /usr/local/bin/sensors "$@"
+        elif [ -x /usr/bin/sensors ]; then
+            exec /usr/bin/sensors "$@"
+        fi
+        ;;
+    cputemp)
+        shift
+        if [ -x /usr/local/bin/cputemp ]; then
+            exec /usr/local/bin/cputemp "$@"
+        fi
+        ;;
+    game|gaming)
+        shift
+        if [ $# -eq 0 ]; then
+            exec /usr/local/bin/asl-wine-launch explorer
+        else
+            exec /usr/local/bin/asl-wine-launch "$@"
+        fi
+        ;;
+    explorer)
+        shift
+        exec /usr/local/bin/asl-wine-launch explorer "$@"
+        ;;
+    winefile)
+        shift
+        exec /usr/local/bin/asl-wine-launch winefile "$@"
+        ;;
+    winecfg)
+        shift
+        exec /usr/local/bin/asl-wine-launch winecfg "$@"
+        ;;
+    status)
+        echo "=== ASL Debian Subsystem Status ==="
+        echo " Environment: ACTIVE"
+        echo " Architecture: $(uname -m)"
+        echo " Host OS: $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'=' -f2 | tr -d '\"')"
+        echo " Memory / Swap:"
+        free -h 2>/dev/null | grep -E '^Mem:|^Swap:'
+        [ -x /usr/local/bin/cputemp ] && echo " Thermal: $(/usr/local/bin/cputemp 2>/dev/null)"
+        ;;
+    doctor)
+        echo "[✓] ASL Subsystem container online."
+        echo "[✓] Python: $(python3 --version 2>&1)"
+        echo "[✓] Wine:   $(wine64 --version 2>&1)"
+        echo "[✓] Box64:  $(box64 --version 2>&1 | head -n1)"
+        echo "[✓] Display: ${DISPLAY:-:0}"
+        [ -x /usr/local/bin/cputemp ] && echo "[✓] Thermal: $(/usr/local/bin/cputemp 2>/dev/null)"
+        ;;
+    *)
+        exec /usr/local/bin/asl-wine-launch "$@"
+        ;;
+esac
 EOF_ASLBIN
 chmod 755 /usr/local/bin/asl
 
 cat << 'EOF_WINE64' > /usr/local/bin/wine64
 #!/bin/bash
 WINE_EXEC=""
-if [ -x /opt/wine-x64/bin/wine64 ]; then
+if [ -x /opt/proton-ge/bin/wine ]; then
+    WINE_EXEC=/opt/proton-ge/bin/wine
+elif [ -x /opt/wine-x64/bin/wine64 ]; then
     WINE_EXEC=/opt/wine-x64/bin/wine64
 elif [ -x /usr/lib/wine/wine64 ]; then
     WINE_EXEC=/usr/lib/wine/wine64
@@ -168,7 +230,9 @@ cat << 'EOF_WINE' > /usr/local/bin/wine
 #!/bin/bash
 # Win64-only project: route plain "wine" to wine64 (ELF32 "wine" can't run under box64).
 WINE_EXEC=""
-if [ -x /opt/wine-x64/bin/wine64 ]; then
+if [ -x /opt/proton-ge/bin/wine ]; then
+    WINE_EXEC=/opt/proton-ge/bin/wine
+elif [ -x /opt/wine-x64/bin/wine64 ]; then
     WINE_EXEC=/opt/wine-x64/bin/wine64
 elif [ -x /usr/lib/wine/wine64 ]; then
     WINE_EXEC=/usr/lib/wine/wine64
@@ -181,16 +245,36 @@ exec /usr/local/bin/asl-wine-launch "$WINE_EXEC" "$@"
 EOF_WINE
 chmod 755 /usr/local/bin/wine
 
+cat << 'EOF_WINEFILE_BIN' > /usr/local/bin/winefile
+#!/bin/bash
+exec /usr/local/bin/asl-wine-launch winefile "$@"
+EOF_WINEFILE_BIN
+chmod 755 /usr/local/bin/winefile
+
 cat << 'EOF_WINECFG_BIN' > /usr/local/bin/winecfg
 #!/bin/bash
 exec /usr/local/bin/asl-wine-launch winecfg "$@"
 EOF_WINECFG_BIN
 chmod 755 /usr/local/bin/winecfg
 
+cat << 'EOF_WINEBOOT_BIN' > /usr/local/bin/wineboot
+#!/bin/bash
+exec /usr/local/bin/asl-wine-launch wineboot "$@"
+EOF_WINEBOOT_BIN
+chmod 755 /usr/local/bin/wineboot
+
+cat << 'EOF_WINEEXPLORER_BIN' > /usr/local/bin/wine-explorer
+#!/bin/bash
+exec /usr/local/bin/asl-wine-launch explorer "$@"
+EOF_WINEEXPLORER_BIN
+chmod 755 /usr/local/bin/wine-explorer
+
 cat << 'EOF_WINESERVER_BIN' > /usr/local/bin/wineserver
 #!/bin/bash
 WINESERVER_EXEC=""
-if [ -x /opt/wine-x64/bin/wineserver ]; then
+if [ -x /opt/proton-ge/bin/wineserver ]; then
+    WINESERVER_EXEC=/opt/proton-ge/bin/wineserver
+elif [ -x /opt/wine-x64/bin/wineserver ]; then
     WINESERVER_EXEC=/opt/wine-x64/bin/wineserver
 elif [ -x /usr/lib/wine/wineserver64 ]; then
     WINESERVER_EXEC=/usr/lib/wine/wineserver64
@@ -206,7 +290,7 @@ chmod 755 /usr/local/bin/wineserver
 if ! command -v winetricks >/dev/null 2>&1; then
     echo "[*] Installing winetricks script in /usr/local/bin..."
     wget -q https://cdn.jsdelivr.net/gh/Winetricks/winetricks@5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || \
-    wget -q https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || \
+    wget -q https://raw.githubusercontent.com/Winetricks/winetricks@5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -O /tmp/winetricks.tmp 2>/dev/null || \
     curl -fsSL https://cdn.jsdelivr.net/gh/Winetricks/winetricks@5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -o /tmp/winetricks.tmp 2>/dev/null || \
     curl -fsSL https://raw.githubusercontent.com/Winetricks/winetricks/5a59ea07513b24093bd90fad943ecf9543cf05bc/src/winetricks -o /tmp/winetricks.tmp 2>/dev/null || true
     if [ -f /tmp/winetricks.tmp ] && [ "$(sha256sum /tmp/winetricks.tmp 2>/dev/null | cut -d' ' -f1)" = "f35c29737ca08a583569e6a3752d52fbe23333c5acfad5f16c4177d25eaf3f4b" ]; then
@@ -222,7 +306,7 @@ cat << 'EOF_WINEFILE' > /usr/share/applications/winefile.desktop
 [Desktop Entry]
 Name=Wine File Manager
 Comment=Browse and manage Windows files in Wine
-Exec=asl-wine-launch wine64 winefile
+Exec=asl-wine-launch winefile
 Icon=file-manager
 Terminal=false
 Type=Application
@@ -233,7 +317,7 @@ cat << 'EOF_WINECFG' > /usr/share/applications/winecfg.desktop
 [Desktop Entry]
 Name=Wine Configuration
 Comment=Configure Wine settings and drive mappings
-Exec=asl-wine-launch wine64 winecfg
+Exec=asl-wine-launch winecfg
 Icon=preferences-system
 Terminal=false
 Type=Application
@@ -244,7 +328,7 @@ cat << 'EOF_EXPLORER' > /usr/share/applications/wine-explorer.desktop
 [Desktop Entry]
 Name=Wine Explorer Desktop
 Comment=Launch Virtual Windows Explorer Desktop Container
-Exec=asl-wine-launch wine64 explorer
+Exec=asl-wine-launch explorer
 Icon=system-file-manager
 Terminal=false
 Type=Application
