@@ -127,8 +127,9 @@ def upload_asset(release_id, file_path):
     token = get_token()
     cmd = [
         "curl", "-sSL", "-X", "POST",
-        "--connect-timeout", "30",
-        "--max-time", "1800",
+        "--connect-timeout", "60",
+        "--max-time", "7200",
+        "--retry", "3",
         "-H", "User-Agent: ASL-Release-Tool",
         "-H", f"Content-Type: {content_type}",
         "--data-binary", f"@{file_path}",

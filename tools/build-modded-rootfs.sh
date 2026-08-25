@@ -184,11 +184,11 @@ cat << 'EOF' > "$EXCLUDE_FILE"
 ./var/tmp/*
 EOF
 
-echo -e "${GREEN}[*] Archiving and compressing modded Debian rootfs with multi-threaded XZ (xz -T0)...${RESET}"
+echo -e "${GREEN}[*] Archiving and compressing modded Debian rootfs (xz -T3 -2, thermally throttled)...${RESET}"
 rm -f "$OUTPUT_TAR"
 
 su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; \
-    tar --exclude-from='$EXCLUDE_FILE' --numeric-owner -I 'xz -T0 -3' -cf '$OUTPUT_TAR' -C '$DEBIANPATH' ."
+    tar --exclude-from='$EXCLUDE_FILE' --numeric-owner -I 'nice -n 19 xz -T3 -2' -cf '$OUTPUT_TAR' -C '$DEBIANPATH' ."
 
 rm -f "$EXCLUDE_FILE"
 
