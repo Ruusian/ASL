@@ -71,3 +71,14 @@ Subsystem execution is transparently routed via helper functions:
 ### 6. Terminal Display & TUI Architecture
 - **DEC Mode 1049 Buffer (`\033[?1049h` / `\033[?1049l`):** TUI views (`dashboard`, `watch`, `process_manager`) run in the terminal's alternate screen buffer. Screen redraws and timer ticks do not leak into the terminal scrollback history.
 - **74-Column Box Drawing Grid:** UI frames are strictly constrained to 74 columns with ANSI escapes formatted outside string measurement routines to ensure pixel-perfect rendering across terminal emulators.
+
+### 7. OmniRoute AI Gateway & Android Netd Bypass
+- **Local Proxy Endpoint:** Runs on `127.0.0.1:20128` to bridge local LLM clients with backend AI inference providers.
+- **Android Netd Bypass:** On Android 14+, non-root app UIDs (like Termux UID `10566`) are subject to strict `netd` resolver filtering. OmniRoute is managed under root execution with explicit Termux library paths (`LD_LIBRARY_PATH`) and host `/etc/resolv.conf` fallback.
+
+### 8. Modular 24/7 Remote Mesh Architecture
+- **Host-Only SSH Management:** Termux host OpenSSH server runs on port 8022 under user permissions (`u0_a566`) with key/password authentication.
+- **Dedicated Oracle VPS Reverse Tunnel:** Persistent SSH reverse relay to `130.210.19.7` routing Port 2222 -> Termux SSH (8022), Port 9119 -> Hermes Dashboard, and Port 6080 -> noVNC Desktop.
+- **Adaptive Jump-Host & On-Demand Pool:** Automatic fallback to Serveo reverse tunnels and on-demand Ngrok token rotation pools with automatic quota tracking.
+- **24/7 Watchdog:** Self-healing health check running every 180s to maintain tunnel persistence without excessive battery/CPU drain.
+

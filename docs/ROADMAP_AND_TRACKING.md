@@ -30,6 +30,11 @@
 - [x] **Host Kernel OS Stability Protection** (Zero host kernel `sysctl` overrides to prevent kernel panics on custom Android kernels)
 - [x] **Hang-Free Subshell Execution Routing** (Temporary script file routing in `core/common.sh` eliminating base64 subshell limits)
 - [x] **D-Bus Managed XFCE Session Lifecycle** (`dbus-run-session startxfce4` with setpriv fallbacks & robust `xfce4-session` / `xfwm4` process tracking)
+- [x] **Terminal UI/UX DEC 1049 Alternate Screen Buffer Isolation** (Clean flicker-free TUI console rendering)
+- [x] **24/7 Background Service Manager & OmniRoute AI Gateway Integration** (`service-manager.sh` with detached subshells & netd DNS bypass)
+- [x] **Modular 24/7 Remote Mesh Architecture** (LAN SSH, Oracle VPS dedicated relay, Serveo jump-host, Ngrok pool)
+- [x] **Source Repository vs Installed Runtime Separation** (`~/ASL` development repo vs `$PREFIX/share/asl` system install)
+- [x] **Kernel Sysctl TCP Network Throughput Tuning** (`99-asl-tcp-tuning.conf`)
 
 ## Planned Enhancements & Roadmap
 - [ ] **Wayland Native compositor backend (When Termux:X11 Wayland DRI3 stabilizes)**

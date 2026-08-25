@@ -1,63 +1,117 @@
 # 🚀 Android Subsystem for Linux (ASL)
 
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20Termux-brightgreen.svg)](https://termux.dev)
-[![Architecture](https://img.shields.io/badge/Architecture-ARM64-blue.svg)](#)
-[![Requirement](https://img.shields.io/badge/Requirements-Root%20%7C%20Shizuku%20%7C%20PRoot-blue.svg)](#)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GPU Acceleration](https://img.shields.io/badge/GPU-Mesa%20Turnip%20%7C%20Zink%20%7C%20VirGL-orange.svg)](#)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Ruusian/ASL/master/assets/asl_banner.png" alt="ASL Banner" width="100%" onerror="this.style.display='none'"/>
+</p>
 
-**Android Subsystem for Linux (ASL)** is a high-performance Linux subsystem management engine, gaming container framework, GTK3 desktop control suite, and Android host bridge for ARM64 devices.
+<p align="center">
+  <b>The Enterprise-Grade Autonomous Linux Subsystem, Gaming Framework & Remote Workstation for Android ARM64</b>
+</p>
 
-Modeled after **WSL (Windows Subsystem for Linux)** on PC, **ASL** transforms your Android smartphone or tablet into a full Linux workstation and gaming environment, supporting **Root (`su`)**, **Shizuku (`rish`)**, and **PRoot (Zero-Root)** environments.
+<p align="center">
+  <a href="https://termux.dev"><img src="https://img.shields.io/badge/Platform-Android%20%7C%20Termux-brightgreen.svg?style=for-the-badge&logo=android" alt="Platform"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/Architecture-ARM64%20(aarch64)-blue.svg?style=for-the-badge&logo=arm" alt="Architecture"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/Execution-Root%20%7C%20Shizuku%20%7C%20PRoot-purple.svg?style=for-the-badge" alt="Execution Modes"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/GPU-Mesa%20Turnip%20%7C%20Zink%20%7C%20VirGL-orange.svg?style=for-the-badge&logo=vulkan" alt="GPU Acceleration"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/Release-v2.5.1%20Stable-success.svg?style=for-the-badge" alt="Release"/></a>
+</p>
 
 ---
 
+## ⚡ Overview
+
+**Android Subsystem for Linux (ASL)** is an autonomous, high-performance Linux container engine, gaming runtime, GTK3 desktop control center, and remote tunneling workstation designed for ARM64 Android devices.
+
+Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or tablet into a native Linux workstation and x86_64 gaming station with zero SELinux panics or host OS crashes across **Root (`su`)**, **Shizuku (`rish`)**, and **PRoot (Zero-Root)** environments.
+
+---
+
+## 🏛️ System Architecture
+
 ```text
- ┌─────────────────────────────────────────────────────────────────────────┐
- │                   ANDROID SUBSYSTEM FOR LINUX (ASL)                     │
- ├─────────────────────────────────────────────────────────────────────────┤
- │                                                                         │
- │  ┌───────────────────────────────────────────────────────────────────┐  │
- │  │       Debian 13 Trixie ARM64 Subsystem + ASL Hub GTK3 Suite       │  │
- │  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────────┐  │  │
- │  │  │ XFCE Desktop │  │ Box64 / Wine │  │ Turnip / Zink / DXVK    │  │  │
- │  │  └──────────────┘  └──────────────┘  └─────────────────────────┘  │  │
- │  └───────────────────────────────────▲───────────────────────────────┘  │
- │                                      │ Direct Hardware Acceleration     │
- │  ┌───────────────────────────────────┴───────────────────────────────┐  │
- │  │                 Android Kernel & Hardware Layers                  │  │
- │  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────────────┐  │  │
- │  │  │ /dev/kgsl-3d0│  │ Audio / Pulse│  │ Storage & Android AID   │  │  │
- │  │  └──────────────┘  └──────────────┘  └─────────────────────────┘  │  │
- │  └───────────────────────────────────────────────────────────────────┘  │
- └─────────────────────────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────────────────────────┐
+ │                       ANDROID SUBSYSTEM FOR LINUX (ASL)                          │
+ ├──────────────────────────────────────────────────────────────────────────────────┤
+ │                                                                                  │
+ │  ┌────────────────────────────────────────────────────────────────────────────┐  │
+ │  │        Debian 13 Trixie / Multi-Distro Subsystem & GTK3 Control Suite      │  │
+ │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
+ │  │  │  XFCE4 Desktop   │  │  Box64 + Wine64  │  │ Turnip / Zink / DXVK     │  │  │
+ │  │  │  (Termux:X11 :0) │  │  Dynarec Engine  │  │ Direct3D 11/12 Vulkan    │  │  │
+ │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
+ │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
+ │  │  │ ASL Hub (GTK3)   │  │ Dev & Security   │  │ OmniRoute AI Gateway     │  │  │
+ │  │  │ (posix_spawn)    │  │ Tooling Suites   │  │ (Port 20128 - Netd Bypass│  │  │
+ │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
+ │  └──────────────────────────────────────▲─────────────────────────────────────┘  │
+ │                                         │ Direct Hardware & Bridge IPC           │
+ │  ┌──────────────────────────────────────┴─────────────────────────────────────┐  │
+ │  │                      Android Host Bridge & 24/7 Daemons                    │  │
+ │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
+ │  │  │ PulseAudio TCP   │  │ LAN SSH (8022)   │  │ Oracle VPS Tunnel Relay  │  │  │
+ │  │  │ (127.0.0.1:4713) │  │ Serveo / Ngrok   │  │ (Port 2222 / 9119 / 6080)│  │  │
+ │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
+ │  └──────────────────────────────────────▲─────────────────────────────────────┘  │
+ │                                         │ Kernel Syscalls & Node Bindings        │
+ │  ┌──────────────────────────────────────┴─────────────────────────────────────┐  │
+ │  │                      Android Linux Kernel & Hardware Nodes                 │  │
+ │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
+ │  │  │ Adreno GPU Node  │  │ Bluetooth / USB  │  │ Virtual Swap Pool        │  │  │
+ │  │  │ (/dev/kgsl-3d0)  │  │ Evdev Gamepads   │  │ (zRAM + 4GB File Swap)   │  │  │
+ │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
+ │  └────────────────────────────────────────────────────────────────────────────┘  │
+ └──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🖥️ Live Terminal TUI Console (v2.5.1)
+
+ASL features a flicker-free, 74-column DEC Mode 1049 alternate-screen buffer dashboard with live diagnostics:
+
+```text
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │   ASL - Android Subsystem for Linux v2.5.1                             │
+ ├────────────────────────────────────────────────────────────────────────┤
+ │   Host:        Linux 4.14.357 (aarch64)                                │
+ │   Subsystem:   Debian 13 (Trixie) [MOUNTED]                            │
+ │   Exec Mode:   Root (su - native kernel chroot)                        │
+ │   GPU Driver:  Qualcomm Adreno 6xx/7xx (Turnip Mesa Vulkan)            │
+ │   Audio:       PulseAudio (127.0.0.1:4713) [ACTIVE]                    │
+ │   Swap Pool:   4.0 GB Active (zRAM + File Swap)                        │
+ ├────────────────────────────────────────────────────────────────────────┤
+ │   Remote Access Endpoints:                                             │
+ │   * LAN SSH (Host):  ssh -p 8022 u0_a566@192.168.1.100                │
+ │   * Oracle VPS:      ssh -J ubuntu@130.210.19.7 -p 2222 user@127.0.0.1 │
+ │   * Hermes Web UI:   http://130.210.19.7                               │
+ ├────────────────────────────────────────────────────────────────────────┤
+ │  [s] Start Subsystem     [x] Stop Subsystem      [d] Start Desktop     │
+ │  [g] Launch Game (.exe)  [h] Performance HUD     [v] Remote Bridges    │
+ │  [p] Process Manager     [t] Thermal Sensors     [w] Live Watchdog     │
+ │  [c] Clean Storage       [r] Self-Repair         [q] Quit              │
+ └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## ⚡ Quick Installation
 
-Install or update **ASL** with a single command inside Termux:
+Install or upgrade **ASL** with a single command inside Termux:
 
 ```bash
-# Recommended (Fast CDN Mirror - bypasses GitHub raw 429 rate limits):
+# Recommended Fast CDN Mirror (bypasses GitHub raw 429 rate limits):
 curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian/ASL@master/install.sh | bash
 
 # Alternative direct GitHub link:
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash
 ```
 
-> ⚠️ **Trust note:** Piping a remote script into `bash` executes it with your current
-> privileges. Review [`install.sh`](install.sh) before running — it installs Termux
-> packages, requires root (`su`), and downloads a prebuilt rootfs (checksum-verified
-> for the modded edition; see the `SHA256SUMS` sidecar). For an auditable install,
-> clone the repo first: `git clone https://github.com/Ruusian/ASL && cd ASL && bash install.sh`.
-
-### 🐧 Distro & Image Options
-Select your preferred Linux distribution interactively during setup (Debian Modded, Debian Trixie, Ubuntu 24.04, Arch Linux, Alpine, or Kali Linux), or pass non-interactive flags:
+### 🐧 Distro & Image Flavors
+Pass non-interactive distribution flags or select interactively during setup:
 
 ```bash
-# ASL Modded Rootfs (Pre-configured Turnip Vulkan, Box64, Wine64, XFCE Desktop & ASL Hub):
+# ASL Modded Rootfs (Turnip Vulkan, Box64, Wine64, XFCE & ASL Hub pre-configured):
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --modded
 
 # Standard Clean Debian Trixie Base:
@@ -73,18 +127,17 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --kali
 ```
 
-### ⚡ Execution Modes (Root / Shizuku / PRoot)
-ASL automatically detects your device capabilities or lets you select your execution mode:
-- **Root (`su`)**: Maximum performance native kernel chroot with direct GPU node access (`--root`).
-- **Shizuku (`rish`)**: ADB-privileged execution mode for non-rooted devices with Shizuku enabled (`--shizuku`).
-- **PRoot**: User-space syscall translation for non-rooted devices without Shizuku (`--proot`).
+### ⚡ 3-Tier Execution Modes
+- **Root (`su`)**: Maximum performance direct kernel chroot with `/dev/kgsl-3d0` GPU node access (`--root`).
+- **Shizuku (`rish`)**: ADB-privileged execution mode for non-rooted devices (`--shizuku`).
+- **PRoot**: User-space syscall translation for non-rooted devices (`--proot`).
 
-Switch modes anytime via CLI:
+Inspect or change execution mode anytime:
 ```bash
 asl exec-mode [root|shizuku|proot|status]
 ```
 
-After installation, launch the interactive console anytime:
+Launch the interactive console anytime:
 ```bash
 asl
 ```
@@ -94,188 +147,112 @@ asl
 ## 🔥 Key Features & Capabilities
 
 ### 🛡️ 1. Zero-Crash Isolated Subsystem Core
-- **100% Native Kernel Performance**: Native root kernel privileges (`su`) mount the chroot directly without system call interception overhead.
-- **Strict Mount Isolation**: Enforces private bind mounts (`--make-rprivate` and `--make-rslave`) without mounting host Android system partitions (`/system`, `/vendor`, `/apex`). Eliminates SELinux panics, mount deadlocks, and OS kernel crashes.
+- **100% Native Kernel Performance**: Direct kernel chroot mounting with zero translation overhead.
+- **Strict Mount Isolation**: Uses `--make-rprivate` and `--make-rslave` bind mounts without mounting Android system partitions (`/system`, `/vendor`, `/apex`), eliminating SELinux deadlocks and OS kernel crashes.
+- **Automated Rollback Traps**: Catches mount errors on startup and unmounts partial paths automatically.
 
 ### 🎛️ 2. Native Debian GTK3 Control Center ("ASL Hub")
-- **Desktop & CLI GUI**: Provides a full GTK3 desktop app launcher installed directly on the Debian desktop (`/root/Desktop/asl-hub.desktop`) and accessible via `asl hub` or `asl gui`.
-- **Multithreading Invariant**: Built with Python 3 + GTK3 using `os.posix_spawn` process creation, adhering to Architecture Invariant #1 (preventing multithreading GTK3 deadlocks).
+- **Desktop & CLI GUI**: Full GTK3 desktop app launcher installed directly on the Debian desktop (`/root/Desktop/asl-hub.desktop`) and callable via `asl hub` / `asl gui`.
+- **Multithreading Invariant**: Built with Python 3 + GTK3 using `os.posix_spawn` process creation to prevent glibc `atfork` multithreading deadlocks.
 
-### 🎮 3. Direct3D 11/12 Hardware Acceleration & Gaming Engine
-- **Turnip Mesa Vulkan Drivers**: Native Turnip driver profile support for Qualcomm Adreno 6xx/7xx GPUs and Zink OpenGL-over-Vulkan.
-- **MangoHud & DXVK_HUD Performance Overlay**: Real-time FPS, CPU/GPU temperature, and VRAM telemetry overlay (`asl hud on`).
-- **Wine Mono & Gecko Offline Bundles**: Package offline `.msi` installers for .NET Framework and MSHTML engine (`asl wine-bundle`).
-- **Wine & Proton-GE Version Manager**: Switch between standard Debian Wine and custom Proton-GE gaming engines (`asl wine-version`).
-- **Bluetooth Gamepad Passthrough**: Bind `/dev/input/event*` nodes into chroot for wireless controllers (`asl gamepad`).
+### 🌐 3. 24/7 Remote Mesh Tunnels & Background Services
+- **Oracle Cloud VPS Dedicated Relay**: Always-on persistent reverse SSH tunnels forwarding SSH (2222), Hermes Dashboard (9119), and noVNC (6080) to your VPS (`130.210.19.7`).
+- **LAN SSH Server**: Termux host SSH daemon on port 8022 with password or ED25519 key authentication.
+- **Serveo & Ngrok**: Instant public jump-host and multi-token rotation tunneling on demand.
+- **24/7 Autostart & Service Watchdog**: Detached double-fork background daemon (`service-manager.sh`) with TCP throughput tuning and automatic service recovery.
 
-### 💻 4. Dev Suite & Security Auditing Suite
+### 🎮 4. Direct3D 11/12 Gaming & Box64 Dynarec Engine
+- **Turnip Mesa Vulkan & Zink**: Hardware-accelerated OpenGL/Direct3D for Qualcomm Adreno 6xx/7xx and VirGL/Zink fallback for Mali GPUs.
+- **Box64 Dynarec Precision Switcher**: Toggle dynamically between high FPS (`asl game precision fast`) and strict IEEE-754 compatibility (`asl game precision safe`).
+- **MangoHud & DXVK_HUD Telemetry**: Real-time FPS, CPU/GPU temperature, and VRAM overlay (`asl hud on`).
+- **Wine Mono & Gecko Offline Bundles**: Package offline `.msi` installers for .NET and MSHTML runtimes (`asl wine-bundle`).
+- **Bluetooth Gamepad Passthrough**: Synchronize `/dev/input/event*` wireless controllers directly into the subsystem (`asl gamepad`).
+
+### 🤖 5. OmniRoute AI Gateway Integration
+- **Local AI Proxy**: Embedded OmniRoute AI proxy running on port 20128.
+- **Android Netd Bypass**: Executes under root with explicit Termux library bindings to circumvent Android 14 UID network restrictions.
+
+### 💻 6. Developer Suite & Security Auditing Suite
 - **Developer Suite**: One-click installation for Python 3, Node.js, Neovim, Go, Rust, and VS Code Server (`asl dev-suite`).
-- **Containerized Security Suite**: Defensive network auditing toolsuite including Nmap, Wireshark/TShark, Netcat, Socat, and Hydra (`asl security-suite`).
+- **Containerized Security Suite**: Defensive network auditing tools including Nmap, Wireshark/TShark, Netcat, Socat, and Hydra (`asl security-suite`).
 
-### 🧹 5. Storage Cleaner & Automated Integrity Repair
+### 🧹 7. Storage Cleaner & Automated Integrity Repair
 - **Storage Cleaner**: Purges APT package archives, temporary `/tmp` files, and Mesa shader caches (`asl clean`).
 - **Automated Integrity Repair**: Self-healing recovery for stale mount points, permission errors, and DPKG lock states (`asl repair`).
 
 ---
 
-## 📖 Guide to the `docs/` Directory
+## 🛠️ Complete CLI Command Reference
 
-All technical specifications, architecture invariants, CLI subcommands, and operational guides are documented inside the [`docs/`](docs/) directory. Use this guide to find the information you need:
-
-| Document | Purpose & Target Audience | Key Contents |
+| Command | Subcommand / Syntax | Description |
 | :--- | :--- | :--- |
-| 🏗️ **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** | System Architects & Developers | Mount isolation mechanisms, process lifecycle invariants (`os.posix_spawn`), GPU driver architecture, dynamic `/etc/profile.d/asl_env.sh` sync. |
-| 🎮 **[`docs/GAMING_GUIDE.md`](docs/GAMING_GUIDE.md)** | Gamers & Power Users | Wine prefix isolation, Turnip/Zink Vulkan drivers, MangoHud telemetry overlay, Proton-GE manager, DXVK/VKD3D auto-installer, Steam setup. |
-| ⚡ **[`docs/PERFORMANCE_TUNING.md`](docs/PERFORMANCE_TUNING.md)** | Performance Engineers | CPU governor boost, sysctl kernel parameters (`swappiness`, `dirty_ratio`), PulseAudio low-latency buffers, Box64 dynarec flags. |
-| 🛠️ **[`docs/CLI_AND_UTILITIES.md`](docs/CLI_AND_UTILITIES.md)** | Command Line & Script Users | Comprehensive subcommand reference table for `asl`, parameter details, utility script index in `core/`, `desktop/`, and `gaming/`. |
-| 🗺️ **[`docs/ROADMAP_AND_TRACKING.md`](docs/ROADMAP_AND_TRACKING.md)** | Contributors & Testers | Completed feature list, upcoming roadmap enhancements, architectural invariants to maintain across edits. |
-
-### How to Use Documentation in Development:
-1. **Adding a Feature**: Consult `docs/ROADMAP_AND_TRACKING.md` to check architectural invariants before making edits.
-2. **Modifying Process Execution**: Review `docs/ARCHITECTURE.md` to ensure `os.posix_spawn` is maintained in GTK3 multithreading contexts.
-3. **Adding CLI Commands**: Update `docs/CLI_AND_UTILITIES.md` whenever adding subcommands to `bin/asl`.
-
----
-
-## 📦 Repository Structure
-
-```text
-ASL/
-├── install.sh                # Automated setup with distro selection & driver setup
-├── bin/
-│   ├── asl                   # Main CLI entrypoint & interactive console dashboard
-├── core/
-│   ├── common.sh             # Shared environment & common utilities
-│   ├── mount-chroot.sh       # Safe isolated chroot mount manager
-│   ├── stop-chroot.sh        # Safe unmount & process termination manager
-│   ├── service-manager.sh    # Service health watchdog (180s interval)
-│   ├── orphan-killer.sh      # Orphan process cleanup utility
-│   ├── doctor.sh             # Environment pre-flight check & diagnostics
-│   ├── gpu-detect.sh         # Hardware SoC auto-detection & profile selection
-│   ├── gpu-profile.sh        # Mesa Turnip / Zink / VirGL environment profile manager
-│   ├── wizard.sh             # Guided first-time setup wizard
-│   ├── hud.sh                # MangoHud & DXVK_HUD telemetry overlay manager
-│   ├── wine-bundle.sh        # Wine Mono & Gecko offline MSI bundle installer
-│   ├── wine-version.sh       # Wine & Proton-GE version manager
-│   ├── gamepad.sh            # Bluetooth & USB gamepad evdev input mapper
-│   ├── dev-suite.sh          # Developer suite installer (Python, Node, Go, Rust, VS Code)
-│   ├── security-suite.sh     # Defensive security audit toolsuite
-│   ├── cleaner.sh            # Storage cache purger & disk space cleaner
-│   ├── repair.sh             # Automated integrity repair & system recovery
-│   ├── thermal.sh            # SoC & battery thermal sensor diagnostic monitor
-│   ├── termux-bridge.sh      # WakeLock, open, clipboard, and notification bridge
-│   ├── android-aid.sh        # Android AID GID group mapper
-│   └── snapshot.sh           # Point-in-time chroot snapshot & backup manager
-├── gaming/
-│   └── wine-box64.sh         # Wine64, Box64 & Windows app execution manager
-├── desktop/
-│   ├── asl-hub/              # ASL Hub GTK3 Control Center source (Python)
-│   ├── asl-hub-installer.sh  # Deploys ASL Hub into Debian rootfs
-│   ├── start-desktop.sh      # Termux:X11 desktop session & PulseAudio launcher
-│   ├── theme.sh              # GTK theme & icon set switcher
-│   ├── remote.sh             # SSH tunnel dispatcher (sources remote/ modules)
-│   ├── remote/               # Modular tunnel components
-│   │   ├── common.sh         #   Shared state, SSH daemon, password management
-│   │   ├── lan.sh            #   LAN SSH server (port 8022)
-│   │   ├── serveo.sh         #   Persistent Serveo jump-host tunnel
-│   │   ├── oracle.sh         #   Oracle Cloud VPS always-on relay
-│   │   ├── ngrok.sh          #   Multi-token pool with quota auto-rotation
-│   │   ├── keys.sh           #   SSH public key management
-│   │   └── autoconnect.sh    #   24/7 auto-reconnect daemon with wake-lock
-│   └── pi-bridge.sh          # Raspberry Pi VNC monitor bridge
-├── tools/
-│   └── make-release.sh       # Release automation
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── CLI_AND_UTILITIES.md
-│   ├── GAMING_GUIDE.md
-│   ├── PERFORMANCE_TUNING.md
-│   ├── ROADMAP_AND_TRACKING.md
-└── .github/
-    └── workflows/
-        └── lint.yml          # CI linting workflow
-```
+| **Interactive Dashboard** | `asl` / `asl dashboard` | Open 74-column DEC 1049 alternate-screen buffer TUI console |
+| **System Overview** | `asl overview` | Print concise live system status and remote endpoint table |
+| **Subsystem Start** | `asl start [--force]` | Mount isolated Linux subsystem rootfs |
+| **Subsystem Stop** | `asl stop [--lazy]` | Safely terminate processes and unmount all bind mounts |
+| **Subsystem Status** | `asl status` | Inspect mount points, process count, rootfs size, and uptime |
+| **Interactive Shell** | `asl shell [user]` | Drop into subsystem rootfs interactive bash shell |
+| **Command Execution** | `asl exec <command>` | Execute single command directly inside Linux subsystem |
+| **Package Installer** | `asl install <pkg>` | Install Debian APT packages inside subsystem |
+| **Package Search** | `asl search <query>` | Search available APT packages |
+| **Execution Mode** | `asl exec-mode [root\|shizuku\|proot]` | Inspect or switch execution mode |
+| **Setup Wizard** | `asl wizard` / `asl init` | Guided first-time setup for Gaming, Dev, Security presets |
+| **GTK3 Control Center**| `asl hub` / `asl gui` | Launch ASL Hub GTK3 desktop control center |
+| **Wine Application** | `asl game <path_to_exe>` | Execute Windows `.exe` via Box64 + Wine64 |
+| **Dynarec Precision** | `asl game precision [safe\|fast]` | Switch Box64 dynarec profile (FPS vs Float Precision) |
+| **DirectX Overrides** | `asl dxvk [enable\|status]` | Configure DXVK (D3D9-11) & VKD3D (D3D12) Vulkan overrides |
+| **Wine Bundles** | `asl wine-bundle [install]` | Package offline Wine Mono (.NET) & Gecko MSI bundles |
+| **Wine Manager** | `asl wine-version [set\|status]` | Switch between Debian system Wine and Proton-GE engines |
+| **Gamepad Passthrough**| `asl gamepad [sync\|test]` | Synchronize host Bluetooth/USB evdev gamepads into chroot |
+| **Performance HUD** | `asl hud [on\|off\|status]` | Toggle MangoHud & DXVK_HUD telemetry overlay |
+| **Thermal Diagnostics**| `asl thermal` | Monitor battery and CPU/GPU thermal zone sensors |
+| **Desktop Session** | `asl desktop [start\|stop\|status]`| Start/stop hardware-accelerated XFCE4 desktop on Termux:X11 |
+| **Remote Dispatcher** | `asl remote [status\|all]` | Inspect or start all remote access bridges |
+| **LAN SSH Server** | `asl remote lan [start\|stop]` | Control LAN SSH server (port 8022) |
+| **Oracle VPS Relay** | `asl remote oracle [start\|stop]` | Control Oracle VPS persistent reverse SSH tunnel |
+| **Serveo Tunnel** | `asl remote serveo [start\|stop]` | Control Serveo jump-host reverse tunnel |
+| **Ngrok Tunnel** | `asl remote ngrok [start\|stop]` | Control Ngrok multi-token tunnel |
+| **24/7 Autoconnect** | `asl remote autoconnect` | Manage background auto-reconnect tunnel daemon |
+| **Service Watchdog** | `asl service [start\|stop\|status]`| Manage 24/7 background service manager and TCP tuning |
+| **OmniRoute Gateway** | `asl omniroute [start\|stop\|status]`| Manage root-isolated OmniRoute AI gateway (port 20128) |
+| **Virtual Swap Pool** | `asl swap [status\|create\|auto]` | Manage 4GB virtual swap pool (5GB upper limit) |
+| **Storage Cleaner** | `asl clean [all\|apt\|tmp]` | Purge package archives, `/tmp`, and shader caches |
+| **Integrity Repair** | `asl repair [all\|mounts]` | Self-healing recovery for mounts, locks, and permissions |
+| **Pre-flight Doctor** | `asl doctor` | Comprehensive environment pre-flight diagnostics |
+| **Android Host Bridge**| `asl wakelock\|open\|clip\|toast` | WakeLock, default app opener, clipboard, notifications |
 
 ---
 
-## 🛠️ Complete Command Reference
+## 📖 Comprehensive Documentation Directory (`docs/`)
 
-### 1. Interactive Console & Telemetry
-| Command | Description |
-| :--- | :--- |
-| `asl` | Open the main terminal dashboard |
-| `asl overview` | Print concise live system status without dashboard |
-| `asl hud [on\|off\|status]` | Toggle MangoHud / DXVK performance telemetry overlay |
-| `asl thermal` | Monitor battery and CPU/GPU thermal zone temperatures |
-| `asl doctor` | Run environment pre-flight diagnostics |
+All in-depth architectural specifications, hardware tuning guides, and developer documentation are located in [`docs/`](docs/):
 
-### 2. GTK3 Dashboard & System Management
-| Command | Description |
+| Document | Purpose & Description |
 | :--- | :--- |
-| `asl hub` / `asl gui` | Deploy and launch ASL Hub GTK3 Control Center |
-| `asl clean [all\|apt\|tmp]`| Purge APT package cache, `/tmp` files, and Mesa shader caches |
-| `asl repair [all\|mounts]`| Run automated repair for stale mounts, DPKG locks, and permissions |
-
-### 3. MoBox Gaming & Direct3D Engine
-| Command | Description |
-| :--- | :--- |
-| `asl gpu` | Display active Turnip/Mesa GPU hardware runtime profile |
-| `asl mode [gaming\|performance]` | Apply memory compaction & Turnip GPU tuning |
-| `asl wine-bundle [install]` | Download & package offline Wine Mono (.NET) & Gecko bundles |
-| `asl wine-version [set]` | Switch between standard system Wine and Proton-GE engines |
-| `asl gamepad [sync\|test]` | Synchronize Bluetooth `/dev/input` gamepads into chroot |
-| `asl dxvk [enable\|status]` | Auto-install DXVK & VKD3D DirectX-to-Vulkan translators |
-| `asl setup-gaming` | Auto-install Wine64, Box64, and gaming tooling |
-| `asl game <exe>` | Execute Windows application via Box64 + Wine64 |
-
-### 4. Dev Suite & Security Audit Tools
-| Command | Description |
-| :--- | :--- |
-| `asl dev-suite [install]` | Install IDEs and dev tools (`python`, `webdev`, `neovim`, `go`, `rust`, `vscode`) |
-| `asl security-suite [install]`| Deploy defensive security auditing suite (`basic`, `audit`, `nmap`, `wireshark`) |
-
-### 5. Termux-X11 Desktop & Remote Services
-| Command | Description |
-| :--- | :--- |
-| `asl desktop start` | Launch hardware-accelerated XFCE4 desktop (includes ASL Hub shortcut) |
-| `asl desktop stop` | Terminate current desktop session safely |
-| `asl desktop status` | Inspect active desktop session state |
-| `asl theme [dark\|light]` | Switch GTK theme presets |
-| `asl resolution [720p\|1080p]` | Configure Termux:X11 display resolution |
-| `asl remote [status]` | Show all remote bridge status |
-| `asl remote all` | Start all remote bridges + autoconnect daemon |
-| `asl remote lan [start\|stop]` | LAN SSH server (port 8022) |
-| `asl remote oracle [start\|stop]` | Oracle Cloud VPS always-on tunnel |
-| `asl remote serveo [start\|stop]` | Persistent Serveo jump-host tunnel |
-| `asl remote ngrok [start\|stop]` | Ngrok tunnel (on-demand multi-token pool) |
-| `asl remote keys [list\|add]` | Manage SSH public keys |
-| `asl remote autoconnect` | 24/7 auto-reconnect daemon with wake-lock |
-| `asl remote password set <p>` | Set remote SSH password |
-| `asl audio [start\|stop\|test]`| PulseAudio server management |
-
-### 6. Termux & Android Host Bridge
-| Command | Description |
-| :--- | :--- |
-| `asl wakelock [on\|off]` | Control CPU WakeLock state |
-| `asl open <file\|url>` | Open file or URL in default Android host app |
-| `asl clip [copy\|paste]` | Read or write Android system clipboard |
-| `asl toast <msg>` | Send Android toast notification |
-| `asl notify <title> <msg>` | Send Android notification banner |
-| `asl aid setup` | Map Android host AID GIDs inside chroot |
+| 🏗️ **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** | Technical subsystem architecture, 3-tier execution model, `os.posix_spawn` invariant, runtime separation. |
+| 🎮 **[`docs/GAMING_GUIDE.md`](docs/GAMING_GUIDE.md)** | Direct3D Vulkan gaming, Box64 dynarec precision, Turnip/Zink drivers, MangoHud, Steam, prefix isolation. |
+| ⚡ **[`docs/PERFORMANCE_TUNING.md`](docs/PERFORMANCE_TUNING.md)** | Kernel sysctl TCP tuning, CPU governor boost, PulseAudio low-latency buffers, virtual swap management. |
+| 🛠️ **[`docs/CLI_AND_UTILITIES.md`](docs/CLI_AND_UTILITIES.md)** | Complete CLI subcommand syntax reference, helper scripts, installer flags, environment variables. |
+| 🗺️ **[`docs/ROADMAP_AND_TRACKING.md`](docs/ROADMAP_AND_TRACKING.md)** | Feature tracking, completed milestones, architectural invariants, future development roadmap. |
+| 📋 **[`CHANGELOG.md`](CHANGELOG.md)** | Detailed chronological release history, security patches, UI modernizations, and recovery logs. |
+| 🔧 **[`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)** | Solutions for common Android mount errors, audio latency, DPKG locks, and display issues. |
 
 ---
 
 ## 🔒 Safety & Isolation Guarantees
 
-Standard chroot scripts often execute `mount --bind / /chroot` or bind Android system folders (`/system`, `/vendor`, `/apex`). On Android 10 through 15+, this causes SELinux violations, mounting deadlocks, broken camera/audio daemons, and kernel panics.
+Standard chroot scripts often execute `mount --bind / /chroot` or bind Android system folders (`/system`, `/vendor`, `/apex`). On Android 10 through 15+, this causes SELinux violations, mount deadlocks, broken camera/audio daemons, and kernel panics.
 
-**Android Subsystem for Linux (ASL)** enforces strict mount isolation:
-- Shared access is provided strictly for user storage (`/sdcard`), device nodes (`/dev`, restricted to 0660/input-group), and IPC sockets (`/tmp`).
+**Android Subsystem for Linux (ASL)** enforces strict isolation invariants:
+- Shared access is restricted to user storage (`/sdcard`), device nodes (`/dev`, restricted to 0660/input-group), and IPC sockets (`/tmp`).
 - Mount points use `--make-rprivate` and `--make-rslave` flags to prevent mount events from leaking into the host Android OS.
-- No host system partitions (`/system`, `/vendor`, `/apex`) are mounted into the chroot, so host OS stability is not threatened by chroot activity.
+- Zero host system partitions (`/system`, `/vendor`, `/apex`) are mounted into the subsystem.
+- Background daemons spawn in detached double-fork subshells (`((nohup bash ... &) &) 2>/dev/null`) to ensure clean terminal exits.
 
 ---
 
-## 📄 License
+## 📄 License & Maintainer
 
-Distributed under the **MIT License**. See `LICENSE` for details.
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
+
+**Lead Author & Maintainer**: [Abhik Sarkar (@Ruusian)](https://github.com/Ruusian)

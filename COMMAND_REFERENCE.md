@@ -31,6 +31,37 @@ asl menu            # Alias for dashboard
 
 ---
 
+## ⚡ Execution Modes & Setup Wizard
+
+### `asl exec-mode`
+Inspect or switch execution mode between Root, Shizuku, and PRoot.
+
+```bash
+asl exec-mode                          # Show current execution mode
+asl exec-mode root                     # Switch to Root (su) kernel chroot mode
+asl exec-mode shizuku                  # Switch to Shizuku (rish) ADB-privileged mode
+asl exec-mode proot                    # Switch to PRoot user-space mode
+asl exec-mode status                   # Detailed capability diagnostics
+```
+
+---
+
+### `asl wizard` / `asl init`
+Run guided first-time interactive setup wizard.
+
+```bash
+asl wizard                             # Launch interactive setup wizard
+asl init                               # Alias for asl wizard
+```
+
+Preset options available in wizard:
+1. **Gaming Workstation** (Box64, Wine64, Turnip Mesa Vulkan, DXVK, MangoHud)
+2. **Software Developer** (Python 3, Node.js, Neovim, Go, Rust, VS Code Server)
+3. **Security Auditing** (Nmap, Wireshark/TShark, Netcat, Socat, Hydra)
+4. **Full Workstation** (Complete desktop suite, developer tools & gaming stack)
+
+---
+
 ## 🐧 Chroot Management
 
 ### `asl start`
@@ -351,13 +382,90 @@ asl remote password clear           # Remove remote SSH password
 ## 🎮 Gaming & Performance
 
 ### `asl game [name]`
-Launch pre-configured game.
+Launch pre-configured game or Windows `.exe`.
 
 ```bash
 asl game                            # List available games
 asl game ninesols                   # Launch Ninesols
 asl game list                       # List all games
 asl game <path/to/game.exe>         # Launch any .exe
+```
+
+---
+
+### `asl game precision [safe|fast|status]`
+Switch Box64 dynamic recompilation precision profile dynamically.
+
+```bash
+asl game precision fast             # Fast mode (max FPS for 3D titles)
+asl game precision safe             # Safe mode (strict float/NaN accuracy for sensitive apps)
+asl game precision status           # Query current dynarec profile
+```
+
+---
+
+### `asl dxvk [enable|disable|status]`
+Configure DirectX-to-Vulkan translation layer (DXVK for Direct3D 9/10/11 and VKD3D for Direct3D 12).
+
+```bash
+asl dxvk enable                     # Enable DXVK DLL overrides in target Wine prefix
+asl dxvk disable                    # Revert to standard Wine OpenGL translation
+asl dxvk status                     # Inspect DXVK / VKD3D installation state
+```
+
+---
+
+### `asl wine-bundle [install|status|clean]`
+Manage offline Wine Mono (.NET Framework) and Wine Gecko (MSHTML engine) MSI bundles.
+
+```bash
+asl wine-bundle install             # Download and configure offline Mono & Gecko bundles
+asl wine-bundle status              # Check bundle installation state
+asl wine-bundle clean               # Purge downloaded bundle installers
+```
+
+---
+
+### `asl wine-version [status|set|install]`
+Switch active Wine execution engine between system Wine and Proton-GE.
+
+```bash
+asl wine-version status             # Check current active Wine engine
+asl wine-version set proton-ge      # Switch to Proton-GE custom engine
+asl wine-version set system         # Switch to standard Debian system Wine
+```
+
+---
+
+### `asl gamepad [status|sync|test]`
+Synchronize Bluetooth and USB `/dev/input/event*` wireless controllers into chroot.
+
+```bash
+asl gamepad status                  # Detect connected gamepads
+asl gamepad sync                    # Map host gamepad event nodes into chroot /dev/input
+asl gamepad test                    # Interactive button & joystick calibration test
+```
+
+---
+
+### `asl hud [on|off|toggle|status]`
+Manage MangoHud and DXVK_HUD real-time performance telemetry overlay.
+
+```bash
+asl hud on                          # Enable FPS, CPU/GPU temp, and VRAM overlay
+asl hud off                         # Disable telemetry overlay
+asl hud toggle                      # Toggle overlay state
+asl hud status                      # Check active HUD configuration
+```
+
+---
+
+### `asl steam [args...]`
+Launch Steam environment or run Windows game setups with Box64 flags.
+
+```bash
+asl steam                           # Launch Steam client environment
+asl steam /sdcard/Installer.exe     # Launch Windows setup in Steam prefix
 ```
 
 ---
