@@ -356,8 +356,10 @@ show_help() {
 }
 
 pause_dashboard() {
+    printf "\033[?1049l\033[?25h" 2>/dev/null || true
     echo ""
     read -r -p "Press Enter to return to the dashboard..." _
+    printf "\033[?1049h\033[2J\033[3J\033[H\033[?25l" 2>/dev/null || true
 }
 
 draw_bar() {
@@ -510,12 +512,34 @@ asl_is_omniroute_running() {
     pgrep -f "omniroute" >/dev/null 2>&1 || su -c "pgrep -f omniroute" >/dev/null 2>&1 || (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null
 }
 
+asl_oracle_info() {
+    local o_host="130.210.19.7" o_user="ubuntu" o_port="2222" o_key="$HOME/.ssh/oracle_vps.key"
+    if [ -f "$HOME/.asl/oracle_vps.conf" ]; then
+        local key_v host_v user_v port_v
+        key_v=$(grep -E '^ORACLE_KEY=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        host_v=$(grep -E '^ORACLE_HOST=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        user_v=$(grep -E '^ORACLE_USER=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        port_v=$(grep -E '^ORACLE_PORT=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        [ -n "$key_v" ] && o_key="$key_v"
+        [ -n "$host_v" ] && o_host="$host_v"
+        [ -n "$user_v" ] && o_user="$user_v"
+        [ -n "$port_v" ] && o_port="$port_v"
+    fi
+    [ -n "${ASL_ORACLE_KEY:-}" ] && o_key="$ASL_ORACLE_KEY"
+    [ -n "${ASL_ORACLE_HOST:-}" ] && o_host="$ASL_ORACLE_HOST"
+    [ -n "${ASL_ORACLE_USER:-}" ] && o_user="$ASL_ORACLE_USER"
+    [ -n "${ASL_ORACLE_PORT:-}" ] && o_port="$ASL_ORACLE_PORT"
+    printf '%s %s %s %s' "$o_host" "$o_user" "$o_port" "$o_key"
+}
+
 asl_remote_summary() {
     local active=()
+    local o_host o_user o_port o_key
+    read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
     if asl_is_sshd_running; then active+=("LAN:8022"); fi
-    if [ -f "$PREFIX/tmp/asl-oracle.state" ] && pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then active+=("Oracle"); fi
-    if [ -f "$PREFIX/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then active+=("Serveo"); fi
-    if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then active+=("Ngrok"); fi
+    if [ -f "$PREFIX/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then active+=("Oracle"); fi
+    if [ -f "$PREFIX/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then active+=("Serveo"); fi
+    if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && (pgrep -x ngrok >/dev/null 2>&1 || pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || su -c "pgrep -x ngrok" >/dev/null 2>&1); then active+=("Ngrok"); fi
     if [ ${#active[@]} -gt 0 ]; then
         printf '%s' "${active[*]}"
     else
@@ -525,8 +549,9 @@ asl_remote_summary() {
 
 asl_remote_details() {
     local details=()
-    local user pass host_ip
+    local user pass host_ip o_host o_user o_port o_key
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+    read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
     user=$(whoami 2>/dev/null || echo "user")
     if [ -f "$HOME/.asl/remote_password" ]; then
         pass="configured"
@@ -538,30 +563,57 @@ asl_remote_details() {
     if asl_is_sshd_running; then
         details+=("* LAN SSH (Host):  ssh -p 8022 ${user}@${host_ip}")
     fi
-    if [ -f "$prefix/tmp/asl-oracle.state" ] && pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then
-        details+=("* Oracle VPS:  ssh -J ubuntu@130.210.19.7 -p 2222 ${user}@127.0.0.1")
-    elif [ -f "$HOME/.ssh/oracle_vps.key" ] && [ -f "$prefix/tmp/asl-oracle.state" ]; then
-        details+=("* Oracle VPS:      Standby (Run 'asl remote oracle start')")
+    if [ -f "$prefix/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then
+        details+=("* Oracle VPS:      ssh -J ${o_user}@${o_host} -p ${o_port} ${user}@127.0.0.1")
+        details+=("* Hermes Web UI:   http://${o_host}")
+    elif [ -f "$o_key" ]; then
+        details+=("* Oracle VPS:      Standby (Host: ${o_host}:${o_port}, Run 'asl remote oracle start')")
     fi
-    if [ -f "$prefix/tmp/asl-serveo.state" ] && pgrep -f "serveo.net" >/dev/null 2>&1; then
+    if [ -f "$prefix/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then
         local s_alias="asl-${user}"
-        if [ -f "$HOME/.asl/serveo_alias.txt" ] && [ -s "$HOME/.asl/serveo_alias.txt" ]; then
+        if [ -f "$prefix/tmp/asl-serveo-active.alias" ] && [ -s "$prefix/tmp/asl-serveo-active.alias" ]; then
+            s_alias=$(cat "$prefix/tmp/asl-serveo-active.alias" 2>/dev/null)
+        elif [ -f "$HOME/.asl/serveo_alias.txt" ] && [ -s "$HOME/.asl/serveo_alias.txt" ]; then
             s_alias=$(cat "$HOME/.asl/serveo_alias.txt" 2>/dev/null)
         elif [ -n "${ASL_SERVEO_ALIAS:-}" ]; then
             s_alias="$ASL_SERVEO_ALIAS"
         fi
         details+=("* Serveo Tunnel:   ssh -J serveo.net ${user}@${s_alias}")
     fi
-    if [ -f "$prefix/tmp/asl-ngrok.state" ] && pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then
-        local ng_url ng_host ng_port ng_json
-        ng_json=$(curl -s --max-time 0.2 --connect-timeout 0.2 http://127.0.0.1:4040/api/tunnels 2>/dev/null)
+    if [ -f "$prefix/tmp/asl-ngrok.state" ] && (pgrep -x ngrok >/dev/null 2>&1 || pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || su -c "pgrep -x ngrok" >/dev/null 2>&1); then
+        local ng_url ng_host ng_port ng_json ng_status_json ng_lat ng_region ng_conns
+        local now ng_cache cache_time
+        now=$(date +%s 2>/dev/null || echo 0)
+        ng_cache="${prefix}/tmp/.asl_ngrok_api_cache"
+        if [ -f "$ng_cache" ]; then
+            read -r cache_time < "$ng_cache" 2>/dev/null || true
+            if [ -n "$cache_time" ] && [[ "$cache_time" =~ ^[0-9]+$ ]] && [ "$((now - cache_time))" -lt 5 ]; then
+                ng_json=$(sed -n '2p' "$ng_cache" 2>/dev/null || true)
+                ng_status_json=$(sed -n '3p' "$ng_cache" 2>/dev/null || true)
+            fi
+        fi
+        if [ -z "$ng_json" ]; then
+            ng_json=$(curl -s --max-time 0.2 --connect-timeout 0.2 http://127.0.0.1:4040/api/tunnels 2>/dev/null)
+            ng_status_json=$(curl -s --max-time 0.2 --connect-timeout 0.2 http://127.0.0.1:4040/api/status 2>/dev/null)
+            if [ -n "$ng_json" ]; then
+                printf '%s\n%s\n%s\n' "$now" "$(echo "$ng_json" | tr -d '\n')" "$(echo "$ng_status_json" | tr -d '\n')" > "$ng_cache" 2>/dev/null || true
+            fi
+        fi
+
         ng_url=$(echo "$ng_json" | grep -oE 'tcp://[^"]+' | head -1)
         if [ -n "$ng_url" ]; then
             ng_host=$(echo "$ng_url" | sed -E 's|tcp://([^:]+):.*|\1|')
             ng_port=$(echo "$ng_url" | sed -E 's|tcp://([^:]+:([0-9]+))|\1|' | sed -E 's|.*:||')
-            details+=("* Ngrok Tunnel:      ssh -p ${ng_port} ${user}@${ng_host}")
+            details+=("* Ngrok Tunnel:    ssh -p ${ng_port} ${user}@${ng_host}")
         else
-            details+=("* Ngrok Tunnel:      Active (Fetching tunnel URL...)")
+            details+=("* Ngrok Tunnel:    Active (Fetching tunnel URL...)")
+        fi
+
+        ng_lat=$(echo "$ng_status_json" | grep -oE '"latency":"[^"]+"' | cut -d'"' -f4)
+        ng_region=$(echo "$ng_status_json" | grep -oE '"region":"[^"]+"' | cut -d'"' -f4)
+        ng_conns=$(echo "$ng_json" | grep -oE '"count":[0-9]+' | head -1 | cut -d':' -f2)
+        if [ -n "$ng_lat" ] || [ -n "$ng_region" ]; then
+            details+=("  - Performance:   Region: ${ng_region:-global} | Latency: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
         fi
     fi
 
@@ -585,7 +637,7 @@ overview() {
     local mem_total mem_avail mem_used mem_pct disk_data load_avg
     local swap_total swap_free swap_used swap_pct governor
     local batt_level batt_temp cpu_temp batt_str cpu_str host_ip wlock_status
-    local up_str freq_str swap_from_zram remote_summary audio_status omni_lbl
+    local up_str freq_str swap_from_zram remote_summary audio_status omni_lbl chroot_disk=""
 
     host_ip=$(asl_host_ip)
 
@@ -641,8 +693,16 @@ overview() {
     fi
 
     governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
-    disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')
+    disk_data=$(df -h /data 2>/dev/null | awk 'NR==2 {print $4 " free / " $2}')
     [ -n "$disk_data" ] || disk_data="unknown"
+    free_kb=$(df -k /data 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$free_kb" ] && [ "$free_kb" -lt 1048576 ]; then
+        disk_data="${C_RED}${C_BOLD}${disk_data} [LOW STORAGE]${C_RESET}${C_CYAN}"
+    fi
+    if is_mounted; then
+        chroot_disk=$(df -h "$DEBIANPATH" 2>/dev/null | awk 'NR==2 {print $4}')
+        [ -n "$chroot_disk" ] && disk_data="${disk_data} (Rootfs: ${chroot_disk} free)"
+    fi
     load_avg=$(cat /proc/loadavg 2>/dev/null || asl_exec "cat /proc/loadavg" 2>/dev/null)
     load_avg=$(printf '%s' "$load_avg" | cut -d' ' -f1-3)
     [ -n "$load_avg" ] || load_avg="unknown"
@@ -840,9 +900,9 @@ process_manager() {
 
 watch_dashboard() {
     trap 'printf "\033[?1049l\033[?25h"; trap - INT; return 0 2>/dev/null || exit 0' INT
-    printf "\033[?1049h\033[?25l" 2>/dev/null || true
+    printf "\033[?1049h\033[2J\033[3J\033[H\033[?25l" 2>/dev/null || true
     while true; do
-        printf "\033[H\033[J" 2>/dev/null || true
+        printf "\033[H" 2>/dev/null || true
         overview compact
         echo ""
         printf '%sTop Processes by CPU Usage%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
@@ -850,6 +910,7 @@ watch_dashboard() {
         asl_exec "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || ps aux | head -n 9 | tail -n +2 || true
         echo ""
         printf '%s[LIVE MONITOR - %s] Host Up %s (Svc %s) | Press "q" or Ctrl+C to return%s\n' "$C_CYAN$C_BOLD" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$(asl_svc_uptime)" "$C_RESET"
+        printf "\033[J" 2>/dev/null || true
         read -rsn1 -t 1.5 key 2>/dev/null || true
         if [ "$key" = "q" ] || [ "$key" = "Q" ] || [ "$key" = $'\x1b' ]; then
             break
@@ -864,6 +925,7 @@ show_host_apps_menu() {
 }
 
 dashboard() {
+    export ASL_DASHBOARD_MODE=1
     local C_SHADOW=$'\033[90m'
     local sel=1
     local choice=""
@@ -880,6 +942,9 @@ dashboard() {
 
     # Switch to DEC 1049 Alternate Screen Buffer (prevents scrollback history repetition)
     printf "\033[?1049h\033[?25l" 2>/dev/null || true
+
+    # Switch terminal to isolated alternate screen buffer & hide cursor
+    printf "\033[?1049h\033[2J\033[3J\033[H\033[?25l" 2>/dev/null || true
 
     render_opt() {
         local idx="$1"
@@ -974,7 +1039,7 @@ dashboard() {
 
             case "$key" in
                 IDLE_TICK)
-                    need_refresh=1
+                    overview_cache=$(overview 2>/dev/null || true)
                     continue
                     ;;
                 UP)
@@ -1044,9 +1109,16 @@ dashboard() {
                     ;;
                 s|S) choice="1"; need_refresh=1 ;;
                 x|X) choice="2"; need_refresh=1 ;;
+                e|E) choice="3"; need_refresh=1 ;;
+                r) choice="4"; need_refresh=1 ;;
+                b|B) choice="5"; need_refresh=1 ;;
                 a|A) choice="6"; need_refresh=1 ;;
                 d|D) choice="7"; need_refresh=1 ;;
+                f|F) choice="8"; need_refresh=1 ;;
+                y|Y) choice="9"; need_refresh=1 ;;
                 v|V) choice="10"; need_refresh=1 ;;
+                u|U) choice="11"; need_refresh=1 ;;
+                l|L) choice="12"; need_refresh=1 ;;
                 g|G) choice="13"; need_refresh=1 ;;
                 m|M) choice="14"; need_refresh=1 ;;
                 k|K) choice="17"; need_refresh=1 ;;
@@ -1140,24 +1212,39 @@ dashboard() {
             10|v|V)
                 echo "Remote Manager:"
                 echo "  1) Start All Tunnels (Oracle + Serveo + Ngrok + LAN + AutoConnect)"
-                echo "  2) Oracle VPS Tunnel Start / Stop / Status"
-                echo "  3) Serveo Tunnel Start / Stop"
-                echo "  4) Ngrok Tunnel Start / Stop"
-                echo "  5) Manage Ngrok Auth Tokens (Add / List / Reset)"
+                echo "  2) Oracle VPS Dedicated Tunnel & Key Management"
+                echo "  3) Serveo Jump Host Tunnel"
+                echo "  4) Ngrok TCP Tunnel"
+                echo "  5) Manage Ngrok Auth Tokens Pool"
                 echo "  6) Show Remote VNC / Desktop Tunnel Instructions"
                 echo "  7) LAN SSH Server Start / Stop"
                 echo "  8) Auto-Connect Daemon Start / Stop"
-                echo "  9) Configure Remote SSH Password (optional)"
-                echo " 10) Show Connection Info & Status"
-                read -r -p "Select action [1-10]: " r_act
+                echo "  9) Configure Remote SSH Password"
+                echo " 10) Authorized SSH Public Keys (List / Add / Import GitHub / Clear)"
+                echo " 11) Show Connection Info & Status"
+                read -r -p "Select action [1-11]: " r_act
                 case "$r_act" in
                     1) bash "$REAL_SCRIPT" remote all ;;
                     2)
-                        echo "Oracle VPS: 1) Start  2) Stop  3) Status"
-                        read -r -p "Choice: " o_choice
+                        echo "Oracle VPS Options:"
+                        echo "  1) Start Tunnel              2) Stop Tunnel              3) Show Status"
+                        echo "  4) Set VPS Host IP/Domain    5) Set VPS SSH User         6) Set VPS Remote Port"
+                        echo "  7) Import Private Key        8) Generate Dedicated Key   9) Show Private Key Info"
+                        echo " 10) Push Host Key to VPS     11) Remove Private Key      12) Remove Oracle Config"
+                        read -r -p "Choice [1-12]: " o_choice
                         case "$o_choice" in
                             1) bash "$REAL_SCRIPT" remote oracle start ;;
                             2) bash "$REAL_SCRIPT" remote oracle stop ;;
+                            3) bash "$REAL_SCRIPT" remote oracle status ;;
+                            4) read -r -p "Host IP or Domain: " o_h; [ -n "$o_h" ] && bash "$REAL_SCRIPT" remote oracle config host "$o_h" ;;
+                            5) read -r -p "SSH User [ubuntu]: " o_u; [ -n "$o_u" ] && bash "$REAL_SCRIPT" remote oracle config user "$o_u" ;;
+                            6) read -r -p "Remote Port [2222]: " o_p; [ -n "$o_p" ] && bash "$REAL_SCRIPT" remote oracle config port "$o_p" ;;
+                            7) read -r -p "Key File Path or Key String: " o_k; [ -n "$o_k" ] && bash "$REAL_SCRIPT" remote oracle add-key "$o_k" ;;
+                            8) bash "$REAL_SCRIPT" remote oracle gen-key ;;
+                            9) bash "$REAL_SCRIPT" remote oracle show-key ;;
+                            10) bash "$REAL_SCRIPT" remote oracle push-pubkey ;;
+                            11) bash "$REAL_SCRIPT" remote oracle remove-key ;;
+                            12) bash "$REAL_SCRIPT" remote oracle remove ;;
                             *) bash "$REAL_SCRIPT" remote oracle status ;;
                         esac
                         ;;
@@ -1224,6 +1311,17 @@ dashboard() {
                         elif [ -n "$new_ssh_pass" ]; then
                             bash "$REAL_SCRIPT" remote password set "$new_ssh_pass"
                         fi
+                        ;;
+                    10)
+                        echo "Authorized Keys: 1) List  2) Add Pubkey  3) Import from GitHub  4) Clear All"
+                        read -r -p "Choice: " k_choice
+                        case "$k_choice" in
+                            1) bash "$REAL_SCRIPT" remote keys list ;;
+                            2) read -r -p "SSH Public Key String: " k_str; [ -n "$k_str" ] && bash "$REAL_SCRIPT" remote keys add "$k_str" ;;
+                            3) read -r -p "GitHub Username: " gh_u; [ -n "$gh_u" ] && bash "$REAL_SCRIPT" remote keys import-github "$gh_u" ;;
+                            4) bash "$REAL_SCRIPT" remote keys clear ;;
+                            *) bash "$REAL_SCRIPT" remote keys list ;;
+                        esac
                         ;;
                     *) bash "$REAL_SCRIPT" remote status ;;
                 esac
@@ -1646,7 +1744,7 @@ case "${1:-}" in
     desktop)
         shift
         DESKTOP_ACTION="${1:-start}"
-        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, or refresh-x11."; exit 1 ;; esac
+        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch|novnc|webvnc) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, novnc, or refresh-x11."; exit 1 ;; esac
         if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = restart || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]]; then
             ensure_mounted
         fi
@@ -1792,6 +1890,14 @@ case "${1:-}" in
         ;;
     wakelock|wake|open|clip|clipboard|shortcut|app-shortcut|clip-sync|clipdaemon|toast|notify|notification|storage)
         bash "$ASL_DIR/core/termux-bridge.sh" "$@"
+        ;;
+    swap|memory|mem)
+        shift
+        bash "$ASL_DIR/core/swap-manager.sh" "$@"
+        ;;
+    openclaude|claude)
+        shift
+        bash "$ASL_DIR/core/openclaude-setup.sh" "$@"
         ;;
     aid|gids)
         shift

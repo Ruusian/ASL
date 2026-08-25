@@ -75,12 +75,12 @@ asl_wine_version_install() {
                 set -e
                 mkdir -p /opt/proton-ge/bin /opt/proton-ge/lib64
                 if command -v curl >/dev/null 2>&1; then
-                    DL_CMD="curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o"
+                    DL_CMD=\"curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o\"
                 elif command -v wget >/dev/null 2>&1; then
-                    DL_CMD="wget -q --timeout=600 --tries=2 -O"
+                    DL_CMD=\"wget -q --timeout=600 --tries=2 -O\"
                 else
                     apt-get update && apt-get install -y curl
-                    DL_CMD="curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o"
+                    DL_CMD=\"curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o\"
                 fi
                 if [ ! -x /opt/proton-ge/bin/wine ]; then
                     echo \"[*] Fetching latest Proton-GE release metadata...\"

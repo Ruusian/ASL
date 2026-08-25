@@ -36,7 +36,7 @@ asl_service_start() {
         echo "[✓] CPU Wake-Lock engaged."
     fi
 
-    # 2. Ensure chroot is mounted
+    # 2. Ensure chroot is mounted & 5GB Swap is active
     if ! is_mounted; then
         echo "[*] Mounting Debian chroot virtual filesystems..."
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
@@ -44,6 +44,10 @@ asl_service_start() {
         fi
     else
         echo "[✓] Debian chroot already mounted."
+    fi
+
+    if [ -f "$SCRIPT_DIR/core/swap-manager.sh" ]; then
+        bash "$SCRIPT_DIR/core/swap-manager.sh" setup >/dev/null 2>&1 || true
     fi
 
     # 3. Start SSH, Serveo, Ngrok, and Auto-Connect daemon
@@ -65,6 +69,11 @@ asl_service_start() {
     mkdir -p "$prefix/tmp" 2>/dev/null || true
     if [ ! -f "$prefix/tmp/asl-service.start_time" ]; then
         date +%s > "$prefix/tmp/asl-service.start_time" 2>/dev/null || true
+    fi
+
+    # Ensure 180s background watchdog daemon is active
+    if ! pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
+        asl_service_loop >/dev/null 2>&1 || true
     fi
 
     echo "[✓] All ASL 24/7 background services are ACTIVE."
@@ -95,23 +104,38 @@ asl_service_enable() {
     chmod 700 "$BOOT_DIR"
 
     cat << 'BOOT_EOF' > "$BOOT_SCRIPT"
-#!/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 # ASL Termux:Boot autostart script
 # Runs automatically on Android device boot via Termux:Boot app
 
+export PREFIX="/data/data/com.termux/files/usr"
+export HOME="/data/data/com.termux/files/home"
+export PATH="$PREFIX/bin:$PREFIX/bin/applets:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/system/bin:/system/xbin:$PATH"
+export LANG="C.UTF-8"
+
+# Engage wake lock immediately
 termux-wake-lock 2>/dev/null || true
 
 # Wait for active network connection on boot (up to 30s)
-echo "[*] Waiting for network connectivity..." >> /data/data/com.termux/files/usr/tmp/asl-boot.log
+mkdir -p "$PREFIX/tmp" 2>/dev/null || true
+echo "[*] [$(date)] ASL Boot Autostart triggered. Waiting for network connectivity..." > "$PREFIX/tmp/asl-boot.log"
 retry=0
 while [ $retry -lt 15 ]; do
-    if ping -c 1 -w 2 1.1.1.1 >/dev/null 2>&1 || ping -c 1 -w 2 8.8.8.8 >/dev/null 2>&1; then
-        echo "[✓] Network online." >> /data/data/com.termux/files/usr/tmp/asl-boot.log
+    if ping -c 1 -w 2 1.1.1.1 >/dev/null 2>&1 || ping -c 1 -w 2 8.8.8.8 >/dev/null 2>&1 || curl -s --connect-timeout 2 -I https://1.1.1.1 >/dev/null 2>&1; then
+        echo "[✓] [$(date)] Network online." >> "$PREFIX/tmp/asl-boot.log"
         break
     fi
     sleep 2
     retry=$((retry + 1))
 done
+
+# Disable Android Phantom Process Killer & App Standby Buckets on boot if root available
+if command -v su >/dev/null 2>&1 && su -c "id -u" >/dev/null 2>&1; then
+    su -c "device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; settings put global settings_enable_monitor_phantom_procs false 2>/dev/null; setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false 2>/dev/null; dumpsys deviceidle whitelist +com.termux 2>/dev/null; am set-standby-bucket com.termux active 2>/dev/null; cmd appops set com.termux RUN_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS allow 2>/dev/null" 2>/dev/null || true
+    if [ -f "$PREFIX/etc/sysctl.d/99-asl-tcp-tuning.conf" ]; then
+        su -c "sysctl -p $PREFIX/etc/sysctl.d/99-asl-tcp-tuning.conf" 2>/dev/null || true
+    fi
+fi
 
 # Locate ASL CLI executable
 if [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ]; then
@@ -125,10 +149,10 @@ BOOT_EOF
     chmod 755 "$BOOT_SCRIPT"
     echo "[✓] Boot autostart script created at $BOOT_SCRIPT"
 
-    # Add background auto-check to .bashrc if not already present
-    if [ -f "$BASHRC" ]; then
-        if ! grep -q "ASL 24/7 Auto-Start Hook" "$BASHRC"; then
-            cat << 'BASHRC_EOF' >> "$BASHRC"
+    # Add background auto-check to .bashrc & .profile if not already present
+    touch "$BASHRC"
+    if ! grep -q "ASL 24/7 Auto-Start Hook" "$BASHRC"; then
+        cat << 'BASHRC_EOF' >> "$BASHRC"
 
 # ASL 24/7 Auto-Start Hook
 if [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
@@ -137,8 +161,20 @@ elif [ -f "$HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconn
     ((nohup bash "$HOME/ASL/bin/asl" service start </dev/null >/dev/null 2>&1 &) &) 2>/dev/null
 fi
 BASHRC_EOF
-            echo "[✓] Added shell auto-start hook to $BASHRC"
-        fi
+        echo "[✓] Added shell auto-start hook to $BASHRC"
+    fi
+
+    PROFILE="$HOME/.profile"
+    touch "$PROFILE"
+    if ! grep -q "ASL 24/7 Auto-Start Hook" "$PROFILE"; then
+        cat << 'PROFILE_EOF' >> "$PROFILE"
+
+# ASL 24/7 Auto-Start Hook
+if [ -f "$HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
+    nohup bash "$HOME/ASL/bin/asl" service start >/dev/null 2>&1 &
+fi
+PROFILE_EOF
+        echo "[✓] Added shell auto-start hook to $PROFILE"
     fi
 
     echo "[✓] ASL autostart successfully enabled! (Will run on boot & shell startup)."
@@ -149,6 +185,9 @@ asl_service_disable() {
     rm -f "$BOOT_SCRIPT"
     if [ -f "$BASHRC" ]; then
         sed -i '/# ASL 24\/7 Auto-Start Hook/,+3d' "$BASHRC" 2>/dev/null || true
+    fi
+    if [ -f "$HOME/.profile" ]; then
+        sed -i '/# ASL 24\/7 Auto-Start Hook/,+3d' "$HOME/.profile" 2>/dev/null || true
     fi
     echo "[✓] Boot autostart disabled."
 }
@@ -197,7 +236,7 @@ asl_service_status() {
     }
 
     local ac_pid ac_mem
-    ac_pid=$(pgrep -f "autoconnect-daemon\|asl-autoconnect" 2>/dev/null | head -1 || true)
+    ac_pid=$(pgrep -f "autoconnect-daemon|asl-autoconnect" 2>/dev/null | head -1 || true)
     if [ -n "$ac_pid" ]; then
         ac_mem=$(fmt_mem "$ac_pid")
         echo " Remote Daemon:  ACTIVE (Auto-Connect PID: $ac_pid, RAM: $ac_mem)"
@@ -314,19 +353,19 @@ asl_service_check() {
         fi
     fi
 
-    # 3. Oracle VPS Tunnel Check (if enabled by user state)
-    if [ -f "$prefix/tmp/asl-oracle.state" ] && ! pgrep -f "ssh.*130.210.19.7" >/dev/null 2>&1; then
-        echo "[!] Oracle VPS tunnel state ACTIVE but process down — restoring tunnel..."
-        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
+    # 4. Oracle VPS Tunnel Check (if enabled by user state)
+    if [ -f "$prefix/tmp/asl-oracle.state" ]; then
+        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ] && ! bash "$SCRIPT_DIR/desktop/remote.sh" oracle status 2>/dev/null | grep -q "RUNNING"; then
+            echo "[!] Oracle VPS tunnel state ACTIVE but process down or unresponsive — restoring tunnel..."
             bash "$SCRIPT_DIR/desktop/remote.sh" oracle start >/dev/null 2>&1 || true
             healed=$((healed + 1))
         fi
     fi
 
-    # 4. Serveo Tunnel Check (if enabled by user state)
-    if [ -f "$prefix/tmp/asl-serveo.state" ] && ! pgrep -f "serveo.net" >/dev/null 2>&1; then
-        echo "[!] Serveo tunnel state ACTIVE but process down — restoring tunnel..."
-        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
+    # 5. Serveo Tunnel Check (if enabled by user state)
+    if [ -f "$prefix/tmp/asl-serveo.state" ]; then
+        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ] && ! bash "$SCRIPT_DIR/desktop/remote.sh" serveo status 2>/dev/null | grep -q "RUNNING"; then
+            echo "[!] Serveo tunnel state ACTIVE but process down or unresponsive — restoring tunnel..."
             bash "$SCRIPT_DIR/desktop/remote.sh" serveo start >/dev/null 2>&1 || true
             healed=$((healed + 1))
         fi
@@ -352,13 +391,24 @@ asl_service_check() {
 #         fi
 #     fi
 
-    # 5. Chroot Mount Check
+    # 5. Chroot Mount & Swap Check
     if ! is_mounted; then
         echo "[!] Debian chroot unmounted — re-mounting Linux virtual filesystems..."
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
             bash "$SCRIPT_DIR/core/mount-chroot.sh" >/dev/null 2>&1 || true
             healed=$((healed + 1))
         fi
+    fi
+    local has_swap=0
+    if [ -f /proc/swaps ] && grep -qE "asl_swap|loop|zram" /proc/swaps 2>/dev/null; then
+        has_swap=1
+    elif command -v su >/dev/null 2>&1 && su -c "grep -qE 'asl_swap|loop|zram' /proc/swaps" 2>/dev/null; then
+        has_swap=1
+    fi
+    if [ -f "$SCRIPT_DIR/core/swap-manager.sh" ] && [ "$has_swap" -eq 0 ]; then
+        echo "[!] 5GB File Swap unattached — re-attaching memory optimization pool..."
+        bash "$SCRIPT_DIR/core/swap-manager.sh" setup >/dev/null 2>&1 || true
+        healed=$((healed + 1))
     fi
 
     # 6. CPU Wake-Lock Protection (prevents Android sleep dropouts)
@@ -394,6 +444,14 @@ asl_service_check() {
             fi
         fi
     done
+
+    # 9. Low Storage Space Warning Guardrail (< 1GB free)
+    local free_kb
+    free_kb=$(df -k /data 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$free_kb" ] && [ "$free_kb" -lt 1048576 ]; then
+        local free_mb=$((free_kb / 1024))
+        echo "[!] LOW STORAGE WARNING: Only ${free_mb}MB free on /data partition! Run 'asl clean' to free up space."
+    fi
 
     if [ "$healed" -eq 0 ]; then
         echo "[✓] All 24/7 background services are healthy and running."

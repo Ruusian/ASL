@@ -113,8 +113,8 @@ export DXVK_STATE_CACHE=1
 export DXVK_LOG_LEVEL=none
 export DXVK_NUM_COMPILER_THREADS=\$(nproc 2>/dev/null || echo 8)
 export DXVK_NUM_ASYNC_THREADS=4
-export BOX64_LD_LIBRARY_PATH="/usr/local/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:${BOX64_LD_LIBRARY_PATH:-}"
-export BOX32_LD_LIBRARY_PATH="/usr/local/lib/i386-linux-gnu:/usr/lib/i386-linux-gnu:/lib/i386-linux-gnu:${BOX32_LD_LIBRARY_PATH:-}"
+export BOX64_LD_LIBRARY_PATH="/usr/local/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/arm-linux-gnueabihf:${BOX64_LD_LIBRARY_PATH:-}"
+export BOX32_LD_LIBRARY_PATH="/usr/local/lib/arm-linux-gnueabihf:/usr/lib/arm-linux-gnueabihf:/lib/arm-linux-gnueabihf:/usr/lib/i386-linux-gnu:${BOX32_LD_LIBRARY_PATH:-}"
 [ -f /etc/box64.apps.conf ] && export BOX64_RCFILE=/etc/box64.apps.conf
 mkdir -p /run/user/0 /tmp/.mesa_cache 2>/dev/null || true
 EOF
@@ -381,6 +381,7 @@ setup_gaming() {
     if ! asl_chroot_exec "
         export PATH=/opt/wine-x64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
         dpkg --add-architecture i386 2>/dev/null || true
+        dpkg --add-architecture armhf 2>/dev/null || true
         CODENAME=\$(. /etc/os-release 2>/dev/null; printf %s \"\$VERSION_CODENAME\")
         [ -n \"\$CODENAME\" ] || CODENAME=trixie
         if [ -f /etc/debian_version ]; then
@@ -398,6 +399,8 @@ setup_gaming() {
             echo \"    Install DXVK DLLs into the Wine prefix later via: winetricks dxvk\"
             exit 1
         fi
+        echo \"[*] Installing optional armhf multi-arch support packages for 32-bit compatibility...\"
+        apt-get install -y libc6:armhf libstdc++6:armhf libasound2:armhf libgl1:armhf libvulkan1:armhf 2>/dev/null || true
         cat << \"EOF_DXVK\" > /etc/dxvk.conf
 # DXVK 3.0+ Configuration for ASL
 # Requires Vulkan 1.4 support from Mesa Turnip

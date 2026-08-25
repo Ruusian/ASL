@@ -28,7 +28,7 @@ protect_pid_oom() {
 
 pid_start_time() {
     [ -n "${1:-}" ] || return 1
-    asl_exec 'export PATH="/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:$PATH"; awk '\''{print $22}'\'' /proc/'"$1"'/stat 2>/dev/null' || awk '{print $22}' "/proc/$1/stat" 2>/dev/null
+    asl_exec 'export PATH="/data/data/com.termux/files/usr/bin:/system/bin:/system/xbin:$PATH"; awk '\''{sub(/^.*\)/, ""); print $20}'\'' /proc/'"$1"'/stat 2>/dev/null' 2>/dev/null || awk '{sub(/^.*\)/, ""); print $20}' "/proc/$1/stat" 2>/dev/null
 }
 
 process_matches() {
@@ -179,50 +179,38 @@ start_desktop() {
     fi
     command -v termux-x11 >/dev/null || { echo "[!] Termux:X11 client is not installed. Install it with: pkg install termux-x11"; return 1; }
     local missing=""
-    asl_chroot_exec "/usr/bin/test -x /usr/bin/xfwm4" 2>/dev/null || missing="xfwm4"
-    asl_chroot_exec "/usr/bin/test -x /usr/bin/xfdesktop" 2>/dev/null || missing="$missing${missing:+ }xfdesktop4"
-    asl_chroot_exec "/usr/bin/test -x /usr/bin/dbus-launch" 2>/dev/null || missing="$missing${missing:+ }dbus-x11"
-    asl_chroot_exec "/usr/bin/test -x /usr/bin/dbus-daemon" 2>/dev/null || missing="$missing${missing:+ }dbus"
-    asl_chroot_exec "/usr/bin/test -x /usr/bin/xfsettingsd" 2>/dev/null || missing="$missing${missing:+ }xfce4-settings"
+    if ! asl_chroot_exec "test -x /usr/bin/xfwm4 -o -x /usr/bin/xfce4-session -o -x /usr/bin/openbox" 2>/dev/null; then
+        missing="xfwm4/xfce4-session"
+    fi
     if [ -n "$missing" ]; then
-        echo "[!] Missing Debian packages: $missing"
-        echo "    Install inside chroot: apt install $missing"
+        echo "[!] Missing Debian desktop environment packages: $missing"
+        echo "    Install inside chroot: apt install xfce4 xfce4-terminal xfwm4"
         return 1
     fi
-    start_audio || return 1
+    start_audio 2>/dev/null || echo "[!] Notice: PulseAudio audio server disabled or not installed."
     start_gpu || true
     DISPLAY_ID=:0
     am start -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[*] Starting Termux:X11 display server..."
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     local xauth_file="$termux_tmp/.Xauthority"
-    if ! command -v xauth >/dev/null 2>&1; then
-        echo "[!] xauth is required for authenticated Termux:X11 access."
-        echo "    Install it with: pkg install xorg-xauth"
-        cleanup_started
-        return 1
+    local xauth_cmd=""
+    if command -v xauth >/dev/null 2>&1; then
+        xauth_cmd="xauth"
     fi
     local xauth_cookie
     xauth_cookie=$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d '[:space:]')
-    if [ -z "$xauth_cookie" ] || ! xauth -f "$xauth_file" add "$DISPLAY_ID" MIT-MAGIC-COOKIE-1 "$xauth_cookie" 2>/dev/null; then
-        echo "[!] Failed to create the X11 authentication cookie."
-        cleanup_started
-        return 1
-    fi
-    chmod 600 "$xauth_file"
-    local real_src real_dst
-    real_src=$(readlink -f "$xauth_file" 2>/dev/null || echo "$xauth_file")
-    real_dst=$(readlink -f "$DEBIANPATH/tmp/.Xauthority" 2>/dev/null || echo "$DEBIANPATH/tmp/.Xauthority")
-    if [ "$real_src" != "$real_dst" ] && ! [ "$xauth_file" -ef "$DEBIANPATH/tmp/.Xauthority" ]; then
-        if ! asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp -f '$xauth_file' '$DEBIANPATH/tmp/.Xauthority' && chmod 600 '$DEBIANPATH/tmp/.Xauthority'" 2>/dev/null; then
-            echo "[!] Failed to install the X11 authentication cookie in the chroot."
-            cleanup_started
-            return 1
-        fi
+    if [ -n "$xauth_cmd" ] && [ -n "$xauth_cookie" ]; then
+        $xauth_cmd -f "$xauth_file" add "$DISPLAY_ID" MIT-MAGIC-COOKIE-1 "$xauth_cookie" 2>/dev/null || true
+        chmod 600 "$xauth_file" 2>/dev/null || true
     fi
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
         rm -f "/data/data/com.termux/files/usr/tmp/.X11-unix/X0" "/data/data/com.termux/files/usr/tmp/.X0-lock" 2>/dev/null || true
-        termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp -auth "$xauth_file" >/dev/null 2>&1 &
+        if [ -f "$xauth_file" ] && [ -s "$xauth_file" ]; then
+            termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp -auth "$xauth_file" >/dev/null 2>&1 &
+        else
+            termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp >/dev/null 2>&1 &
+        fi
         sleep 1
     fi
     X11_PID=$(pgrep -n -f "termux-x11.*:0" || pgrep -f "termux-x11.*:[0-9]" | head -n1 || true)
@@ -282,6 +270,7 @@ start_desktop() {
     cat << LAUNCHER_EOF > "$launcher_script"
 #!/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+[ -f /usr/local/lib/libdisable_close_range.so ] && export LD_PRELOAD=/usr/local/lib/libdisable_close_range.so
 [ -f /usr/local/lib/libno_close_range.so ] && export LD_PRELOAD=/usr/local/lib/libno_close_range.so
 # Sanitize environment — remove leaked Termux/Android vars
 for v in \$(env | grep -E -o '^(TERMUX|SHELL_CMD|ANDROID|OPENAI|CLAUDE|OPENCLAUDE|COREPACK|NODE_OPTIONS|DEX2OAT|BOOTCLASS|SYSTEMSERVER|GIT_EDITOR|ASEC_|NoDefault)[A-Za-z_]*'); do
@@ -348,9 +337,10 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
 
 rm -f /tmp/xfce-keepalive 2>/dev/null
 (
-    sleep 3
+    sleep 2
     export DISPLAY=:0
     export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
+    xhost + 2>/dev/null || true
     xrandr --newmode "1280x720" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
     xrandr --addmode builtin "1280x720" 2>/dev/null || true
     xrandr --newmode "1600x900" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true
@@ -364,19 +354,29 @@ rm -f /tmp/xfce-keepalive 2>/dev/null
 
     xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/theme -s Blacklight 2>/dev/null || xfconf-query -c xfwm4 -p /general/theme -n -t string -s Blacklight 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xsettings -p /Net/IconThemeName -s bes-icon-black 2>/dev/null || xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s bes-icon-black 2>/dev/null || true
+    xfconf-query -c xsettings -p /Net/ThemeName -s Blacklight 2>/dev/null || xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Blacklight 2>/dev/null || true
+    xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Blacklight 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Blacklight 2>/dev/null || true
     xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 28 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeSize -n -t int -s 28 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/HintStyle -s hintslight 2>/dev/null || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/RGBA -s rgb 2>/dev/null || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s /usr/share/backgrounds/blacklight/Blacklight_wireframe_nostars.png 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /usr/share/backgrounds/blacklight/Blacklight_wireframe_nostars.png 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -n -t int -s 5 2>/dev/null || true
 ) &
 
 rm -f /etc/xdg/autostart/light-locker.desktop "$HOME/.config/autostart/light-locker.desktop" 2>/dev/null || true
 
-if [ -x /usr/bin/startxfce4 ]; then
+if command -v xfce4-session >/dev/null 2>&1; then
+    exec dbus-run-session xfce4-session
+elif command -v startxfce4 >/dev/null 2>&1; then
+    exec dbus-run-session startxfce4
+elif [ -x /usr/bin/startxfce4 ]; then
     exec /usr/bin/startxfce4
 elif [ -x /usr/bin/xfce4-session ]; then
     exec /usr/bin/xfce4-session
@@ -385,29 +385,28 @@ else
 fi
 LAUNCHER_EOF
     chmod 755 "$launcher_script"
-    cp -f "$launcher_script" "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
-    chmod 755 "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
+    asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp -f '$launcher_script' '$DEBIANPATH/tmp/asl-start-xfce.sh' && chmod 755 '$DEBIANPATH/tmp/asl-start-xfce.sh'" 2>/dev/null || cp -f "$launcher_script" "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
     LAUNCHER_PID=
     case "${ASL_EXEC_MODE:-root}" in
         proot|shizuku)
-            asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+            asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh >/tmp/asl-xfce-launch.log 2>&1" &
             LAUNCHER_PID=$!
             ;;
         root|*)
             if [ "$asl_target_user" = "root" ]; then
                 if asl_chroot_exec "test -x /usr/bin/setpriv" 2>/dev/null; then
-                    asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                    asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1" &
                     LAUNCHER_PID=$!
                 else
-                    asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                    asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh >/tmp/asl-xfce-launch.log 2>&1" &
                     LAUNCHER_PID=$!
                 fi
             else
                 if asl_chroot_exec "test -x /usr/bin/setpriv" 2>/dev/null; then
-                    asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid='$asl_target_user' --regid='$asl_target_user' --init-groups /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                    asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid='$asl_target_user' --regid='$asl_target_user' --init-groups /bin/bash /tmp/asl-start-xfce.sh >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1" &
                     LAUNCHER_PID=$!
                 else
-                    asl_chroot_exec "su - '$asl_target_user' -s /bin/bash /tmp/asl-start-xfce.sh" >/dev/null 2>&1 &
+                    asl_chroot_exec "su - '$asl_target_user' -s /bin/bash /tmp/asl-start-xfce.sh >/tmp/asl-xfce-launch.log 2>&1" &
                     LAUNCHER_PID=$!
                 fi
             fi
@@ -416,9 +415,9 @@ LAUNCHER_EOF
     SESSION_PID=
     SESSION_START=
     for _i in 1 2 3 4 5 6 7 8 9 10; do
-        for pid in $(asl_chroot_exec "pgrep -x xfwm4 || pgrep -x xfce4-session" 2>/dev/null); do
+        for pid in $(asl_chroot_exec "pgrep -f 'xfwm4|xfce4-session|startxfce4|asl-start-xfce'" 2>/dev/null); do
             st=$(pid_start_time "$pid")
-            if [ -n "$st" ] && (process_matches "$pid" "xfwm4" "$st" || process_matches "$pid" "xfce4-session" "$st"); then
+            if [ -n "$st" ] && (process_matches "$pid" "xfwm4" "$st" || process_matches "$pid" "xfce4-session" "$st" || process_matches "$pid" "startxfce4" "$st" || process_matches "$pid" "asl-start-xfce" "$st"); then
                 SESSION_PID="$pid"
                 SESSION_START="$st"
                 break 2
@@ -428,10 +427,15 @@ LAUNCHER_EOF
     done
     if [ -z "$SESSION_PID" ] || [ -z "$SESSION_START" ]; then
         echo "[!] XFCE desktop failed to start (session process not running)."
+        if asl_exec "test -f '$DEBIANPATH/tmp/asl-xfce-launch.log'" 2>/dev/null; then
+            echo "    --- Startup Diagnostics (/tmp/asl-xfce-launch.log) ---"
+            asl_exec "cat '$DEBIANPATH/tmp/asl-xfce-launch.log'" 2>/dev/null || true
+            echo "    -------------------------------------------------------"
+        fi
         cleanup_started
         return 1
     fi
-    if ! (process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"); then
+    if ! (process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START" || process_matches "$SESSION_PID" "startxfce4" "$SESSION_START" || process_matches "$SESSION_PID" "asl-start-xfce" "$SESSION_START"); then
         echo "[!] XFCE desktop process exited during startup."
         cleanup_started
         return 1
@@ -454,9 +458,9 @@ stop_desktop() {
     sleep 1
     chroot_pkill 9 '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64)([^A-Za-z0-9_]|$)'
     chroot_pkill TERM '(^|[^A-Za-z0-9_])(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query|picom)([^A-Za-z0-9_]|$)'
-    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
+    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START" || process_matches "$SESSION_PID" "startxfce4" "$SESSION_START" || process_matches "$SESSION_PID" "asl-start-xfce" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
-    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then asl_exec "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
+    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START" || process_matches "$SESSION_PID" "startxfce4" "$SESSION_START" || process_matches "$SESSION_PID" "asl-start-xfce" "$SESSION_START"; then asl_exec "kill -KILL $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
     chroot_pkill TERM '(^|[^A-Za-z0-9_])(asl-start-xfce|dbus-run-session|dbus-daemon)([^A-Za-z0-9_]|$)'
     chroot_pkill 9 '(^|[^A-Za-z0-9_])(asl-start-xfce|dbus-run-session|sleep)([^A-Za-z0-9_]|$)'
@@ -491,12 +495,13 @@ force_stop_desktop() {
 
 status_desktop() {
     if ! read_state; then echo "Desktop: STOPPED"; return 0; fi
-    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then
+    if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START" || process_matches "$SESSION_PID" "startxfce4" "$SESSION_START" || process_matches "$SESSION_PID" "asl-start-xfce" "$SESSION_START"; then
         echo "Desktop: RUNNING ($DISPLAY_ID)"
         process_matches "$X11_PID" "termux-x11" "$X11_START" || echo "Warning: Termux:X11 process is not running."
         return 0
     else
-        echo "Desktop: STALE STATE"
+        rm -f "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
+        echo "Desktop: STOPPED"
         return 0
     fi
 }
@@ -611,6 +616,58 @@ audio_control() {
     esac
 }
 
+novnc_control() {
+    local action="${1:-status}"
+    case "$action" in
+        start)
+            if ! is_mounted; then
+                echo "[!] Debian chroot is not mounted. Run 'asl start' first."
+                return 1
+            fi
+            echo "[*] Initializing noVNC Web Browser Desktop Bridge..."
+            if ! asl_chroot_exec "command -v x11vnc >/dev/null 2>&1 && (command -v websockify >/dev/null 2>&1 || test -d /usr/share/novnc)" 2>/dev/null; then
+                echo "[*] Installing noVNC & WebSockify dependencies inside chroot..."
+                asl_chroot_exec "apt-get update && apt-get install -y novnc websockify x11vnc xvfb" || {
+                    echo "[!] Failed to install noVNC dependencies."
+                    return 1
+                }
+            fi
+            if ! su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin pgrep -f 'x11vnc.*5900'" >/dev/null 2>&1; then
+                echo "[*] Ensuring X11 display :0 is ready..."
+                su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c '
+                    if ! pgrep -f \"termux-x11\" >/dev/null && ! pgrep -f \"Xvfb :0\" >/dev/null; then
+                        rm -f /tmp/.X0-lock /tmp/.X11-unix/X0 2>/dev/null || true
+                        Xvfb :0 -screen 0 1280x720x24 >/tmp/xvfb.log 2>&1 &
+                        sleep 1
+                        DISPLAY=:0 dbus-run-session startxfce4 >/tmp/xfce-novnc.log 2>&1 &
+                        sleep 1
+                    fi
+                    x11vnc -display :0 -noshm -nopw -rfbport 5900 -shared -forever -bg -noxdamage -repeat -o /tmp/x11vnc.log >/dev/null 2>&1 || true
+                '" >/dev/null 2>&1 || true
+                sleep 1
+            fi
+            if ! su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin pgrep -f 'websockify.*6080'" >/dev/null 2>&1; then
+                echo "[*] Launching websockify HTML5 bridge on port 6080..."
+                su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 >/tmp/websockify.log 2>&1 &" >/dev/null 2>&1 || true
+                sleep 1
+            fi
+            echo "[✓] noVNC Browser Desktop active at: http://127.0.0.1:6080/vnc.html"
+            echo "    Open in your device browser to view the XFCE desktop directly!"
+            ;;
+        stop)
+            su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c 'pkill -f \"websockify.*6080\"; pkill -f \"x11vnc.*5900\"; pkill -f \"Xvfb :0\"'" 2>/dev/null || true
+            echo "[✓] noVNC Web Desktop bridge stopped."
+            ;;
+        status|"")
+            if su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin pgrep -f 'websockify.*6080'" >/dev/null 2>&1; then
+                echo "noVNC Browser Desktop: RUNNING (http://127.0.0.1:6080/vnc.html)"
+            else
+                echo "noVNC Browser Desktop: STOPPED"
+            fi
+            ;;
+    esac
+}
+
 case "${1:-start}" in
     start|"") start_desktop ;;
     stop) stop_desktop ;;
@@ -619,7 +676,8 @@ case "${1:-start}" in
     status) status_desktop ;;
     refresh-x11) refresh_x11_state ;;
     audio) shift; audio_control "$@" ;;
+    novnc|webvnc) shift; novnc_control "$@" ;;
     sync-apps) sync_apps ;;
     launch) shift; launch_app "$@" ;;
-    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|audio|sync-apps|launch}"; exit 1 ;;
+    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|audio|novnc|sync-apps|launch}"; exit 1 ;;
 esac

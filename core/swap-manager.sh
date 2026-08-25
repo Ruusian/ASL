@@ -23,9 +23,9 @@ asl_swap_status() {
     echo "ZRAM Status:"
     if [ -d /sys/block/zram0 ]; then
         local zram_size zram_used zram_comp algo
-        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null | tr -d '[:space:]')
-        zram_used=$(cat /sys/block/zram0/mm_stat 2>/dev/null | awk '{print $3}' | tr -d '[:space:]')
-        algo=$(cat /sys/block/zram0/comp_algorithm 2>/dev/null || echo "unknown")
+        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || su -c "cat /sys/block/zram0/disksize" 2>/dev/null | tr -d '[:space:]')
+        zram_used=$(cat /sys/block/zram0/mm_stat 2>/dev/null | awk '{print $3}' || su -c "cat /sys/block/zram0/mm_stat" 2>/dev/null | awk '{print $3}' | tr -d '[:space:]')
+        algo=$(cat /sys/block/zram0/comp_algorithm 2>/dev/null || su -c "cat /sys/block/zram0/comp_algorithm" 2>/dev/null || echo "unknown")
         [[ "$zram_size" =~ ^[0-9]+$ ]] || zram_size=0
         [[ "$zram_used" =~ ^[0-9]+$ ]] || zram_used=0
 
@@ -78,53 +78,66 @@ asl_swap_status() {
 }
 
 asl_swap_setup() {
-    echo "[*] Setting up memory optimization & 5GB virtual swap pool..."
+    local target_size="${1:-5G}"
+    echo "[*] Setting up $target_size virtual swap pool & memory optimization..."
 
     local swapfile="/data/local/tmp/asl_swap.img"
-    local swap_cmd="
-        if [ ! -f '$swapfile' ]; then
-            echo '[*] Creating 5GB swap image at $swapfile...'
-            fallocate -l 5G '$swapfile' 2>/dev/null || dd if=/dev/zero of='$swapfile' bs=1M count=5120 2>/dev/null
-            chmod 600 '$swapfile'
-        fi
-
-        # Check if already active
-        if ! grep -q '$swapfile' /proc/swaps 2>/dev/null; then
-            # Direct swapon or via loop device
-            if ! swapon '$swapfile' 2>/dev/null; then
-                # Find or associate loop device
-                LOOP=\$(losetup -j '$swapfile' 2>/dev/null | cut -d: -f1 | head -n1)
-                if [ -z \"\$LOOP\" ]; then
-                    LOOP=\$(losetup -f --show '$swapfile' 2>/dev/null || true)
-                fi
-                if [ -n \"\$LOOP\" ]; then
-                    mkswap \"\$LOOP\" 2>/dev/null || true
-                    swapon \"\$LOOP\" 2>/dev/null && echo '[✓] 5GB swap pool activated on '\$LOOP || echo '[!] Failed to activate swap on '\$LOOP
-                fi
-            else
-                echo '[✓] 5GB swap pool activated'
-            fi
-        else
-            echo '[✓] 5GB swap pool already active'
-        fi
-
-        # Set swappiness (prefer keeping Linux processes in RAM)
-        sysctl -w vm.swappiness=10 2>/dev/null || true
-
-        # Protect critical processes from OOM killer
-        for pid in \$(pgrep -f '(box64|wine|pulseaudio|sshd)' 2>/dev/null || true); do
-            echo -1000 > '/proc/'\$pid'/oom_score_adj' 2>/dev/null || true
-        done
-    "
-
-    if [ "$(id -u)" -eq 0 ]; then
-        eval "$swap_cmd"
-    elif su -c "id" >/dev/null 2>&1; then
-        su -c "$swap_cmd"
-    else
-        echo "[!] Warning: swapon requires root privileges on Android."
+    if [ ! -f "$swapfile" ]; then
+        echo "[*] Creating $target_size swap image..."
+        su -c "swapoff -a 2>/dev/null || true" 2>/dev/null || swapoff -a 2>/dev/null || true
+        su -c "fallocate -l $target_size '$swapfile' || dd if=/dev/zero of='$swapfile' bs=1M count=5120" 2>/dev/null || fallocate -l $target_size "$swapfile" 2>/dev/null || dd if=/dev/zero of="$swapfile" bs=1M count=5120 2>/dev/null || true
+        su -c "chmod 600 '$swapfile' && mkswap '$swapfile'" 2>/dev/null || (chmod 600 "$swapfile" && mkswap "$swapfile") 2>/dev/null || true
+        echo "[✓] $target_size swap image created."
     fi
 
+    # Ensure only ONE loop device is attached and active for the swap image
+    local active_swap_loops
+    active_swap_loops=$(su -c "losetup -j '$swapfile'" 2>/dev/null | cut -d: -f1 || losetup -j "$swapfile" 2>/dev/null | cut -d: -f1 || true)
+    local count=0
+    for dev in $active_swap_loops; do
+        count=$((count + 1))
+        if [ $count -gt 1 ]; then
+            echo "[*] Detaching duplicate swap loop device $dev..."
+            su -c "swapoff '$dev' 2>/dev/null || true; losetup -d '$dev' 2>/dev/null || true" 2>/dev/null || true
+        fi
+    done
+
+    local is_active=0
+    if [ "$(id -u)" -eq 0 ]; then
+        grep -q "$swapfile\|loop" /proc/swaps 2>/dev/null && is_active=1
+    else
+        su -c "cat /proc/swaps" 2>/dev/null | grep -q "$swapfile\|loop" && is_active=1
+    fi
+
+    if [ "$is_active" -eq 0 ]; then
+        echo "[*] Attaching 5GB swap loop device..."
+        if [ "$(id -u)" -eq 0 ]; then
+            loopdev=$(losetup -f 2>/dev/null || true)
+            if [ -n "$loopdev" ]; then
+                losetup "$loopdev" "$swapfile" 2>/dev/null && swapon "$loopdev" 2>/dev/null && echo "[✓] 5GB Swap enabled." || echo "[!] Swap mount skipped."
+            else
+                swapon "$swapfile" 2>/dev/null && echo "[✓] 5GB Swap enabled." || echo "[!] Swap mount skipped."
+            fi
+        else
+            su -c "loopdev=\$(losetup -f) && losetup \$loopdev '$swapfile' && swapon \$loopdev" 2>/dev/null && echo "[✓] 5GB Swap enabled." || echo "[!] Swap mount skipped or active."
+        fi
+    else
+        echo "[✓] Swap already active."
+    fi
+
+    # Set swappiness (prefer keeping Linux processes in RAM)
+    echo "[*] Setting swappiness to 10..."
+    sysctl -w vm.swappiness=10 2>/dev/null || su -c "sysctl -w vm.swappiness=10" 2>/dev/null || echo "  Warning: Could not set swappiness (needs root)"
+
+    # Protect critical processes from OOM killer
+    echo "[*] Setting OOM protection for critical processes..."
+    local critical_pids
+    critical_pids=$(pgrep -f "(box64|wine|pulseaudio|sshd)" 2>/dev/null || true)
+    for pid in $critical_pids; do
+        if [ -n "$pid" ]; then
+            su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || echo -1000 > "/proc/$pid/oom_score_adj" 2>/dev/null || true
+        fi
+    done
     echo "[✓] Memory optimization complete"
 }
 

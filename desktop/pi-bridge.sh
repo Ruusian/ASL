@@ -17,6 +17,9 @@ phone_ip=""
 echo "Starting ASL phone display bridge..."
 while [ "$retry_count" -lt "$max_retries" ]; do
     phone_ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/{print $NF; exit}')
+    [ -n "$phone_ip" ] || phone_ip=$(ifconfig 2>/dev/null | awk '/inet /{print $2}' | grep -v '127.0.0.1' | head -1)
+    [ -n "$phone_ip" ] || phone_ip=$(getprop dhcp.wlan0.ipaddress 2>/dev/null)
+    [ -n "$phone_ip" ] || phone_ip=$(su -c "ip -4 route get 1.1.1.1 2>/dev/null" 2>/dev/null | awk '/src/{print $NF; exit}')
     if [ -n "$phone_ip" ]; then
         break
     fi

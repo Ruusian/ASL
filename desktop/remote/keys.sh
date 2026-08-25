@@ -4,6 +4,22 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$SCRIPT_DIR/desktop/remote/common.sh"
 
+sync_key_to_oracle() {
+    local key_data="$1"
+    if [ -f "$SCRIPT_DIR/desktop/remote/oracle.sh" ]; then
+        source "$SCRIPT_DIR/desktop/remote/oracle.sh" >/dev/null 2>&1 || true
+        load_oracle_config 2>/dev/null || true
+    fi
+    local oracle_key="${ORACLE_KEY:-$HOME/.ssh/oracle_vps.key}"
+    local oracle_host="${ORACLE_HOST:-${ASL_ORACLE_HOST:-130.210.19.7}}"
+    local oracle_user="${ORACLE_USER:-${ASL_ORACLE_USER:-ubuntu}}"
+
+    if [ -f "$oracle_key" ] && [ -n "$key_data" ]; then
+        echo "$key_data" | ssh -i "$oracle_key" -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "${oracle_user}@${oracle_host}" \
+            "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys" >/dev/null 2>&1 || true
+    fi
+}
+
 key_control() {
     local action="${1:-list}"
     local key_file="$HOME/.ssh/authorized_keys"
@@ -17,7 +33,8 @@ key_control() {
             mkdir -p "$HOME/.ssh"
             echo "$key" >> "$key_file"
             chmod 600 "$key_file"
-            echo "[✓] SSH Public Key added successfully to host."
+            sync_key_to_oracle "$key"
+            echo "[✓] SSH Public Key added successfully to host and Oracle VPS."
             ;;
         import-github|github)
             local gh_user="$2"
@@ -49,7 +66,8 @@ key_control() {
                 chmod 700 "$HOME/.ssh"
                 printf '%s' "$valid_keys" >> "$key_file"
                 chmod 600 "$key_file"
-                echo "[✓] Successfully imported SSH key(s) from GitHub user '$gh_user'."
+                sync_key_to_oracle "$valid_keys"
+                echo "[✓] Successfully imported SSH key(s) from GitHub user '$gh_user' to host and Oracle VPS."
             else
                 echo "Error: Could not fetch SSH keys for GitHub user '$gh_user' (empty, timed out, or oversized response)."
                 return 1
@@ -72,3 +90,7 @@ key_control() {
             ;;
     esac
 }
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    key_control "$@"
+fi

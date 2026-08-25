@@ -46,7 +46,7 @@ if command -v getenforce >/dev/null 2>&1; then
     se_mode=$(getenforce 2>/dev/null || echo "Unknown")
     check selinux optional "mode=$se_mode" PASS
 fi
-if [ -d "$DEBIANPATH" ] || [ -d "$PREFIX/var/lib/proot-distro/containers/asl-debian" ]; then check debian-root required "$DEBIANPATH exists" PASS; else check debian-root required "$DEBIANPATH is missing" FAIL; fi
+if [ -d "$DEBIANPATH" ] || asl_exec "test -d '$DEBIANPATH'" 2>/dev/null || [ -d "$PREFIX/var/lib/proot-distro/containers/asl-debian" ]; then check debian-root required "$DEBIANPATH exists" PASS; else check debian-root required "$DEBIANPATH is missing" FAIL; fi
 if is_mounted; then mounted=1; check chroot optional "mounted" PASS; else mounted=0; check chroot optional "not mounted; chroot checks skipped" WARN; fi
 if command -v termux-x11 >/dev/null; then check termux-x11 required "client installed" PASS; else check termux-x11 required "install with: pkg install termux-x11" FAIL; fi
 if command -v pulseaudio >/dev/null; then check pulseaudio required "client installed" PASS; else check pulseaudio required "install with: pkg install pulseaudio" FAIL; fi
@@ -54,8 +54,8 @@ if [ -d /sdcard ] && [ -w /sdcard ]; then check storage optional "/sdcard is wri
 asl_gpu_detect
 if [ -e /dev/dri ] || [ -e /dev/kgsl-3d0 ]; then check gpu optional "profile=$ASL_GPU_PROFILE; host GPU node present" PASS; else check gpu optional "profile=$ASL_GPU_PROFILE; no known host GPU node" WARN; fi
 if [ "$mounted" = 1 ]; then
-    (asl_chroot_exec "/usr/bin/test -x /usr/bin/xfwm4 -o -x /usr/bin/xfce4-session" 2>/dev/null) && check xfce optional "XFCE session / window manager available" PASS || check xfce optional "install Debian xfwm4 or xfce4-session" WARN
-    (asl_chroot_exec "/usr/bin/test -x /usr/bin/dbus-launch -a \( -S /var/run/dbus/system_bus_socket -o -S /run/dbus/system_bus_socket -o -x /usr/bin/dbus-daemon \)" 2>/dev/null) && check dbus optional "D-Bus daemon & launcher ready" PASS || check dbus optional "install Debian dbus-x11 / dbus" WARN
-    if asl_chroot_exec "/usr/bin/find /usr/share/vulkan/icd.d -type f -name '*.json' -print -quit 2>/dev/null | grep -q ." 2>/dev/null; then check vulkan optional "ICD JSON found" PASS; else check vulkan optional "no Vulkan ICD JSON found" WARN; fi
+    (asl_chroot_exec "test -x /usr/bin/xfwm4 -o -x /usr/bin/xfce4-session" 2>/dev/null) && check xfce optional "XFCE session / window manager available" PASS || check xfce optional "install Debian xfwm4 or xfce4-session" WARN
+    (asl_chroot_exec "test -x /usr/bin/dbus-launch -o -x /usr/bin/dbus-daemon" 2>/dev/null) && check dbus optional "D-Bus daemon & launcher ready" PASS || check dbus optional "install Debian dbus-x11 / dbus" WARN
+    if asl_chroot_exec "find /usr/share/vulkan/icd.d -type f -name '*.json' -print -quit 2>/dev/null | grep -q ." 2>/dev/null; then check vulkan optional "ICD JSON found" PASS; else check vulkan optional "no Vulkan ICD JSON found" WARN; fi
 fi
 exit "$fail"

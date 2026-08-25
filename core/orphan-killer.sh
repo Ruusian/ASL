@@ -11,31 +11,43 @@ fi
 asl_orphan_kill() {
     echo "[*] Running ASL Orphan Process Scan & Cleanup..."
     local rogue_pids=()
-    local pid comm cmd
+    local pid comm pcpu etime cmd
+    local my_pid="$$"
 
-    local ps_output
-    if su -c "id -u" >/dev/null 2>&1; then
-        ps_output=$(su -c "ps -ef 2>/dev/null" || ps -ef)
-    else
-        ps_output=$(ps -ef)
-    fi
+    # Find processes matching rogue patterns or high-cpu python/agent spin loops
+    while read -r pid comm pcpu etime cmd; do
+        [ -n "$pid" ] || continue
+        # Exclude self, openclaude, and hermes agent runner
+        [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
+        echo "$cmd" | grep -qE "openclaude|claude-code|hermes" && continue
 
-    # Find processes matching rogue patterns or high-cpu spin loops
-    while read -r line; do
-        [ -n "$line" ] || continue
-        # Exclude self and openclaude agent
-        echo "$line" | grep -qE "openclaude|grep|awk|orphan-killer" && continue
-
-        pid=$(echo "$line" | awk '{print $2}')
-        [ -n "$pid" ] && [[ "$pid" =~ ^[0-9]+$ ]] || continue
-        [ "$pid" -eq "$$" ] 2>/dev/null && continue
-
-        if echo "$line" | grep -qE "hermes-agent|ensurepip|render_dashboard_header" || \
-           (echo "$line" | grep -q "python" && echo "$line" | grep -q "default-pip"); then
+        # Match known stuck background spin-loop signatures (py3compile, node-gyp, stuck pip)
+        if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
+           (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 2>/dev/null ])); then
             rogue_pids+=("$pid")
-            echo "[!] Detected rogue process: PID $pid -> $line"
+            echo "[!] Detected rogue/stuck process: PID $pid ($comm, CPU: ${pcpu}%, Time: $etime) -> $cmd"
         fi
-    done <<< "$ps_output"
+    done < <(ps -eo pid,comm,pcpu,etime,args 2>/dev/null | awk 'NR>1 {pid=$1; comm=$2; pcpu=$3; etime=$4; $1=""; $2=""; $3=""; $4=""; print pid, comm, pcpu, etime, $0}')
+
+    # Also scan inside Linux chroot if mounted
+    if is_mounted 2>/dev/null; then
+        while read -r pid comm pcpu etime cmd; do
+            [ -n "$pid" ] || continue
+            [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
+            echo "$cmd" | grep -qE "openclaude|claude-code|hermes" && continue
+            if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
+               (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 2>/dev/null ])); then
+                local already=0
+                for existing in "${rogue_pids[@]}"; do
+                    [ "$existing" -eq "$pid" ] 2>/dev/null && { already=1; break; }
+                done
+                if [ "$already" -eq 0 ]; then
+                    rogue_pids+=("$pid")
+                    echo "[!] Detected rogue chroot process: PID $pid ($comm, CPU: ${pcpu}%, Time: $etime) -> $cmd"
+                fi
+            fi
+        done < <(asl_exec "ps -eo pid,comm,pcpu,etime,args" 2>/dev/null | awk 'NR>1 {pid=$1; comm=$2; pcpu=$3; etime=$4; $1=""; $2=""; $3=""; $4=""; print pid, comm, pcpu, etime, $0}')
+    fi
 
     if [ ${#rogue_pids[@]} -eq 0 ]; then
         echo "[✓] No rogue orphan processes detected."

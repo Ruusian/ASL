@@ -50,10 +50,117 @@ GAMEPAD_KEYWORDS = (
 
 
 class ASLHubWindow(Gtk.Window):
+    def apply_custom_css(self):
+        try:
+            css_provider = Gtk.CssProvider()
+            css_data = b"""
+            window {
+                background-color: #1a1b26;
+                color: #c0caf5;
+                font-family: 'Cantarell', 'Inter', 'Noto Sans', sans-serif;
+                font-size: 10.5pt;
+            }
+            headerbar {
+                background-image: linear-gradient(to bottom, #1f2335, #1a1b26);
+                border-bottom: 1px solid #3b4261;
+                padding: 6px;
+            }
+            headerbar label.title {
+                color: #7dcfff;
+                font-weight: bold;
+            }
+            headerbar label.subtitle {
+                color: #9aa5ce;
+            }
+            notebook header {
+                background-color: #16161e;
+                border-bottom: 1px solid #3b4261;
+                padding: 2px 4px 0 4px;
+            }
+            notebook tab {
+                padding: 6px 14px;
+                border-radius: 6px 6px 0 0;
+                background-color: #1f2335;
+                color: #a9b1d6;
+                margin-right: 2px;
+            }
+            notebook tab:checked {
+                background-color: #24283b;
+                color: #7aa2f7;
+                font-weight: bold;
+                border-bottom: 2px solid #7aa2f7;
+            }
+            button {
+                background-image: linear-gradient(to bottom, #24283b, #1f2335);
+                color: #c0caf5;
+                border: 1px solid #3b4261;
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-weight: 500;
+            }
+            button:hover {
+                background-image: linear-gradient(to bottom, #2ac3de, #7dcfff);
+                color: #15161e;
+                border-color: #7dcfff;
+            }
+            button.suggested-action {
+                background-image: linear-gradient(to bottom, #9ece6a, #73daca);
+                color: #15161e;
+                font-weight: bold;
+                border-color: #9ece6a;
+            }
+            button.destructive-action {
+                background-image: linear-gradient(to bottom, #f7768e, #db4b4b);
+                color: #ffffff;
+                font-weight: bold;
+                border-color: #f7768e;
+            }
+            frame {
+                border: 1px solid #3b4261;
+                border-radius: 8px;
+                background-color: #24283b;
+                padding: 4px;
+            }
+            textview text {
+                background-color: #15161e;
+                color: #7aa2f7;
+                font-family: 'JetBrains Mono', 'Monospace', monospace;
+                padding: 8px;
+            }
+            progressbar progress {
+                background-color: #7aa2f7;
+                border-radius: 4px;
+            }
+            progressbar trough {
+                background-color: #16161e;
+                border-radius: 4px;
+                border: 1px solid #3b4261;
+            }
+            entry {
+                background-color: #15161e;
+                color: #c0caf5;
+                border: 1px solid #3b4261;
+                border-radius: 6px;
+                padding: 4px 8px;
+            }
+            entry:focus {
+                border-color: #7aa2f7;
+            }
+            """
+            css_provider.load_from_data(css_data)
+            screen = Gdk.Screen.get_default()
+            if screen:
+                Gtk.StyleContext.add_provider_for_screen(
+                    screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                )
+        except Exception:
+            pass
+
     def __init__(self):
         super().__init__(title="ASL Hub - Android Subsystem for Linux")
         self.set_default_size(860, 640)
         self.set_border_width(12)
+        self.apply_custom_css()
 
         self.active_pid = None
         self.active_cmd = None
