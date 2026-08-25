@@ -1,4 +1,4 @@
-# ASL Gaming & Wine Isolation Guide
+# ASL Gaming & Wine Acceleration Guide
 
 ## Execution Environment & Hardware Acceleration
 ASL provides Direct3D 9/10/11/12 gaming acceleration across Root (`su`), Shizuku (`rish`), and PRoot execution modes:
@@ -7,34 +7,31 @@ ASL provides Direct3D 9/10/11/12 gaming acceleration across Root (`su`), Shizuku
 
 ---
 
-## Wine Prefix & Directory Isolation Topology
-ASL isolates Wine applications to prevent DLL conflicts and corrupted game configurations across titles.
+## Wine Prefix & Execution Topology
+ASL manages Wine 64-bit applications under Box64 dynamic binary translation.
 
 ### Default Prefix Routing
-- **Default System Prefix:** `/root/.wine-x64`
-- **Isolated Game Prefixes:** `/root/.wine-prefixes/<GameDirectoryName>`
+- **Default System Prefix:** `/root/.wine` (or configurable via `WINEPREFIX`)
 
-When an `.exe` file inside `/opt/games/<GameName>/...` or `/sdcard/Games/<GameName>/...` is launched:
-1. `asl-wine-launch` extracts the root folder name of the game (`<GameName>`).
-2. Checks if a local `.wineprefix` or `wineprefix.txt` override file exists in the executable's directory.
-3. Automatically sets `WINEPREFIX=/root/.wine-prefixes/<GameName>` and initializes the prefix if missing.
-
-### Custom Prefix Overrides
-To force a game or application into a custom prefix, create a file named `.wineprefix` in the game directory containing the absolute path:
+When executing an application:
 ```bash
-echo "/root/.wine-prefixes/MyCustomGame" > /opt/games/MyGame/.wineprefix
+# Launch any Windows .exe directly
+asl game /sdcard/Games/MyGame/game.exe
+
+# Or specify a custom prefix
+WINEPREFIX=/root/.wine-custom asl game /sdcard/Games/MyGame/game.exe
 ```
 
 ---
 
 ## Box64 Dynarec Precision Tuning Profile
-Toggle dynamic recompilation precision presets between high frame rate and crash recovery:
+Toggle dynamic recompilation precision presets between high frame rate and compatibility:
 
 ```bash
-# Maximize performance (Fast mode)
+# Maximize performance (Fast mode: FASTROUND=1, FASTNAN=1, X87DOUBLE=0)
 asl game precision fast
 
-# High Precision compatibility mode (Safe mode for float/NaN sensitive titles)
+# High Precision compatibility mode (Safe mode: FASTROUND=0, FASTNAN=0, X87DOUBLE=1)
 asl game precision safe
 
 # Inspect active dynarec precision profile
@@ -43,66 +40,94 @@ asl game precision status
 
 ---
 
-## DXVK & VKD3D-Proton Setup
+## DXVK & Vulkan Translation Setup
 DXVK translates Direct3D 9, 10, and 11 calls directly to Vulkan. VKD3D-Proton translates Direct3D 12 calls to Vulkan.
 
-### Enabling DXVK for a Prefix
+### Enabling DXVK Configuration
 ```bash
-# Enable DXVK for default prefix
+# Configure DXVK async translation in /etc/dxvk.conf
 asl dxvk enable
 
-# Enable DXVK for a specific game prefix
-WINEPREFIX=/root/.wine-prefixes/MyGame asl dxvk enable
-```
-
-### DXVK Status Check
-```bash
+# Check DXVK configuration status
 asl dxvk status
 ```
 
 ---
 
-## AMD FSR Fullscreen & Resolution Scaling
-ASL includes built-in AMD FidelityFX Super Resolution (FSR) support via `asl-wine-launch`.
-
-- **Default Resolution:** `1280x720` upscaled to native display.
-- **Custom Resolution:** Pass `ASL_RES` prior to running:
-  ```bash
-  ASL_RES=1600x900 asl game /opt/games/MyGame/game.exe
-  ```
-
----
-
-## Steam & x86_64 Launcher Integration
-Run x86_64 launchers (Steam, Heroic, GOG) using optimized Box64 Dynarec flags.
+## Wine Engine Switching (`asl wine-version`)
+Switch the active Wine binary between Debian system-wine and Proton-GE:
 
 ```bash
-# Launch Steam environment
-asl steam
+# Check current active Wine engine
+asl wine-version status
 
-# Launch specific Windows setup or launcher package
-asl steam /sdcard/SteamSetup.exe
+# Switch to Proton-GE custom engine
+asl wine-version set proton-ge
+
+# Switch to standard Debian system Wine
+asl wine-version set system-wine
+
+# Install latest Proton-GE release
+asl wine-version install proton-ge
 ```
 
 ---
 
-## Game Save & Prefix Backup System (`asl-backup`)
-Back up saves and AppData directly to compressed `.tar.gz` archives in `/sdcard/ASL_Backups`.
+## Offline Wine Mono & Gecko Bundles (`asl wine-bundle`)
+Download and package offline MSI installers for .NET Framework and MSHTML runtimes:
 
-### Backup Commands
 ```bash
-# Back up default AppData
-asl backup save default
+# Install offline MSI bundles
+asl wine-bundle install
 
-# Back up a specific game prefix
-asl backup save MyGame
+# Check bundle status
+asl wine-bundle status
 
-# Back up all Wine prefixes
-asl backup save all
+# Clean bundles
+asl wine-bundle clean
+```
 
-# List existing backups
-asl backup list
+---
 
-# Restore a backup archive
-asl backup restore /sdcard/ASL_Backups/asl_backup_MyGame_20260817_150000.tar.gz
+## Bluetooth & Wireless Gamepad Passthrough (`asl gamepad`)
+Synchronize Android `/dev/input/event*` wireless and USB controllers directly into the subsystem:
+
+```bash
+# Detect connected controllers
+asl gamepad status
+
+# Sync gamepad nodes into chroot /dev/input
+asl gamepad sync
+
+# Interactive input calibration test
+asl gamepad test
+```
+
+---
+
+## Real-Time Performance HUD Telemetry (`asl hud`)
+Toggle MangoHud and DXVK_HUD telemetry overlay displaying FPS, CPU/GPU temperatures, and RAM/VRAM:
+
+```bash
+# Enable performance overlay
+asl hud on
+
+# Disable performance overlay
+asl hud off
+
+# Toggle overlay state
+asl hud toggle
+```
+
+---
+
+## Subsystem Backup & Restore (`asl backup`)
+Back up and restore your complete Linux subsystem rootfs:
+
+```bash
+# Create full compressed backup of Debian rootfs
+asl backup
+
+# Restore rootfs from backup archive
+asl restore /sdcard/Download/asl-backup.tar.xz
 ```

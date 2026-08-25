@@ -187,8 +187,8 @@ asl
 | :--- | :--- | :--- |
 | **Interactive Dashboard** | `asl` / `asl dashboard` | Open 74-column DEC 1049 alternate-screen buffer TUI console |
 | **System Overview** | `asl overview` | Print concise live system status and remote endpoint table |
-| **Subsystem Start** | `asl start [--force]` | Mount isolated Linux subsystem rootfs |
-| **Subsystem Stop** | `asl stop [--lazy]` | Safely terminate processes and unmount all bind mounts |
+| **Subsystem Start** | `asl start` | Mount isolated Linux subsystem rootfs and virtual filesystems |
+| **Subsystem Stop** | `asl stop` | Safely terminate processes and unmount all bind mounts |
 | **Subsystem Status** | `asl status` | Inspect mount points, process count, rootfs size, and uptime |
 | **Interactive Shell** | `asl shell [user]` | Drop into subsystem rootfs interactive bash shell |
 | **Command Execution** | `asl exec <command>` | Execute single command directly inside Linux subsystem |
@@ -199,26 +199,28 @@ asl
 | **GTK3 Control Center**| `asl hub` / `asl gui` | Launch ASL Hub GTK3 desktop control center |
 | **Wine Application** | `asl game <path_to_exe>` | Execute Windows `.exe` via Box64 + Wine64 |
 | **Dynarec Precision** | `asl game precision [safe\|fast]` | Switch Box64 dynarec profile (FPS vs Float Precision) |
-| **DirectX Overrides** | `asl dxvk [enable\|status]` | Configure DXVK (D3D9-11) & VKD3D (D3D12) Vulkan overrides |
-| **Wine Bundles** | `asl wine-bundle [install]` | Package offline Wine Mono (.NET) & Gecko MSI bundles |
-| **Wine Manager** | `asl wine-version [set\|status]` | Switch between Debian system Wine and Proton-GE engines |
+| **DirectX Overrides** | `asl dxvk [enable\|status]` | Configure DXVK Direct3D async translation |
+| **Wine Bundles** | `asl wine-bundle [install\|status\|clean]` | Package offline Wine Mono (.NET) & Gecko MSI bundles |
+| **Wine Manager** | `asl wine-version [set\|status\|install]` | Switch between Debian system Wine and Proton-GE engines |
 | **Gamepad Passthrough**| `asl gamepad [sync\|test]` | Synchronize host Bluetooth/USB evdev gamepads into chroot |
-| **Performance HUD** | `asl hud [on\|off\|status]` | Toggle MangoHud & DXVK_HUD telemetry overlay |
-| **Thermal Diagnostics**| `asl thermal` | Monitor battery and CPU/GPU thermal zone sensors |
-| **Desktop Session** | `asl desktop [start\|stop\|status]`| Start/stop hardware-accelerated XFCE4 desktop on Termux:X11 |
-| **Remote Dispatcher** | `asl remote [status\|all]` | Inspect or start all remote access bridges |
+| **Performance HUD** | `asl hud [on\|off\|toggle\|status]` | Toggle MangoHud & DXVK_HUD telemetry overlay |
+| **Thermal Diagnostics**| `asl thermal [watch]` | Monitor battery and CPU/GPU thermal zone sensors |
+| **Desktop Session** | `asl desktop [start\|stop\|restart]`| Start/stop hardware-accelerated XFCE4 desktop on Termux:X11 |
+| **Remote Dispatcher** | `asl remote [status\|all\|gui]` | Inspect or start all remote access bridges |
 | **LAN SSH Server** | `asl remote lan [start\|stop]` | Control LAN SSH server (port 8022) |
-| **Oracle VPS Relay** | `asl remote oracle [start\|stop]` | Control Oracle VPS persistent reverse SSH tunnel |
+| **Oracle VPS Relay** | `asl remote oracle [setup\|start\|stop]` | Control dedicated VPS persistent reverse SSH tunnel |
 | **Serveo Tunnel** | `asl remote serveo [start\|stop]` | Control Serveo jump-host reverse tunnel |
 | **Ngrok Tunnel** | `asl remote ngrok [start\|stop]` | Control Ngrok multi-token tunnel |
 | **24/7 Autoconnect** | `asl remote autoconnect` | Manage background auto-reconnect tunnel daemon |
 | **Service Watchdog** | `asl service [start\|stop\|status]`| Manage 24/7 background service manager and TCP tuning |
 | **OmniRoute Gateway** | `asl omniroute [start\|stop\|status]`| Manage root-isolated OmniRoute AI gateway (port 20128) |
-| **Virtual Swap Pool** | `asl swap [status\|create\|auto]` | Manage 4GB virtual swap pool (5GB upper limit) |
-| **Storage Cleaner** | `asl clean [all\|apt\|tmp]` | Purge package archives, `/tmp`, and shader caches |
-| **Integrity Repair** | `asl repair [all\|mounts]` | Self-healing recovery for mounts, locks, and permissions |
+| **Virtual Swap Pool** | `asl swap [status\|setup\|optimize\|cleanup]` | Manage virtual swap pool (5GB upper limit) |
+| **Storage Cleaner** | `asl clean [status\|all\|apt\|tmp\|cache]` | Purge package archives, `/tmp`, and shader caches |
+| **Integrity Repair** | `asl repair [all\|mounts\|permissions\|dpkg]` | Self-healing recovery for mounts, locks, and permissions |
 | **Pre-flight Doctor** | `asl doctor` | Comprehensive environment pre-flight diagnostics |
-| **Android Host Bridge**| `asl wakelock\|open\|clip\|toast` | WakeLock, default app opener, clipboard, notifications |
+| **Declarative Config**| `asl config [show\|init\|get\|set]` | Manage system settings in `/etc/asl.conf` |
+| **Path Translation** | `asl path [-u\|-a\|-c\|-m] <path>` | Translate paths between Android host and Linux container |
+| **Android Host Bridge**| `asl wakelock\|open\|clip\|toast\|shortcut` | WakeLock, default app opener, clipboard, notifications |
 
 ---
 
@@ -229,7 +231,7 @@ All in-depth architectural specifications, hardware tuning guides, and developer
 | Document | Purpose & Description |
 | :--- | :--- |
 | 🏗️ **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** | Technical subsystem architecture, 3-tier execution model, `os.posix_spawn` invariant, runtime separation. |
-| 🎮 **[`docs/GAMING_GUIDE.md`](docs/GAMING_GUIDE.md)** | Direct3D Vulkan gaming, Box64 dynarec precision, Turnip/Zink drivers, MangoHud, Steam, prefix isolation. |
+| 🎮 **[`docs/GAMING_GUIDE.md`](docs/GAMING_GUIDE.md)** | Direct3D Vulkan gaming, Box64 dynarec precision, Turnip/Zink drivers, MangoHud, Wine configuration. |
 | ⚡ **[`docs/PERFORMANCE_TUNING.md`](docs/PERFORMANCE_TUNING.md)** | Kernel sysctl TCP tuning, CPU governor boost, PulseAudio low-latency buffers, virtual swap management. |
 | 🛠️ **[`docs/CLI_AND_UTILITIES.md`](docs/CLI_AND_UTILITIES.md)** | Complete CLI subcommand syntax reference, helper scripts, installer flags, environment variables. |
 | 🗺️ **[`docs/ROADMAP_AND_TRACKING.md`](docs/ROADMAP_AND_TRACKING.md)** | Feature tracking, completed milestones, architectural invariants, future development roadmap. |

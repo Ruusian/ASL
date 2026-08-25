@@ -8,19 +8,17 @@ This guide will help you get up and running with Android Subsystem for Linux (AS
 
 Before installing ASL, ensure you have:
 
-- ✅ **Android Device** with root access (Magisk, KernelSU, or APatch)
+- ✅ **Android Device** with root access (Magisk, KernelSU, or APatch), Shizuku, or standard Termux
 - ✅ **Termux** installed from F-Droid or GitHub Releases
-- ✅ **Root Manager** with working `su` command
-- ✅ **Storage Space** - At least 5GB free for Debian rootfs + applications
+- ✅ **Storage Space** - At least 5GB free for Linux subsystem rootfs + applications
 
 ### Quick Prerequisites Check
 
 Run this in Termux to verify everything:
 
 ```bash
-su -c "id | grep -q 'uid=0' && echo '✓ Root access OK' || echo '✗ Root access FAILED'"
-termux-storage-get  # Check storage access
-which proot-distro  # Check if proot-distro is installed
+su -c "id | grep -q 'uid=0' && echo '✓ Root access OK' || echo '✗ Root access not detected'"
+which termux-setup-storage
 ```
 
 ---
@@ -46,16 +44,12 @@ bash install.sh
 
 ### Step 2: Choose Rootfs Edition
 
-During installation, you'll be prompted:
+During installation, you can select the Linux distribution flavor:
 
-```
-Select Debian edition:
-  1) Modded (Pre-configured for gaming/desktop) [RECOMMENDED]
-  2) Standard (Clean Debian Trixie)
-  3) Custom (Advanced)
-```
-
-**For beginners**: Choose **1 (Modded)** — includes Turnip Vulkan, Box64, Wine, XFCE.
+- **Debian Modded [RECOMMENDED]**: Turnip Mesa Vulkan, Box64, Wine64, XFCE4 desktop pre-configured.
+- **Clean Debian Trixie Base**: Minimal official Debian Trixie arm64 rootfs.
+- **Ubuntu 24.04 LTS Base**: Clean Ubuntu Noble arm64 base.
+- **Arch / Kali / Alpine Base**: Alternative Linux distributions.
 
 ### Step 3: Verify Installation
 
@@ -67,13 +61,13 @@ asl doctor
 
 Expected output:
 ```
-root           PASS  su grants root access
-debian-root    PASS  /data/local/tmp/chrootDebian found
-chroot         WARN  not mounted yet (run: asl start)
-termux-x11     PASS  installed
+exec-mode      PASS  su grants root access (ROOT mode)
+debian-root    PASS  /data/local/tmp/chrootDebian exists
+chroot         WARN  not mounted; chroot checks skipped (run: asl start)
+termux-x11     PASS  client installed
 pulseaudio     PASS  client installed
 storage        PASS  /sdcard is writable
-gpu            PASS  profile=turnip; Adreno GPU detected
+gpu            PASS  profile=turnip; host GPU node present
 ```
 
 ---
@@ -86,16 +80,19 @@ gpu            PASS  profile=turnip; Adreno GPU detected
 asl
 ```
 
-This opens the interactive TUI dashboard with 23+ commands and real-time system stats.
+This opens the interactive 74-column alternate-screen buffer TUI dashboard with real-time system stats.
 
 **Key hotkeys**:
-- `s` - Start/mount chroot
-- `x` - Stop/unmount chroot  
-- `d` - Start XFCE desktop
-- `g` - Run Windows .exe (via Wine/Box64)
+- `s` - Start / mount subsystem
+- `x` - Stop / unmount subsystem  
+- `d` - Start XFCE desktop session (Termux:X11)
+- `g` - Launch Windows executable / Game Hub
 - `p` - Process manager
-- `t` - Thermal monitor
-- `h` - Help
+- `t` - Thermal & battery monitor
+- `h` - Toggle HUD telemetry overlay
+- `v` - Remote bridge endpoints
+- `c` - Clean storage & caches
+- `r` - Integrity self-repair
 - `q` - Quit
 
 ### Workflow 2: Mount Debian & Enter Shell
@@ -104,7 +101,7 @@ This opens the interactive TUI dashboard with 23+ commands and real-time system 
 # Start chroot (mount Debian)
 asl start
 
-# Enter root shell inside chroot
+# Enter root shell inside subsystem
 asl shell
 
 # Now you're in Linux!
@@ -120,9 +117,6 @@ asl exec "uname -a"
 
 # Run with arguments
 asl exec "gcc --version"
-
-# Run interactive command
-asl shell
 ```
 
 ### Workflow 4: Start Desktop Environment
@@ -131,42 +125,40 @@ asl shell
 # Start XFCE desktop with Termux:X11
 asl desktop start
 
-# Access via VNC or SSH
-asl remote ssh
+# Check remote connection endpoints
+asl remote status
 
 # Stop desktop when done
 asl desktop stop
 ```
 
-### Workflow 5: Run Windows Games
+### Workflow 5: Run Windows Applications & Games
 
 ```bash
-# Start chroot
+# Start subsystem
 asl start
 
-# List installed games
-wine notepad
-
-# Run a game (example: Ninesolls)
-asl game ninesols
+# Open interactive Gaming & Host Apps Hub
+asl game
 
 # Or run any .exe directly
-asl exec "wine /sdcard/Games/MyGame.exe"
+asl game /sdcard/Games/MyGame/game.exe
 ```
 
 ---
 
 ## 📚 Common Commands
 
-### Chroot Management
+### Subsystem Management
 
 ```bash
 asl start              # Mount Debian chroot
-asl stop               # Unmount chroot
-asl status             # Show chroot status
+asl stop               # Unmount subsystem
+asl status             # Show subsystem status
 asl shell [user]       # Enter interactive shell (default: root)
 asl exec <cmd>         # Run single command
 asl install <pkg...>   # Install Debian packages
+asl search <query>     # Search available packages
 ```
 
 ### Snapshots & Backups
@@ -176,29 +168,31 @@ asl snapshot create daily    # Create snapshot named "daily"
 asl snapshot list            # List all snapshots
 asl snapshot restore daily   # Restore from snapshot
 asl snapshot delete daily    # Delete snapshot
-asl backup create            # Full chroot backup
-asl backup list              # List backups
+asl snapshot export daily    # Export to .tar.zst archive
+asl backup                   # Full chroot backup
 ```
 
-### Desktop & Remote
+### Desktop & Resolution
 
 ```bash
 asl desktop start      # Start XFCE + Termux:X11
 asl desktop stop       # Stop desktop
 asl theme dark         # Set dark theme
-asl resolution 1920x1080  # Set resolution
-asl remote ssh         # Enable SSH access
-asl remote vnc         # Enable VNC access
+asl resolution 1080p   # Set 1080p resolution
+asl remote lan start   # Start LAN SSH server
+asl remote oracle start# Connect to dedicated VPS tunnel
 ```
 
 ### Gaming & Performance
 
 ```bash
-asl game [name]        # Launch pre-configured game
-asl mode gaming        # Set gaming performance profile
-asl mode balanced      # Set balanced mode
-asl mode power-save    # Set power save mode
-asl boost              # Run optimization script
+asl game               # Launch gaming hub
+asl game /path/app.exe # Run Windows .exe
+asl game precision fast# Set Box64 max FPS profile
+asl game precision safe# Set Box64 safe precision profile
+asl mode gaming        # Set CPU governor to performance
+asl mode balanced      # Set CPU governor to balanced
+asl hud on             # Enable MangoHud / DXVK HUD overlay
 ```
 
 ### Diagnostics
@@ -207,18 +201,19 @@ asl boost              # Run optimization script
 asl doctor             # Health check
 asl overview           # Show system overview
 asl thermal            # Monitor thermal/battery
-asl ps                 # List running chroot processes
-asl log                # View system logs
+asl thermal watch      # Live thermal monitor
+asl ps                 # Process manager
 ```
 
-### Android Integration
+### Android Host Integration
 
 ```bash
-asl android aid        # Map Android ID groups
+asl aid                # Map Android ID groups
 asl wakelock on/off    # CPU wake lock
-asl open <file>        # Open file in Android app
+asl open <file>        # Open file in Android host app
 asl clip copy/paste    # Clipboard bridge
 asl toast "Message"    # Android notification
+asl shortcut <app>     # Create Android home screen shortcut
 ```
 
 ---
@@ -227,30 +222,26 @@ asl toast "Message"    # Android notification
 
 ### Environment Variables
 
-Set in `/etc/profile` or `~/.bashrc`:
+Set in container `/etc/profile` or host `~/.bashrc`:
 
 ```bash
-# GPU profile (turnip, zink, virgl, swiftshader)
-export ASL_GPU=turnip
+# Display server
+export DISPLAY=:0
 
-# Box64 dynarec CPU option
-export BOX64_DYNAREC_CPU=cortex-a76
+# PulseAudio TCP server
+export PULSE_SERVER=127.0.0.1:4713
 
 # Wine prefix
-export WINEPREFIX=~/.wine
-
-# Mesa debug output
-export MESA_DEBUG=silent
+export WINEPREFIX=/root/.wine
 ```
 
 ### Files & Locations
 
 ```
-~/.config/asl/                    # ASL config directory
-~/.local/state/asl/               # Runtime state
-/data/local/tmp/chrootDebian      # Debian rootfs
+/data/local/tmp/chrootDebian      # Debian rootfs container
 /data/local/tmp/.asl-snapshots/   # Snapshot storage
-~/.wine/                          # Wine prefix
+$PREFIX/etc/asl_exec_mode         # Execution mode configuration
+$PREFIX/etc/asl.conf              # System declarative configuration
 /sdcard/                          # Android storage (shared)
 ```
 
@@ -264,53 +255,49 @@ export MESA_DEBUG=silent
 # Check what's wrong
 asl doctor
 
-# Common fixes
-asl stop              # Force stop
-rm -rf /data/local/tmp/.asl-snapshots  # Clear locks
-asl start --force     # Start with force flag
+# Force stop and clean stale mounts
+asl repair mounts
 
-# If still stuck
-su -c "umount -l /data/local/tmp/chrootDebian"
+# Re-attempt startup
+asl start
 ```
 
-### Performance Issues
+### Performance Optimization
 
 ```bash
-# Check CPU/GPU profile
-asl overview
+# Set gaming profile (CPU governor performance)
+asl mode gaming
 
-# Optimize system
-asl boost             # Run optimization script
-asl mode gaming       # Set gaming mode
+# Setup 5GB virtual swap pool
+asl swap setup 5G
 
-# Monitor in real-time
-asl thermal           # Watch temps
-watch -n1 'asl ps'    # Watch processes
+# Optimize memory and drop caches
+asl swap optimize
+
+# Monitor temperatures
+asl thermal watch
 ```
 
-### Graphics Not Working
+### Graphics Diagnostics
 
 ```bash
 # Check GPU detection
-asl doctor | grep gpu
+asl doctor
 
-# Test graphics
-asl shell
-glxinfo | grep "OpenGL"
-vkcube               # Vulkan test
-
-# Fallback to VirGL if Turnip doesn't work
-export ASL_GPU=virgl
+# Run GPU and Vulkan benchmark
+asl game benchmark
 ```
 
-### Desktop Crashes
+### Desktop Issues
 
 ```bash
 # Stop desktop cleanly
 asl desktop stop
 
-# Restart X11 server
-killall -9 Xwayland  # or Xvfb depending on setup
+# Refresh Termux:X11 socket
+asl desktop refresh-x11
+
+# Restart desktop session
 asl desktop start
 ```
 
@@ -318,17 +305,16 @@ asl desktop start
 
 ## 📖 Next Steps
 
-- **Read [TROUBLESHOOTING.md](TROUBLESHOOTING.md)** for common issues
-- **Check [CONTRIBUTING.md](CONTRIBUTING.md)** to help improve ASL
-- **Review [TEST_RESULTS.md](TEST_RESULTS.md)** for v1.1 release validation
-- **Explore [.instructions.md](.instructions.md)** for advanced agent context
+- **Read [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md)** for complete CLI syntax
+- **Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for technical architecture
+- **Read [docs/GAMING_GUIDE.md](docs/GAMING_GUIDE.md)** for Box64 & Vulkan setup
+- **Read [TROUBLESHOOTING.md](TROUBLESHOOTING.md)** for common issues & solutions
 
 ---
 
 ## 💬 Support & Community
 
 - 🐛 **Report Bugs**: GitHub Issues at https://github.com/Ruusian/ASL/issues
-- 💡 **Suggest Features**: GitHub Discussions
 - 📧 **Contact**: abhiksarkar00@gmail.com
 
 ---

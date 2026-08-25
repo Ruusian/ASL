@@ -1,13 +1,13 @@
 # ASL Command Reference
 
-Complete reference for all ASL commands and their usage.
+Complete reference for all ASL commands and their real-world usage.
 
 ---
 
 ## 🎯 Dashboard & Navigation
 
 ### `asl`
-Launch interactive dashboard.
+Launch interactive 74-column DEC Mode 1049 alternate-screen buffer dashboard.
 
 ```bash
 asl                 # Open dashboard
@@ -15,19 +15,19 @@ asl dashboard       # Same as above
 asl menu            # Alias for dashboard
 ```
 
-**Keyboard Shortcuts**:
-- `s` - Start/mount chroot
-- `x` - Stop/unmount
-- `a` - Android AID setup
-- `g` - Run Windows .exe
-- `d` - Start desktop
-- `v` - Remote SSH/VNC
+**Interactive Hotkeys**:
+- `s` - Start / mount subsystem
+- `x` - Stop / unmount subsystem
+- `d` - Start desktop session (Termux:X11)
+- `g` - Launch Windows executable / Game Hub
+- `h` - Toggle performance HUD overlay
+- `v` - Remote bridges & tunnel endpoints
 - `p` - Process manager
-- `t` - Thermal monitor
-- `h` - Help
-- `r` - Refresh
-- `w` - Watch live
-- `q` - Quit
+- `t` - Thermal & battery monitor
+- `w` - Live watchdog monitor
+- `c` - Clean container cache & storage
+- `r` - System integrity self-repair
+- `q` - Quit dashboard
 
 ---
 
@@ -62,333 +62,216 @@ Preset options available in wizard:
 
 ---
 
-## 🐧 Chroot Management
+## 🐧 Subsystem Management
 
 ### `asl start`
-Start and mount Debian chroot.
+Mount Debian chroot and virtual filesystems (`/dev`, `/proc`, `/sys`, `/sdcard`, `/tmp`).
 
 ```bash
-asl start                           # Start chroot
-asl start --timeout 120             # Set custom timeout (seconds)
-asl start --force                   # Force start even if stuck
-asl start --verbose                 # Show detailed output
+asl start                           # Start and mount subsystem
 ```
-
-**Returns**:
-- `0` - Success
-- `1` - Failed (check `asl doctor`)
-- `2` - Already mounted
 
 ---
 
 ### `asl stop`
-Stop and unmount chroot.
+Gracefully terminate desktop and subsystem processes, then unmount all bind mounts in reverse order.
 
 ```bash
-asl stop                            # Stop chroot
-asl stop --force                    # Force unmount
-asl stop --lazy                     # Lazy unmount (don't wait)
-asl stop --kill-all                 # Kill all processes before unmount
+asl stop                            # Prompt confirmation and stop subsystem
 ```
-
-**What it does**:
-1. Sends SIGTERM to running processes
-2. Waits for graceful shutdown
-3. Sends SIGKILL if needed
-4. Unmounts all bind mounts in reverse order
 
 ---
 
 ### `asl status`
-Show chroot status and statistics.
+Show subsystem mount status, container size, location, and active sub-mounts.
 
 ```bash
-asl status                          # Show detailed status
-asl status --json                   # Output as JSON
-asl status --brief                  # Compact output
+asl status                          # Show status overview
 ```
-
-**Output includes**:
-- Mounted/unmounted state
-- Process count
-- Rootfs size
-- Mount points
-- Uptime (if running)
 
 ---
 
 ### `asl shell [user]`
-Enter interactive shell inside chroot.
+Enter interactive bash login shell inside subsystem rootfs.
 
 ```bash
 asl shell                           # Enter as root
-asl shell user                      # Enter as specific user
-asl shell --                        # Pass remaining args to shell
-asl shell < script.sh               # Run script in chroot shell
-```
-
-**Examples**:
-```bash
-asl shell                           # Get root shell
-asl shell << 'EOF'
-apt-get update
-apt-get install -y build-essential
-gcc --version
-EOF
+asl shell user                      # Enter as specific container user
 ```
 
 ---
 
 ### `asl exec <command>`
-Execute single command inside chroot.
+Execute a single command directly inside the subsystem container.
 
 ```bash
-asl exec "command"                  # Run command
-asl exec "cmd1 && cmd2"             # Multiple commands
-asl exec -- "cmd --with-dashes"     # Handle arguments properly
-```
-
-**Examples**:
-```bash
-asl exec "apt-get update"
-asl exec "gcc -v"
-asl exec "python3 script.py"
-asl exec "bash /sdcard/setup.sh"
+asl exec "uname -a"                 # Run command
+asl exec "apt-get update"           # Update package lists
+asl exec "python3 script.py"        # Run Python script
 ```
 
 ---
 
-### `asl install [packages]`
-Install Debian packages using apt.
+### `asl install <packages...>`
+Install Debian packages inside the subsystem using APT.
 
 ```bash
 asl install build-essential         # Install single package
-asl install git curl wget           # Install multiple
-asl install --update                # Update package list first
-asl install --upgrade               # Upgrade all packages
+asl install git curl wget           # Install multiple packages
 ```
 
-**Aliases**:
-- `asl pkg install` - Same as above
-- `asl apt install` - Alias
+---
+
+### `asl search <query>`
+Search available Debian APT packages in repository cache.
+
+```bash
+asl search python3                  # Search packages
+```
 
 ---
 
 ## 📸 Snapshots & Backups
 
-### `asl snapshot create <name>`
-Create point-in-time snapshot.
+### `asl snapshot`
+Point-in-time container snapshot management.
 
 ```bash
-asl snapshot create backup-v1       # Create snapshot
-asl snapshot create daily-$(date +%Y%m%d)  # Timestamped
-```
-
-**Naming rules**:
-- Alphanumeric, underscore, dash only
-- No spaces or special characters
-- Max 50 characters
-
----
-
-### `asl snapshot list`
-List all snapshots.
-
-```bash
-asl snapshot list                   # Show all
-asl snapshot list --json            # JSON format
-asl snapshot list --size            # Show sizes
-```
-
-**Output**:
-```
-Snapshots:
-  backup-v1       [2.8 GB] Created: 2026-08-16 10:30
-  gaming-setup    [3.1 GB] Created: 2026-08-15 14:22
-  daily-20260816  [2.9 GB] Created: 2026-08-16 23:59
+asl snapshot list                   # List all saved snapshots
+asl snapshot create <name>          # Create snapshot of current rootfs
+asl snapshot restore <name>         # Restore rootfs from snapshot
+asl snapshot delete <name>          # Delete snapshot
+asl snapshot export <name> [file]   # Export snapshot to compressed archive (.tar.zst / .tar.xz)
+asl snapshot import <file> <name>   # Import snapshot from compressed archive
 ```
 
 ---
 
-### `asl snapshot restore <name>`
-Restore from snapshot.
+### `asl backup` & `asl restore`
+Full rootfs backup and restoration.
 
 ```bash
-asl snapshot restore backup-v1      # Restore snapshot
-asl snapshot restore --force         # Force restore
-asl snapshot restore --backup        # Create backup before restore
-```
-
-**What it does**:
-1. Stops running chroot
-2. Swaps current with snapshot
-3. Verifies integrity
-4. Restarts chroot
-
----
-
-### `asl snapshot delete <name>`
-Delete a snapshot.
-
-```bash
-asl snapshot delete backup-v1       # Delete snapshot
-asl snapshot delete --all           # Delete all (dangerous!)
-asl snapshot delete --confirm       # Skip confirmation
+asl backup                          # Create full compressed backup of Debian rootfs
+asl restore [path/to/backup.tar.xz] # Restore Debian rootfs from backup archive
 ```
 
 ---
 
-### `asl backup create [name]`
-Create full chroot backup.
+## 🖥️ Desktop & Resolution
+
+### `asl desktop`
+Manage hardware-accelerated XFCE4 desktop session on Termux:X11 (`:0`).
 
 ```bash
-asl backup create                   # Auto-named backup
-asl backup create my-backup         # Named backup
-asl backup create --compress gz     # Compress with gzip
+asl desktop start                   # Start XFCE4 desktop session
+asl desktop stop                    # Stop desktop session
+asl desktop restart                 # Restart desktop session
+asl desktop status                  # Check desktop session state
+asl desktop refresh-x11             # Refresh Termux:X11 display socket
+asl desktop sync-apps               # Sync .desktop application shortcuts
+asl desktop launch <app>            # Launch specific desktop application
 ```
 
 ---
 
-### `asl backup restore <name>`
-Restore from backup.
+### `asl resolution [720p|1080p|native] [scale]`
+Configure Termux:X11 display resolution and GTK scaling.
 
 ```bash
-asl backup restore my-backup        # Restore backup
-asl backup restore --verify         # Verify before restore
+asl resolution 720p                 # Set 1280x720 display resolution
+asl resolution 1080p                # Set 1920x1080 display resolution
+asl resolution native               # Set native display resolution
+asl resolution 1080p 1.25           # Set 1080p with 1.25x GTK scale factor
+asl resolution status               # Inspect current display resolution
 ```
 
 ---
 
-## 🖥️ Desktop & Remote
-
-### `asl desktop start`
-Start XFCE desktop with Termux:X11.
+### `asl theme`
+Switch desktop theme and styling.
 
 ```bash
-asl desktop start                   # Start desktop
-asl desktop start --resolution 1920x1080  # Custom resolution
-asl desktop start --dpi 96          # Set DPI
-```
-
-**Requirements**:
-- Termux:X11 app installed and running
-- At least 2GB free RAM
-
----
-
-### `asl desktop stop`
-Stop XFCE desktop.
-
-```bash
-asl desktop stop                    # Stop gracefully
-asl desktop stop --kill             # Force kill
-asl desktop stop --logout           # Logout user first
+asl theme                           # Interactive theme menu
+asl theme dark                      # Apply dark GTK/XFCE theme
+asl theme light                     # Apply light theme
 ```
 
 ---
 
-### `asl desktop status`
-Show desktop status.
+## 🌐 Remote Access Bridges (`asl remote`)
+
+Modular remote connection manager supporting LAN SSH, user Oracle/custom VPS reverse tunnels, Serveo, and Ngrok.
 
 ```bash
-asl desktop status                  # Show status
-asl desktop status --verbose        # Detailed info
+asl remote status                   # Show status of all remote bridge endpoints
+asl remote all                      # Start LAN SSH + Oracle VPS + Serveo + Autoconnect
+asl remote gui                      # Display remote desktop (VNC/X11) SSH forwarding guide
 ```
 
----
-
-### `asl theme [dark|light|auto]`
-Set desktop theme.
-
+### LAN SSH Server (Port 8022)
 ```bash
-asl theme dark                      # Dark theme
-asl theme light                     # Light theme
-asl theme auto                      # Auto-detect
-asl theme list                      # List available themes
+asl remote lan start                # Start host OpenSSH daemon on port 8022
+asl remote lan stop                 # Stop LAN SSH daemon
+asl remote lan status               # Show LAN connection command with dynamic IP
 ```
 
----
-
-### `asl resolution <WxH>`
-Set desktop resolution.
-
+### Dedicated VPS / Oracle Cloud Relay
+Interactive and configurable for your own remote server:
 ```bash
-asl resolution 1920x1080            # 1080p
-asl resolution 1280x720             # 720p
-asl resolution 2560x1440            # 1440p
-asl resolution list                 # Show options
+asl remote oracle setup             # Interactive setup wizard (prompts for host, user, port, key)
+asl remote oracle start             # Connect persistent reverse SSH tunnel (port 2222 -> 8022)
+asl remote oracle stop              # Disconnect VPS tunnel
+asl remote oracle status            # Check VPS tunnel status
+asl remote oracle gen-key           # Generate dedicated ED25519 keypair
+asl remote oracle add-key <keyfile> # Import existing SSH private key
+asl remote oracle push-pubkey       # Copy public key to remote VPS authorized_keys
+asl remote oracle remove            # Remove VPS configuration and keys
 ```
 
----
-
-### `asl remote`
-Modular remote access bridge with 8 tunnel components (LAN, Oracle VPS, Serveo, Ngrok, SSH Keys, Autoconnect).
-
+### Serveo Jump-Host Reverse Tunnel
 ```bash
-asl remote status                   # Show all tunnel status
-asl remote all                      # Start LAN + Oracle + Serveo + Autoconnect
-```
-
-#### LAN SSH (port 8022)
-```bash
-asl remote lan start                # Start LAN SSH server
-asl remote lan stop                 # Stop LAN SSH server
-```
-
-#### Oracle Cloud VPS (Always-On Tunnel)
-```bash
-asl remote oracle start             # Connect to Oracle VPS reverse tunnel
-asl remote oracle stop              # Disconnect Oracle tunnel
-```
-
-#### Serveo Persistent Tunnel
-```bash
-asl remote serveo start             # Start Serveo tunnel (alias: asl-<user>)
+asl remote serveo start             # Start Serveo reverse tunnel
 asl remote serveo stop              # Stop Serveo tunnel
 asl remote serveo alias <name>      # Set custom Serveo subdomain
 ```
 
-#### Ngrok (On-Demand Multi-Token Pool)
+### Ngrok On-Demand Tunnel Pool
 ```bash
-asl remote ngrok start              # Start Ngrok tunnel (auto-rotates tokens)
+asl remote ngrok start              # Start Ngrok TCP tunnel
 asl remote ngrok stop               # Stop Ngrok tunnel
-asl remote ngrok add-token <token>  # Add auth token to pool
-asl remote ngrok list-tokens        # List tokens and quota status
-asl remote ngrok rotate             # Rotate to next active token
-asl remote ngrok reset              # Reset quota-exhausted tokens
+asl remote ngrok add-token <token>  # Add authtoken to rotation pool
+asl remote ngrok list-tokens        # List tokens and quota statuses
+asl remote ngrok rotate             # Rotate to next active token in pool
+asl remote ngrok reset              # Reset exhausted quota flags
 ```
 
-#### SSH Key Management
+### SSH Key & Password Management
 ```bash
 asl remote keys list                # List authorized SSH public keys
-asl remote keys add "<pubkey>"      # Add an SSH public key
-asl remote keys import-github <user> # Import keys from GitHub
-```
-
-#### Autoconnect Daemon
-```bash
-asl remote autoconnect              # Start 24/7 auto-reconnect daemon
-asl remote autoconnect stop         # Stop autoconnect daemon
-```
-
-#### Password Management
-```bash
+asl remote keys add "<pubkey>"      # Add an authorized SSH public key
+asl remote keys import-github <user># Import public SSH keys from GitHub account
 asl remote password set <pass>      # Set remote SSH password
-asl remote password clear           # Remove remote SSH password
+asl remote password clear           # Clear remote SSH password
+```
+
+### Autoconnect 24/7 Daemon
+```bash
+asl remote autoconnect              # Start 24/7 auto-reconnect background daemon
+asl remote autoconnect stop         # Stop autoconnect daemon
 ```
 
 ---
 
-## 🎮 Gaming & Performance
+## 🎮 Gaming, Box64 & Direct3D
 
-### `asl game [name]`
-Launch pre-configured game or Windows `.exe`.
+### `asl game` / `asl wine`
+Execute Windows applications (`.exe`) via Box64 Dynarec + Wine64, or open the interactive Gaming Hub.
 
 ```bash
-asl game                            # List available games
-asl game ninesols                   # Launch Ninesols
-asl game list                       # List all games
-asl game <path/to/game.exe>         # Launch any .exe
+asl game                            # Open interactive Gaming & Host Applications Hub
+asl game <path/to/app.exe>          # Launch any Windows .exe directly
+asl game setup                      # Install gaming stack (Wine, Box64, Mesa, Vulkan tools)
+asl game benchmark                  # Run OpenGL / Vulkan hardware benchmark (glmark2, vulkaninfo)
 ```
 
 ---
@@ -397,20 +280,19 @@ asl game <path/to/game.exe>         # Launch any .exe
 Switch Box64 dynamic recompilation precision profile dynamically.
 
 ```bash
-asl game precision fast             # Fast mode (max FPS for 3D titles)
-asl game precision safe             # Safe mode (strict float/NaN accuracy for sensitive apps)
-asl game precision status           # Query current dynarec profile
+asl game precision fast             # Fast mode (max FPS for 3D gaming: FASTROUND=1, FASTNAN=1, X87DOUBLE=0)
+asl game precision safe             # Safe mode (strict float/NaN accuracy: FASTROUND=0, FASTNAN=0, X87DOUBLE=1)
+asl game precision status           # Query current active dynarec precision profile
 ```
 
 ---
 
-### `asl dxvk [enable|disable|status]`
-Configure DirectX-to-Vulkan translation layer (DXVK for Direct3D 9/10/11 and VKD3D for Direct3D 12).
+### `asl dxvk [enable|status]`
+Configure DirectX-to-Vulkan translation layer (`/etc/dxvk.conf`).
 
 ```bash
-asl dxvk enable                     # Enable DXVK DLL overrides in target Wine prefix
-asl dxvk disable                    # Revert to standard Wine OpenGL translation
-asl dxvk status                     # Inspect DXVK / VKD3D installation state
+asl dxvk enable                     # Enable DXVK async pipeline configuration
+asl dxvk status                     # Inspect DXVK configuration state
 ```
 
 ---
@@ -427,12 +309,13 @@ asl wine-bundle clean               # Purge downloaded bundle installers
 ---
 
 ### `asl wine-version [status|set|install]`
-Switch active Wine execution engine between system Wine and Proton-GE.
+Switch active Wine execution engine between Debian system-wine and Proton-GE.
 
 ```bash
 asl wine-version status             # Check current active Wine engine
 asl wine-version set proton-ge      # Switch to Proton-GE custom engine
-asl wine-version set system         # Switch to standard Debian system Wine
+asl wine-version set system-wine    # Switch to standard Debian system Wine
+asl wine-version install proton-ge  # Download and install latest Proton-GE release
 ```
 
 ---
@@ -452,7 +335,7 @@ asl gamepad test                    # Interactive button & joystick calibration 
 Manage MangoHud and DXVK_HUD real-time performance telemetry overlay.
 
 ```bash
-asl hud on                          # Enable FPS, CPU/GPU temp, and VRAM overlay
+asl hud on                          # Enable FPS, CPU/GPU temp, RAM/VRAM overlay
 asl hud off                         # Disable telemetry overlay
 asl hud toggle                      # Toggle overlay state
 asl hud status                      # Check active HUD configuration
@@ -460,253 +343,167 @@ asl hud status                      # Check active HUD configuration
 
 ---
 
-### `asl steam [args...]`
-Launch Steam environment or run Windows game setups with Box64 flags.
+### `asl mode [gaming|performance|balanced|status]`
+Set system CPU governor and performance profile.
 
 ```bash
-asl steam                           # Launch Steam client environment
-asl steam /sdcard/Installer.exe     # Launch Windows setup in Steam prefix
+asl mode gaming                     # Gaming profile (CPU governor set to performance)
+asl mode performance                # Performance profile
+asl mode balanced                   # Balanced profile (CPU governor set to schedutil/powersave)
+asl mode status                     # Show active profile and CPU governor
 ```
-
----
-
-### `asl mode [mode]`
-Set performance profile.
-
-```bash
-asl mode gaming                     # Gaming profile (full power)
-asl mode balanced                   # Balanced (default)
-asl mode power-save                 # Power save
-asl mode list                       # Show profiles
-asl mode current                    # Show current mode
-```
-
-**What each mode does**:
-
-| Mode | CPU Governor | Swap | Dirty Ratio |
-|------|--------------|------|-------------|
-| Gaming | performance | 10 | 10 |
-| Balanced | schedutil | 30 | 20 |
-| Power-save | powersave | 60 | 40 |
-
----
-
-### `asl boost`
-Run system optimization.
-
-```bash
-asl boost                           # Run optimizer
-asl boost --verbose                 # Show details
-asl boost --dry-run                 # Don't actually run
-```
-
-**Does**:
-- Kill non-essential Android background apps
-- Force CPU to performance mode
-- Set OOM score for protection
-- Compact memory and cache
-- Tune swap/VFS settings
 
 ---
 
 ## 📊 Diagnostics & Monitoring
 
 ### `asl doctor`
-System health check.
+Comprehensive non-mutating pre-flight system diagnostics.
 
 ```bash
-asl doctor                          # Full diagnostics
-asl doctor --verbose                # Detailed output
-asl doctor --json                   # JSON format
+asl doctor                          # Run full environment health check
 ```
 
 **Checks**:
-- Root access
-- Debian rootfs
-- Chroot mounted
-- Termux:X11
-- PulseAudio
-- Storage access
-- GPU detection
+- Root access (`su`) / Shizuku (`rish`) / PRoot readiness
+- Debian rootfs existence
+- Subsystem mount status
+- Termux:X11 client installation
+- PulseAudio client installation
+- Storage permissions (`/sdcard`)
+- GPU detection and hardware nodes (`/dev/kgsl-3d0`, `/dev/dri/*`)
+- XFCE4 session and D-Bus daemon availability
+- Vulkan ICD configuration
 
 ---
 
 ### `asl overview`
-Quick system overview.
+Display live system status and remote endpoint table.
 
 ```bash
-asl overview                        # Show overview
-asl overview --watch                # Auto-refresh
-asl overview --json                 # JSON format
+asl overview                        # Show system overview
 ```
-
-**Shows**:
-- Chroot/Desktop/GPU status
-- RAM/Swap usage
-- CPU temperature
-- Battery status
-- Network info
 
 ---
 
 ### `asl thermal`
-Monitor thermal & battery.
+Monitor thermal sensors and battery temperature.
 
 ```bash
-asl thermal                         # Show status
-asl thermal --watch                 # Live monitoring
-asl thermal --json                  # JSON format
-asl thermal --alert 80              # Alert at 80°C
-```
-
-**Monitors**:
-- CPU temperature
-- GPU temperature
-- Battery temperature
-- Thermal sensors (TSENS, quiet-therm)
-
----
-
-### `asl ps`
-List chroot processes.
-
-```bash
-asl ps                              # List all
-asl ps <pid>                        # Show specific PID
-asl ps -k <pid>                     # Kill process
-asl ps --json                       # JSON format
+asl thermal                         # Show thermal & battery report
+asl thermal watch                   # Live thermal monitor (5s refresh)
 ```
 
 ---
 
-### `asl log`
-View system logs.
+### `asl ps` / `asl watch`
+Interactive process management and live monitor.
 
 ```bash
-asl log                             # Show recent logs
-asl log --tail 100                  # Last 100 lines
-asl log --follow                    # Live tail
-asl log --grep "error"              # Filter logs
+asl ps                              # Open interactive process manager
+asl watch                           # Open live system monitoring dashboard
 ```
 
 ---
 
-## 📱 Android Integration
+## 📱 Android Host Integration
 
-### `asl android aid`
-Map Android ID groups.
+### `asl aid` / `asl gids`
+Map Android AID groups (sdcard_rw, inet, graphics) inside container.
 
 ```bash
-asl android aid                     # Apply AID mapping
-asl android aid --check             # Verify mapping
-asl android aid --reset             # Reset to defaults
+asl aid                             # Apply Android AID group mappings
+asl aid status                      # Verify AID mapping status
 ```
 
 ---
 
-### `asl wakelock [on|off]`
+### `asl wakelock [on|off|status]`
 CPU wake lock control.
 
 ```bash
-asl wakelock on                     # Enable wake lock
-asl wakelock off                    # Disable wake lock
-asl wakelock status                 # Show current status
+asl wakelock on                     # Acquire CPU wake lock (prevents sleep during background tasks)
+asl wakelock off                    # Release CPU wake lock
+asl wakelock status                 # Show current wake lock status
 ```
 
 ---
 
 ### `asl open <file|url>`
-Open file/URL in Android.
+Open container file or URL in default Android host application.
 
 ```bash
-asl open /sdcard/photo.jpg          # Open in photo app
-asl open https://github.com         # Open in browser
-asl open document.pdf               # Open in PDF reader
+asl open /sdcard/photo.jpg          # Open image in Android gallery
+asl open https://github.com         # Open URL in Android browser
 ```
 
 ---
 
-### `asl clip [copy|paste]`
-Clipboard sync.
+### `asl clip [copy <text>|paste]`
+Android system clipboard bridge.
 
 ```bash
-asl clip copy                       # Copy to Android clipboard
-asl clip paste                      # Paste from Android
-echo "text" | asl clip copy         # Pipe to clipboard
+asl clip copy "Hello from Linux"    # Copy text to Android clipboard
+asl clip paste                      # Paste text from Android clipboard
+echo "data" | asl clip copy         # Pipe standard input to clipboard
+asl clip-sync start                 # Start background bidirectional clipboard sync daemon
+asl clip-sync stop                  # Stop clipboard sync daemon
 ```
 
 ---
 
-### `asl toast "message"`
-Android notification.
+### `asl toast <message>` & `asl notify <title> <message>`
+Trigger native Android host notifications and toast messages.
 
 ```bash
-asl toast "Build complete!"
-asl toast "Error occurred" --long   # Long duration
-asl toast "Download: 50%" --tag build-progress  # Persistent
+asl toast "Task completed!"         # Display Android toast
+asl notify "ASL" "Build finished"   # Post Android system notification
 ```
 
 ---
 
-## 🔧 System Commands
-
-### `asl help`
-Show command help.
+### `asl shortcut <app-name>`
+Create Android home screen launcher shortcut for container applications.
 
 ```bash
-asl help                            # Show all commands
-asl help <command>                  # Help for specific command
-asl help gaming                     # Help for category
-asl help --full                     # Full manual
+asl shortcut winecfg                # Create shortcut for Wine configuration
 ```
 
 ---
 
-### `asl version`
-Show version information.
+### `asl storage`
+Request Android shared storage permissions.
 
 ```bash
-asl version                         # Version
-asl version --check                 # Check for updates
+asl storage                         # Trigger termux-setup-storage
 ```
 
 ---
 
-### `asl config [key] [value]`
-Manage configuration.
+### `asl path [OPTIONS] <path>`
+Translate filesystem paths between Android host and Linux container.
 
 ```bash
-asl config get GPU                  # Get setting
-asl config set GPU turnip           # Set setting
-asl config list                     # List all
-asl config reset                    # Reset to defaults
+asl path -u /storage/emulated/0/doc # Convert host path to container path (/sdcard/doc)
+asl path -a /sdcard/doc             # Convert container path to host path
+asl path -c /etc/hosts              # Convert container path to chroot filesystem path
+asl path -m                         # Display container storage mount points
 ```
 
 ---
 
-### `asl update`
-Update ASL.
-
-```bash
-asl update                          # Update to latest
-asl update --check                  # Check for updates
-asl update --from-source            # Build from source
-```
-
----
-
-## 🤖 AI, Background Services & Automation
+## 🤖 24/7 Background Services & Automation
 
 ### `asl service`
 Manage 24/7 background daemons, Termux:Boot autostart, and health watchdog.
 
 ```bash
-asl service status                  # Check 24/7 service and daemon status
+asl service status                  # Check 24/7 service, boot autostart, and daemon status
 asl service start                   # Start background services (SSH, Tunnels, OmniRoute)
-asl service stop                    # Stop background services
+asl service stop                    # Stop all background services
 asl service restart                 # Restart background services
-asl service check                   # Run self-healing health watchdog
-asl service loop                    # Start autonomous background watchdog daemon (180s interval)
+asl service check                   # Run self-healing health watchdog check
+asl service loop                    # Start autonomous background watchdog loop (180s interval)
 asl service enable                  # Enable Termux:Boot autostart & shell hook
 asl service disable                 # Disable boot autostart
 ```
@@ -733,11 +530,9 @@ Manage virtual swap pool and zRAM swap files with 5GB safety bounds.
 
 ```bash
 asl swap status                     # Show swap usage, zRAM state & swapfile stats
-asl swap create [size_in_mb]        # Create virtual swapfile (default: 4096MB)
-asl swap enable                     # Activate virtual swapfile
-asl swap disable                    # Deactivate virtual swapfile
-asl swap auto                       # Automatically size swapfile based on RAM & free storage
-asl swap remove                     # Deactivate and delete virtual swapfile
+asl swap setup [size]               # Setup virtual swapfile (default: 5G)
+asl swap optimize                   # Run memory compaction and drop caches
+asl swap cleanup                    # Deactivate and detach swap loop devices
 ```
 
 ---
@@ -747,23 +542,24 @@ Purge cache files, package archives, and temporary artifacts to free internal st
 
 ```bash
 asl clean status                    # Show cleanable storage breakdown
-asl clean all                       # Clean APT cache, /tmp, and Wine shader cache
+asl clean all                       # Clean APT cache, /tmp, and shader caches
 asl clean apt                       # Clean Debian APT package archives
 asl clean tmp                       # Clean container temporary files
-asl clean wine                      # Clean Wine prefix cache and shaders
+asl clean cache                     # Clean user cache & Mesa shader caches
 ```
 
 ---
 
 ### `asl repair`
-Automated system integrity repair and recovery for corrupted locks or mount states.
+Automated system integrity repair and recovery for corrupted locks, permissions, or mount states.
 
 ```bash
 asl repair all                      # Run full self-healing recovery suite
 asl repair mounts                   # Fix stale or corrupted chroot mounts
-asl repair perms                    # Restore file permissions and Android AID mappings
-asl repair dpkg                     # Recover from interrupted DPKG / APT lock states
-asl repair dbus                     # Reset D-Bus socket and daemon
+asl repair permissions              # Restore file permissions, GPU nodes, and IPC sockets
+asl repair dpkg                     # Recover from interrupted DPKG / APT lock states & DNS
+asl repair env                      # Resynchronize dynamic profile.d GPU/HUD environment variables
+asl repair libs                     # Rebind dynamic linker bindings (ldconfig)
 ```
 
 ---
@@ -774,11 +570,12 @@ asl repair dbus                     # Reset D-Bus socket and daemon
 Deploy pre-configured developer toolchains inside the Debian chroot.
 
 ```bash
-asl dev-suite list                  # List available development toolchains
+asl dev-suite status                # Check installed development toolchains
+asl dev-suite install all           # Install full developer suite
 asl dev-suite install python        # Install Python 3, pip, venv, and development headers
 asl dev-suite install webdev        # Install Node.js, npm, yarn, and TypeScript
-asl dev-suite install neovim        # Install Neovim with modern Lua configuration
-asl dev-suite install vscode        # Install VS Code Server (web-accessible code editor)
+asl dev-suite install neovim        # Install Neovim with modern configuration
+asl dev-suite install vscode        # Install VS Code Server
 asl dev-suite install golang        # Install Go compiler and toolchain
 asl dev-suite install rust          # Install Rust toolchain via rustup
 ```
@@ -789,15 +586,16 @@ asl dev-suite install rust          # Install Rust toolchain via rustup
 Install defensive network auditing and security analysis tools.
 
 ```bash
-asl security-suite list             # List available security packages
-asl security-suite install basic    # Install nmap, netcat, socat, tcpdump
+asl security-suite status           # Check installed security packages
+asl security-suite install basic    # Install Nmap, Netcat, Socat, TCPDump
 asl security-suite install audit    # Install Wireshark/TShark, Nikto, Gobuster
+asl security-suite install full     # Install complete security suite
 ```
 
 ---
 
 ### `asl hub` / `asl gui`
-Launch native GTK3 Control Center desktop application inside XFCE4 session.
+Launch native GTK3 Control Center desktop application inside XFCE4 session (`os.posix_spawn` invariant).
 
 ```bash
 asl hub                             # Launch ASL Control Center GTK3 app
@@ -806,47 +604,14 @@ asl gui                             # Alias for asl hub
 
 ---
 
-## 🎓 Advanced Usage
-
-### Chaining Commands
-
-```bash
-# Start → Install package → Run command → Stop
-asl start && asl install build-essential && asl exec "gcc -v" && asl stop
-
-# With error handling
-asl start || exit 1
-asl install git || exit 1
-asl exec "git --version" || exit 1
-asl stop
-```
-
-### Using in Scripts
+### `asl config`
+Manage declarative configuration in `/etc/asl.conf`.
 
 ```bash
-#!/bin/bash
-# Build script using ASL
-
-set -e  # Exit on error
-
-asl start
-asl exec "apt-get update && apt-get install -y build-essential"
-asl exec "cd /sdcard/project && make"
-asl stop
-
-echo "✓ Build complete"
-```
-
-### Environment Variables
-
-```bash
-# Set in chroot
-export ASL_GPU=turnip
-export WINEPREFIX=~/.wine-gaming
-export MESA_DEBUG=silent
-
-# Set globally
-echo 'export ASL_GPU=turnip' >> ~/.bashrc
+asl config show                     # Display active /etc/asl.conf settings
+asl config init                     # Initialize default configuration file
+asl config get <section> <key>      # Get specific configuration value
+asl config set <sec> <key> <val>    # Update configuration setting
 ```
 
 ---
@@ -854,17 +619,6 @@ echo 'export ASL_GPU=turnip' >> ~/.bashrc
 ## 📞 Getting Help
 
 ```bash
-asl help                    # Show all commands
-asl <command> --help        # Help for specific command
-asl doctor                  # Diagnostics
-asl log                     # View logs
-
-# Online help
-# GitHub: https://github.com/Ruusian/ASL
-# Docs: https://github.com/Ruusian/ASL/blob/master/GETTING_STARTED.md
-# Troubleshooting: https://github.com/Ruusian/ASL/blob/master/TROUBLESHOOTING.md
+asl help                            # Show all CLI commands
+asl doctor                          # Run system diagnostics
 ```
-
----
-
-**Pro Tip**: Most commands support `--help`, `--verbose`, `--json` flags for more info!

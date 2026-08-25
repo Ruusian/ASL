@@ -20,12 +20,12 @@
 - [x] **IDE & Developer Environment Toolsuite (`asl dev-suite`)**
 - [x] **Containerized Defensive Security Audit Suite (`asl security-suite`)**
 - [x] **Storage Cleaner & Automated Integrity Repair (`asl clean` & `asl repair`)**
-- [x] **Per-Game Wine Prefix Isolation System**
-- [x] **Direct `.exe` / `.msi` MIME Desktop File Associations in Debian File Managers**
-- [x] **DXVK & VKD3D-Proton Runtime Auto-Installer (`asl dxvk`)**
-- [x] **Termux:X11 Dynamic FSR Resolution & Low-Latency PulseAudio Optimizer**
-- [x] **Steam & x86_64 Game Launcher Environment (`asl steam`)**
-- [x] **One-Click Game Save & Wine Prefix Backup/Restore (`asl backup`)**
+- [x] **DXVK & VKD3D-Proton Runtime Configuration (`asl dxvk`)**
+- [x] **Termux:X11 Dynamic Display Resolution & Low-Latency PulseAudio Optimizer**
+- [x] **Windows Binary Execution Layer (`asl game`)**
+- [x] **Full Subsystem Backup & Point-in-Time Snapshot Management (`asl backup` & `asl snapshot`)**
+- [x] **Declarative System Configuration Manager (`/etc/asl.conf` / `asl config`)**
+- [x] **Host <-> Subsystem Path Translation Utility (`asl path`)**
 - [x] **Comprehensive `docs/` Directory Structure**
 - [x] **Host Kernel OS Stability Protection** (Zero host kernel `sysctl` overrides to prevent kernel panics on custom Android kernels)
 - [x] **Hang-Free Subshell Execution Routing** (Temporary script file routing in `core/common.sh` eliminating base64 subshell limits)
@@ -41,6 +41,6 @@
 
 ## Known Architecture Invariants to Maintain
 1. **Never replace `os.posix_spawn` in `asl-gui` / `asl-hub`** with `subprocess.Popen` or `os.fork()`.
-2. **Always sanitize `.wineprefix` paths** with `tr -d '\r\n'` to prevent Windows CRLF file issues.
+2. **Always sanitize file paths** with `tr -d '\r\n'` to prevent Windows CRLF file issues.
 3. **Ensure `export PATH` is explicit** across all utility scripts called inside minimal chroot subshells.
 4. **Use `core/common.sh` abstractions (`asl_exec`, `asl_chroot_exec`)** for all host/chroot execution paths.
