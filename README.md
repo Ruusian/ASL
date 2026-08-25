@@ -50,7 +50,7 @@ Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or
  │  │                      Android Host Bridge & 24/7 Daemons                    │  │
  │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
  │  │  │ PulseAudio TCP   │  │ LAN SSH (8022)   │  │ Oracle VPS Tunnel Relay  │  │  │
- │  │  │ (127.0.0.1:4713) │  │ Serveo / Ngrok   │  │ (Port 2222 / 9119 / 6080)│  │  │
+ │  │  │ (127.0.0.1:4713) │  │ Serveo / Ngrok   │  │ (Persistent SSH 2222)    │  │  │
  │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
  │  └──────────────────────────────────────▲─────────────────────────────────────┘  │
  │                                         │ Kernel Syscalls & Node Bindings        │
@@ -83,8 +83,7 @@ ASL features a flicker-free, 74-column DEC Mode 1049 alternate-screen buffer das
  ├────────────────────────────────────────────────────────────────────────┤
  │   Remote Access Endpoints:                                             │
  │   * LAN SSH (Host):  ssh -p 8022 u0_a566@192.168.1.100                │
- │   * Oracle VPS:      ssh -J ubuntu@130.210.19.7 -p 2222 user@127.0.0.1 │
- │   * Hermes Web UI:   http://130.210.19.7                               │
+ │   * Oracle VPS:      ssh -J ubuntu@<VPS_IP> -p 2222 user@127.0.0.1   │
  ├────────────────────────────────────────────────────────────────────────┤
  │  [s] Start Subsystem     [x] Stop Subsystem      [d] Start Desktop     │
  │  [g] Launch Game (.exe)  [h] Performance HUD     [v] Remote Bridges    │
@@ -156,7 +155,7 @@ asl
 - **Multithreading Invariant**: Built with Python 3 + GTK3 using `os.posix_spawn` process creation to prevent glibc `atfork` multithreading deadlocks.
 
 ### 🌐 3. 24/7 Remote Mesh Tunnels & Background Services
-- **Oracle Cloud VPS Dedicated Relay**: Always-on persistent reverse SSH tunnels forwarding SSH (2222), Hermes Dashboard (9119), and noVNC (6080) to your VPS (`130.210.19.7`).
+- **Oracle Cloud VPS Dedicated Relay**: Always-on persistent reverse SSH tunnel forwarding SSH (2222) to your own remote VPS (`asl remote oracle setup`).
 - **LAN SSH Server**: Termux host SSH daemon on port 8022 with password or ED25519 key authentication.
 - **Serveo & Ngrok**: Instant public jump-host and multi-token rotation tunneling on demand.
 - **24/7 Autostart & Service Watchdog**: Detached double-fork background daemon (`service-manager.sh`) with TCP throughput tuning and automatic service recovery.

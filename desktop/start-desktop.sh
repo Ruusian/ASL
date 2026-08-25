@@ -616,58 +616,6 @@ audio_control() {
     esac
 }
 
-novnc_control() {
-    local action="${1:-status}"
-    case "$action" in
-        start)
-            if ! is_mounted; then
-                echo "[!] Debian chroot is not mounted. Run 'asl start' first."
-                return 1
-            fi
-            echo "[*] Initializing noVNC Web Browser Desktop Bridge..."
-            if ! asl_chroot_exec "command -v x11vnc >/dev/null 2>&1 && (command -v websockify >/dev/null 2>&1 || test -d /usr/share/novnc)" 2>/dev/null; then
-                echo "[*] Installing noVNC & WebSockify dependencies inside chroot..."
-                asl_chroot_exec "apt-get update && apt-get install -y novnc websockify x11vnc xvfb" || {
-                    echo "[!] Failed to install noVNC dependencies."
-                    return 1
-                }
-            fi
-            if ! su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin pgrep -f 'x11vnc.*5900'" >/dev/null 2>&1; then
-                echo "[*] Ensuring X11 display :0 is ready..."
-                su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c '
-                    if ! pgrep -f \"termux-x11\" >/dev/null && ! pgrep -f \"Xvfb :0\" >/dev/null; then
-                        rm -f /tmp/.X0-lock /tmp/.X11-unix/X0 2>/dev/null || true
-                        Xvfb :0 -screen 0 1280x720x24 >/tmp/xvfb.log 2>&1 &
-                        sleep 1
-                        DISPLAY=:0 dbus-run-session startxfce4 >/tmp/xfce-novnc.log 2>&1 &
-                        sleep 1
-                    fi
-                    x11vnc -display :0 -noshm -nopw -rfbport 5900 -shared -forever -bg -noxdamage -repeat -o /tmp/x11vnc.log >/dev/null 2>&1 || true
-                '" >/dev/null 2>&1 || true
-                sleep 1
-            fi
-            if ! su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin pgrep -f 'websockify.*6080'" >/dev/null 2>&1; then
-                echo "[*] Launching websockify HTML5 bridge on port 6080..."
-                su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 >/tmp/websockify.log 2>&1 &" >/dev/null 2>&1 || true
-                sleep 1
-            fi
-            echo "[✓] noVNC Browser Desktop active at: http://127.0.0.1:6080/vnc.html"
-            echo "    Open in your device browser to view the XFCE desktop directly!"
-            ;;
-        stop)
-            su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash -c 'pkill -f \"websockify.*6080\"; pkill -f \"x11vnc.*5900\"; pkill -f \"Xvfb :0\"'" 2>/dev/null || true
-            echo "[✓] noVNC Web Desktop bridge stopped."
-            ;;
-        status|"")
-            if su -M -c "chroot $DEBIANPATH /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin pgrep -f 'websockify.*6080'" >/dev/null 2>&1; then
-                echo "noVNC Browser Desktop: RUNNING (http://127.0.0.1:6080/vnc.html)"
-            else
-                echo "noVNC Browser Desktop: STOPPED"
-            fi
-            ;;
-    esac
-}
-
 case "${1:-start}" in
     start|"") start_desktop ;;
     stop) stop_desktop ;;
@@ -676,8 +624,7 @@ case "${1:-start}" in
     status) status_desktop ;;
     refresh-x11) refresh_x11_state ;;
     audio) shift; audio_control "$@" ;;
-    novnc|webvnc) shift; novnc_control "$@" ;;
     sync-apps) sync_apps ;;
     launch) shift; launch_app "$@" ;;
-    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|audio|novnc|sync-apps|launch}"; exit 1 ;;
+    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|audio|sync-apps|launch}"; exit 1 ;;
 esac

@@ -13,6 +13,8 @@ def get_token():
         return token
     # Search common credential files
     paths = [
+        "/data/data/com.termux/files/home/.config/gh/hosts.yml",
+        "/data/data/com.termux/files/home/.git-credentials",
         os.path.expanduser("~/.config/gh/hosts.yml"),
         os.path.expanduser("~/.git-credentials"),
         "/data/local/tmp/chrootDebian/root/.config/gh/hosts.yml",

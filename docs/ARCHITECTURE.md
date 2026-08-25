@@ -78,7 +78,7 @@ Subsystem execution is transparently routed via helper functions:
 
 ### 8. Modular 24/7 Remote Mesh Architecture
 - **Host-Only SSH Management:** Termux host OpenSSH server runs on port 8022 under user permissions (`u0_a566`) with key/password authentication.
-- **Dedicated Oracle VPS Reverse Tunnel:** Persistent SSH reverse relay to `130.210.19.7` routing Port 2222 -> Termux SSH (8022), Port 9119 -> Hermes Dashboard, and Port 6080 -> noVNC Desktop.
+- **Dedicated Oracle / VPS Reverse Tunnel:** Persistent SSH reverse relay to user-configured VPS (`asl remote oracle setup`) routing Port 2222 -> Termux SSH (8022).
 - **Adaptive Jump-Host & On-Demand Pool:** Automatic fallback to Serveo reverse tunnels and on-demand Ngrok token rotation pools with automatic quota tracking.
 - **24/7 Watchdog:** Self-healing health check running every 180s to maintain tunnel persistence without excessive battery/CPU drain.
 

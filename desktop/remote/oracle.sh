@@ -10,7 +10,7 @@ ORACLE_STATE="$PREFIX/tmp/asl-oracle.state"
 
 load_oracle_config() {
     ORACLE_KEY="$HOME/.ssh/oracle_vps.key"
-    ORACLE_HOST="130.210.19.7"
+    ORACLE_HOST=""
     ORACLE_USER="ubuntu"
     ORACLE_PORT="2222"
 
@@ -45,14 +45,119 @@ EOF
     chmod 600 "$ORACLE_CONF"
 }
 
+oracle_setup_wizard() {
+    echo "=================================================="
+    echo "       ASL Oracle / VPS Remote Setup Wizard       "
+    echo "=================================================="
+    echo "Configure a dedicated remote VPS reverse SSH relay."
+    echo ""
+
+    local input_host input_user input_port input_key_choice
+
+    # 1. Host IP / Domain
+    while [ -z "$input_host" ]; do
+        read -r -p "Enter Oracle / VPS Hostname or IP address: " input_host
+        input_host=$(echo "$input_host" | tr -d '[:space:]')
+        if [ -z "$input_host" ]; then
+            echo "[!] Hostname / IP cannot be empty."
+        fi
+    done
+    ORACLE_HOST="$input_host"
+
+    # 2. SSH User
+    read -r -p "Enter VPS SSH Username [default: ubuntu]: " input_user
+    input_user=$(echo "$input_user" | tr -d '[:space:]')
+    ORACLE_USER="${input_user:-ubuntu}"
+
+    # 3. Remote Port
+    read -r -p "Enter Remote SSH Forwarding Port [default: 2222]: " input_port
+    input_port=$(echo "$input_port" | tr -d '[:space:]')
+    ORACLE_PORT="${input_port:-2222}"
+
+    # 4. SSH Key Management
+    echo ""
+    echo "SSH Private Key Configuration:"
+    echo "  1) Generate a new dedicated ED25519 SSH keypair (Recommended)"
+    echo "  2) Specify path to an existing private key file"
+    echo "  3) Paste private key contents directly"
+    echo "  4) Keep existing key if present ($ORACLE_KEY)"
+    read -r -p "Select key setup option [1-4, default: 1]: " input_key_choice
+    input_key_choice=$(echo "$input_key_choice" | tr -d '[:space:]')
+    input_key_choice="${input_key_choice:-1}"
+
+    case "$input_key_choice" in
+        1)
+            mkdir -p "$HOME/.ssh" 2>/dev/null || true
+            rm -f "$ORACLE_KEY" "$ORACLE_KEY.pub" 2>/dev/null || true
+            ssh-keygen -t ed25519 -f "$ORACLE_KEY" -N "" -C "asl-oracle-vps" >/dev/null 2>&1
+            chmod 600 "$ORACLE_KEY"
+            echo "[✓] Dedicated SSH keypair generated at $ORACLE_KEY"
+            if [ -f "$ORACLE_KEY.pub" ]; then
+                echo ""
+                echo "========================================================"
+                echo " IMPORTANT: Add this public key to your VPS authorized_keys:"
+                echo " File on VPS: ~/.ssh/authorized_keys"
+                echo "--------------------------------------------------------"
+                cat "$ORACLE_KEY.pub"
+                echo "--------------------------------------------------------"
+                echo "========================================================"
+                echo ""
+            fi
+            ;;
+        2)
+            local key_path=""
+            read -r -p "Enter full path to private key file: " key_path
+            key_path="${key_path/#\~/$HOME}"
+            if [ -f "$key_path" ]; then
+                mkdir -p "$HOME/.ssh" 2>/dev/null || true
+                cp -f "$key_path" "$ORACLE_KEY"
+                chmod 600 "$ORACLE_KEY"
+                echo "[✓] Private key imported -> $ORACLE_KEY"
+            else
+                echo "[!] File not found at '$key_path'. Key configuration aborted."
+            fi
+            ;;
+        3)
+            echo "Paste your private key below (end with an empty line or EOF):"
+            local key_content="" line=""
+            while IFS= read -r line; do
+                [ -z "$line" ] && [ -n "$key_content" ] && break
+                key_content="${key_content}${line}"$'\n'
+            done
+            if printf '%s\n' "$key_content" | grep -q "PRIVATE KEY"; then
+                mkdir -p "$HOME/.ssh" 2>/dev/null || true
+                printf '%s' "$key_content" > "$ORACLE_KEY"
+                chmod 600 "$ORACLE_KEY"
+                echo "[✓] Private key saved -> $ORACLE_KEY"
+            else
+                echo "[!] Invalid private key content provided."
+            fi
+            ;;
+        4|*)
+            if [ -f "$ORACLE_KEY" ]; then
+                echo "[✓] Retained existing key at $ORACLE_KEY"
+            else
+                echo "[!] Warning: No existing key found at $ORACLE_KEY."
+            fi
+            ;;
+    esac
+
+    save_oracle_config
+    echo ""
+    echo "[✓] VPS configuration saved successfully to $ORACLE_CONF!"
+    echo ""
+    oracle_status
+}
+
 load_oracle_config
 
 oracle_running() {
     load_oracle_config
+    [ -z "$ORACLE_HOST" ] && return 1
     if [ -f "$ORACLE_LOG" ] && [ "$(wc -c < "$ORACLE_LOG" 2>/dev/null || echo 0)" -gt 102400 ]; then
         tail -n 200 "$ORACLE_LOG" > "$ORACLE_LOG.tmp" 2>/dev/null && mv "$ORACLE_LOG.tmp" "$ORACLE_LOG" 2>/dev/null || true
     fi
-    if [ -f "$ORACLE_STATE" ] && pgrep -f "ssh.*${ORACLE_HOST}" >/dev/null 2>&1; then
+    if [ -f "$ORACLE_STATE" ] && [ -n "$ORACLE_HOST" ] && pgrep -f "ssh.*${ORACLE_HOST}" >/dev/null 2>&1; then
         if tail -n 10 "$ORACLE_LOG" 2>/dev/null | grep -qE "Permission denied|Connection closed|Connection refused|Host key verification failed|kex_exchange_identification|remote port forwarding failed|Broken pipe|Network is unreachable|Software caused connection abort|Connection reset|Connection timed out"; then
             pkill -9 -f "ssh.*${ORACLE_HOST}" 2>/dev/null || true
             return 1
@@ -70,17 +175,37 @@ oracle_control() {
     case "$action" in
         start)
             ensure_host_sshd
+            if [ -z "$ORACLE_HOST" ]; then
+                if [ -t 0 ]; then
+                    oracle_setup_wizard || return 1
+                else
+                    echo "Error: Oracle VPS host is not configured."
+                    echo "Run 'asl remote oracle setup' or 'asl remote oracle config host <ip>' first."
+                    return 1
+                fi
+            fi
             if [ ! -f "$ORACLE_KEY" ]; then
-                echo "Error: Oracle VPS private key not found at $ORACLE_KEY"
-                echo "Use 'asl remote oracle add-key <key_file>' or 'asl remote oracle gen-key' to set up a key."
-                return 1
+                if [ -t 0 ]; then
+                    echo "[!] Oracle VPS private key missing at $ORACLE_KEY."
+                    read -r -p "Generate a new ED25519 keypair now? [Y/n]: " gen_confirm
+                    if [[ "$gen_confirm" =~ ^[Nn] ]]; then
+                        echo "Run 'asl remote oracle add-key <file>' to provide a key."
+                        return 1
+                    else
+                        oracle_control gen-key
+                    fi
+                else
+                    echo "Error: Oracle VPS private key not found at $ORACLE_KEY"
+                    echo "Use 'asl remote oracle add-key <key_file>' or 'asl remote oracle gen-key' to set up a key."
+                    return 1
+                fi
             fi
             touch "$ORACLE_STATE"
-            if oracle_running && pgrep -f "ssh.*9119:127.0.0.1:9119.*${ORACLE_HOST}" >/dev/null 2>&1 && pgrep -f "ssh.*6080:127.0.0.1:6080.*${ORACLE_HOST}" >/dev/null 2>&1; then
-                echo "[*] Oracle VPS dedicated tunnels (2222, 9119 & 6080) are already running."
+            if oracle_running; then
+                echo "[*] Oracle VPS dedicated tunnel (${ORACLE_PORT} -> 8022) is already running."
             else
                 # Kill only tunnel SSH processes (-N flag), not interactive sessions
-                pkill -f "ssh.*-N.*${ORACLE_HOST}" 2>/dev/null || true
+                [ -n "$ORACLE_HOST" ] && pkill -f "ssh.*-N.*${ORACLE_HOST}" 2>/dev/null || true
                 sleep 1
                 echo "[*] Clearing stale listeners on Oracle VPS (${ORACLE_HOST}:${ORACLE_PORT})..."
                 # Kill all sshd children holding the tunnel port (not the main sshd)
@@ -93,7 +218,7 @@ oracle_control() {
                     sudo ss -tulpn | grep ':${ORACLE_PORT} ' || echo PORT_CLEARED
                 " 2>/dev/null || true
                 sleep 1
-                echo "[*] Launching Oracle VPS persistent SSH tunnels (${ORACLE_HOST}:${ORACLE_PORT} -> 8022, 9119 -> 9119, 6080 -> 6080)..."
+                echo "[*] Launching Oracle VPS persistent SSH tunnel (${ORACLE_HOST}:${ORACLE_PORT} -> 8022)..."
                 rm -f "$ORACLE_LOG"
                 nohup ssh -i "$ORACLE_KEY" -T -N \
                     -o StrictHostKeyChecking=accept-new \
@@ -103,8 +228,6 @@ oracle_control() {
                     -o ExitOnForwardFailure=yes \
                     -o ConnectTimeout=10 \
                     -R "*:${ORACLE_PORT}:127.0.0.1:8022" \
-                    -R "9119:127.0.0.1:9119" \
-                    -R "6080:127.0.0.1:6080" \
                     "${ORACLE_USER}@${ORACLE_HOST}" > "$ORACLE_LOG" 2>&1 &
                 echo $! > "$ORACLE_STATE"
                 sleep 4
@@ -120,13 +243,16 @@ oracle_control() {
             if oracle_running; then
                 local pid
                 pid=$(cat "$ORACLE_STATE" 2>/dev/null)
-                [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || pkill -f "ssh.*-N.*${ORACLE_HOST}" 2>/dev/null || true
+                [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || ([ -n "$ORACLE_HOST" ] && pkill -f "ssh.*-N.*${ORACLE_HOST}" 2>/dev/null) || true
                 rm -f "$ORACLE_STATE" "$ORACLE_LOG"
                 echo "[✓] Oracle VPS tunnel stopped."
             else
                 rm -f "$ORACLE_STATE"
                 echo "[*] Oracle VPS tunnel is not running."
             fi
+            ;;
+        setup|init|wizard)
+            oracle_setup_wizard
             ;;
         config|set-config|set)
             local subopt="${1:-show}"
@@ -170,7 +296,7 @@ oracle_control() {
                     ;;
                 show|*)
                     echo "=== Oracle VPS Configuration ==="
-                    echo "  Host:     $ORACLE_HOST"
+                    echo "  Host:     ${ORACLE_HOST:-<not configured>}"
                     echo "  User:     $ORACLE_USER"
                     echo "  Port:     $ORACLE_PORT"
                     echo "  Key Path: $ORACLE_KEY"
@@ -224,7 +350,7 @@ oracle_control() {
             fi
             ;;
         remove-key|clear-key|delete-key)
-            pkill -f "ssh.*${ORACLE_HOST}" 2>/dev/null || true
+            [ -n "$ORACLE_HOST" ] && pkill -f "ssh.*${ORACLE_HOST}" 2>/dev/null || true
             rm -f "$ORACLE_STATE" "$ORACLE_LOG" "$ORACLE_KEY" "$ORACLE_KEY.pub"
             echo "[✓] Oracle VPS private key deleted."
             ;;
@@ -242,6 +368,10 @@ oracle_control() {
             ;;
         pubkey|push-pubkey|add-pubkey)
             local key_to_push="${1:-}"
+            if [ -z "$ORACLE_HOST" ]; then
+                echo "Error: Oracle VPS host not configured. Run 'asl remote oracle config host <ip>' first."
+                return 1
+            fi
             if [ ! -f "$ORACLE_KEY" ]; then
                 echo "Error: Private key missing ($ORACLE_KEY). Add a private key first using 'asl remote oracle add-key'."
                 return 1
@@ -275,7 +405,7 @@ oracle_control() {
             fi
             ;;
         remove|delete|clear|reset)
-            pkill -f "ssh.*${ORACLE_HOST}" 2>/dev/null || true
+            [ -n "$ORACLE_HOST" ] && pkill -f "ssh.*${ORACLE_HOST}" 2>/dev/null || true
             rm -f "$ORACLE_STATE" "$ORACLE_LOG" "$ORACLE_KEY" "$ORACLE_KEY.pub" "$ORACLE_CONF"
             echo "[✓] Oracle VPS configuration and keys completely removed from ASL."
             ;;
@@ -285,6 +415,9 @@ oracle_control() {
         *)
             echo "=== ASL Oracle Remote VPS Management ==="
             echo "Usage: asl remote oracle <action> [args]"
+            echo ""
+            echo "Setup & Wizard:"
+            echo "  setup               Interactive setup wizard for VPS connection"
             echo ""
             echo "Tunnel Control:"
             echo "  start               Start persistent Oracle VPS reverse tunnel"
@@ -312,11 +445,15 @@ oracle_control() {
 
 oracle_status() {
     load_oracle_config
+    if [ -z "$ORACLE_HOST" ]; then
+        echo "Oracle VPS Tunnel: NOT CONFIGURED"
+        echo "    Run 'asl remote oracle setup' or 'asl remote oracle config host <ip>' to configure."
+        return 0
+    fi
     if oracle_running; then
         echo "Oracle VPS Tunnel: RUNNING (Dedicated Always-On Private Relay)"
-        echo "    Host:     ${ORACLE_HOST} (User: ${ORACLE_USER}, Port: ${ORACLE_PORT})"
-        echo "    Connect:  ssh -J ${ORACLE_USER}@${ORACLE_HOST} -p ${ORACLE_PORT} $(whoami)@127.0.0.1"
-        echo "    Dashboard:   http://${ORACLE_HOST}"
+        echo "    Host:           ${ORACLE_HOST} (User: ${ORACLE_USER}, Port: ${ORACLE_PORT})"
+        echo "    Connect:        ssh -J ${ORACLE_USER}@${ORACLE_HOST} -p ${ORACLE_PORT} $(whoami)@127.0.0.1"
         echo "    Authentication: SSH key ($ORACLE_KEY)"
     else
         echo "Oracle VPS Tunnel: STOPPED"

@@ -256,12 +256,19 @@ asl_service_status() {
         echo " LAN SSH Server: INACTIVE"
     fi
 
-    local oracle_pid oracle_mem
-    oracle_pid=$(pgrep -f "ssh.*130.210.19.7" 2>/dev/null | head -1 || true)
+    local oracle_pid oracle_mem o_host="" o_port="2222"
+    if [ -f "$HOME/.asl/oracle_vps.conf" ]; then
+        o_host=$(grep -E '^ORACLE_HOST=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        o_port=$(grep -E '^ORACLE_PORT=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        o_port="${o_port:-2222}"
+    fi
+    if [ -n "$o_host" ]; then
+        oracle_pid=$(pgrep -f "ssh.*${o_host}" 2>/dev/null | head -1 || true)
+    fi
     if [ -n "$oracle_pid" ]; then
         oracle_mem=$(fmt_mem "$oracle_pid")
-        echo " Oracle Tunnel: ACTIVE (130.210.19.7:2222, PID: $oracle_pid, RAM: $oracle_mem)"
-    elif [ -f "$HOME/.ssh/oracle_vps.key" ]; then
+        echo " Oracle Tunnel: ACTIVE (${o_host}:${o_port}, PID: $oracle_pid, RAM: $oracle_mem)"
+    elif [ -n "$o_host" ] && [ -f "$HOME/.ssh/oracle_vps.key" ]; then
         echo " Oracle Tunnel: STANDBY (Run 'asl remote oracle start')"
     fi
 

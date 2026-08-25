@@ -42,14 +42,14 @@ autoconnect_daemon() {
         if [ -n "$prev_ip" ] && [ -n "$curr_ip" ] && [ "$prev_ip" != "$curr_ip" ]; then
             echo "[Autoconnect $(date +%H:%M:%S)] Network IP changed ($prev_ip -> $curr_ip). Evicting stale SSH tunnel sockets..." >> "$AUTOCONNECT_LOG"
             load_oracle_config 2>/dev/null || true
-            pkill -9 -f "ssh.*${ORACLE_HOST:-130.210.19.7}" 2>/dev/null || true
+            [ -n "$ORACLE_HOST" ] && pkill -9 -f "ssh.*${ORACLE_HOST}" 2>/dev/null || true
             pkill -9 -f "serveo.net" 2>/dev/null || true
             pkill -9 -f "ngrok.*tcp" 2>/dev/null || true
         fi
         [ -n "$curr_ip" ] && prev_ip="$curr_ip"
 
         if is_online; then
-            if [ -f "$ORACLE_KEY" ] && ! oracle_running; then
+            if [ -n "$ORACLE_HOST" ] && [ -f "$ORACLE_KEY" ] && ! oracle_running; then
                 echo "[Autoconnect $(date +%H:%M:%S)] Oracle VPS tunnels offline or unresponsive. Re-establishing..." >> "$AUTOCONNECT_LOG"
                 bash "$script_path" oracle start >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi

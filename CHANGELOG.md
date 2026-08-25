@@ -20,7 +20,7 @@ guaranteed while new features, fixes, and project updates are being developed.
 
 - **Live Remote Endpoints & Untruncated SSH Commands**:
   - Integrated real-time remote access endpoints directly into the dashboard overview header.
-  - Formatted LAN SSH (Port 8022), Oracle Cloud VPS relay (`ssh -J ubuntu@130.210.19.7 -p 2222`), Serveo tunnel, and Ngrok commands with exact 74-column alignment and zero string truncation.
+  - Formatted LAN SSH (Port 8022), Oracle Cloud VPS relay (`ssh -J ubuntu@<VPS_IP> -p 2222`), Serveo tunnel, and Ngrok commands with exact 74-column alignment and zero string truncation.
 
 - **Subshell Detachment & Silent Service Autostart**:
   - Upgraded background service invocation in `~/.bashrc` and `service-manager.sh` to detached double-fork subshells `((nohup bash ... &) &) 2>/dev/null`.
@@ -44,7 +44,7 @@ guaranteed while new features, fixes, and project updates are being developed.
     - `common.sh` - Shared state, SSH daemon management, password management
     - `lan.sh` - LAN SSH server control (port 8022)
     - `serveo.sh` - Persistent Serveo jump-host tunnel with alias fallback
-    - `oracle.sh` - Oracle Cloud VPS dedicated always-on relay (130.210.19.7)
+    - `oracle.sh` - Oracle Cloud VPS dedicated always-on relay (interactive & configurable)
     - `ngrok.sh` - Multi-token pool with quota auto-rotation and metrics
     - `keys.sh` - SSH public key management and GitHub key import
     - `autoconnect.sh` - 24/7 auto-reconnect daemon with wake-lock

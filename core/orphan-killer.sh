@@ -1,6 +1,6 @@
 #!/bin/bash
 # ASL: Automated Orphan Process Killer & Fail-Safe Reboot System
-# Detects and terminates rogue background spin-loops (e.g. hermes-agent, stuck python pip, orphaned dashboards).
+# Detects and terminates rogue background spin-loops (e.g. stuck python pip, orphaned processes).
 # If a stuck process cannot be killed due to kernel D-state lock, triggers an automatic system reboot.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,12 +14,12 @@ asl_orphan_kill() {
     local pid comm pcpu etime cmd
     local my_pid="$$"
 
-    # Find processes matching rogue patterns or high-cpu python/agent spin loops
+    # Find processes matching rogue patterns or high-cpu python spin loops
     while read -r pid comm pcpu etime cmd; do
         [ -n "$pid" ] || continue
-        # Exclude self, openclaude, and hermes agent runner
+        # Exclude self, openclaude, claude-code
         [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
-        echo "$cmd" | grep -qE "openclaude|claude-code|hermes" && continue
+        echo "$cmd" | grep -qE "openclaude|claude-code" && continue
 
         # Match known stuck background spin-loop signatures (py3compile, node-gyp, stuck pip)
         if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
@@ -34,7 +34,7 @@ asl_orphan_kill() {
         while read -r pid comm pcpu etime cmd; do
             [ -n "$pid" ] || continue
             [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
-            echo "$cmd" | grep -qE "openclaude|claude-code|hermes" && continue
+            echo "$cmd" | grep -qE "openclaude|claude-code" && continue
             if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
                (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 2>/dev/null ])); then
                 local already=0

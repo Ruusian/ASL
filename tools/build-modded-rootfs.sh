@@ -223,6 +223,13 @@ fi
 TAR_SIZE="$(du -h "$OUTPUT_TAR" 2>/dev/null | cut -f1)"
 echo -e "${GREEN}[✓] Rootfs archive created successfully: $OUTPUT_TAR ($TAR_SIZE)${RESET}"
 
+echo -e "${GREEN}[*] Verifying archive integrity...${RESET}"
+if ! su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; xz -t '$OUTPUT_TAR'"; then
+    echo -e "${RED}[!] Error: Archive integrity check failed.${RESET}"
+    exit 1
+fi
+echo -e "${GREEN}[✓] Archive integrity verified successfully!${RESET}"
+
 echo -e "${GREEN}[*] Computing SHA256 checksum...${RESET}"
 ARCHIVE_NAME="$(basename "$OUTPUT_TAR")"
 ARCHIVE_SUM="$(sha256sum "$OUTPUT_TAR" | awk '{print $1}')"

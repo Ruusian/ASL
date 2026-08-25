@@ -11,10 +11,10 @@ sync_key_to_oracle() {
         load_oracle_config 2>/dev/null || true
     fi
     local oracle_key="${ORACLE_KEY:-$HOME/.ssh/oracle_vps.key}"
-    local oracle_host="${ORACLE_HOST:-${ASL_ORACLE_HOST:-130.210.19.7}}"
+    local oracle_host="${ORACLE_HOST:-${ASL_ORACLE_HOST:-}}"
     local oracle_user="${ORACLE_USER:-${ASL_ORACLE_USER:-ubuntu}}"
 
-    if [ -f "$oracle_key" ] && [ -n "$key_data" ]; then
+    if [ -n "$oracle_host" ] && [ -f "$oracle_key" ] && [ -n "$key_data" ]; then
         echo "$key_data" | ssh -i "$oracle_key" -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "${oracle_user}@${oracle_host}" \
             "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys" >/dev/null 2>&1 || true
     fi

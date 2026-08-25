@@ -513,7 +513,7 @@ asl_is_omniroute_running() {
 }
 
 asl_oracle_info() {
-    local o_host="130.210.19.7" o_user="ubuntu" o_port="2222" o_key="$HOME/.ssh/oracle_vps.key"
+    local o_host="" o_user="ubuntu" o_port="2222" o_key="$HOME/.ssh/oracle_vps.key"
     if [ -f "$HOME/.asl/oracle_vps.conf" ]; then
         local key_v host_v user_v port_v
         key_v=$(grep -E '^ORACLE_KEY=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
@@ -537,7 +537,7 @@ asl_remote_summary() {
     local o_host o_user o_port o_key
     read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
     if asl_is_sshd_running; then active+=("LAN:8022"); fi
-    if [ -f "$PREFIX/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then active+=("Oracle"); fi
+    if [ -n "$o_host" ] && [ -f "$PREFIX/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then active+=("VPS"); fi
     if [ -f "$PREFIX/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then active+=("Serveo"); fi
     if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && (pgrep -x ngrok >/dev/null 2>&1 || pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || su -c "pgrep -x ngrok" >/dev/null 2>&1); then active+=("Ngrok"); fi
     if [ ${#active[@]} -gt 0 ]; then
@@ -563,10 +563,9 @@ asl_remote_details() {
     if asl_is_sshd_running; then
         details+=("* LAN SSH (Host):  ssh -p 8022 ${user}@${host_ip}")
     fi
-    if [ -f "$prefix/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then
+    if [ -n "$o_host" ] && [ -f "$prefix/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then
         details+=("* Oracle VPS:      ssh -J ${o_user}@${o_host} -p ${o_port} ${user}@127.0.0.1")
-        details+=("* Hermes Web UI:   http://${o_host}")
-    elif [ -f "$o_key" ]; then
+    elif [ -n "$o_host" ] && [ -f "$o_key" ]; then
         details+=("* Oracle VPS:      Standby (Host: ${o_host}:${o_port}, Run 'asl remote oracle start')")
     fi
     if [ -f "$prefix/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then
@@ -1744,7 +1743,7 @@ case "${1:-}" in
     desktop)
         shift
         DESKTOP_ACTION="${1:-start}"
-        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch|novnc|webvnc) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, novnc, or refresh-x11."; exit 1 ;; esac
+        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, or refresh-x11."; exit 1 ;; esac
         if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = restart || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]]; then
             ensure_mounted
         fi
