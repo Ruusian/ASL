@@ -110,6 +110,12 @@ def upload_asset(release_id, file_path):
     file_size = os.path.getsize(file_path)
     print(f"[*] Uploading {filename} ({file_size / (1024*1024):.2f} MB) to Release ID {release_id}...")
 
+    # GitHub Releases hard file cap: 2 GiB (2,147,483,648 bytes) per asset
+    max_gh_size = 2 * 1024 * 1024 * 1024
+    if file_size >= max_gh_size:
+        print(f"[!] Error: {filename} ({file_size / (1024*1024*1024):.2f} GB) exceeds GitHub's 2 GiB per-asset limit. Compress or split before uploading.")
+        return False
+
     # Check if asset already exists in release and remove it first (clobber)
     rel_data = gh_api(f"releases/{release_id}")
     try:
