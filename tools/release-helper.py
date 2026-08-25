@@ -130,7 +130,10 @@ def upload_asset(release_id, file_path):
         print("[!] Note checking existing assets:", e)
 
     upload_url = f"https://uploads.github.com/repos/{REPO}/releases/{release_id}/assets?name={filename}"
-    content_type = "application/x-xz" if filename.endswith(".xz") else "text/plain"
+    if filename.endswith(".xz") or ".part" in filename or filename.endswith(".tar"):
+        content_type = "application/octet-stream"
+    else:
+        content_type = "text/plain"
     token = get_token()
 
     # Use streaming file upload with curl -T (stream from disk without loading full file into RAM)

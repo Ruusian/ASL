@@ -202,8 +202,18 @@ echo -e "${GREEN}[✓] Archive integrity verified successfully!${RESET}"
 echo -e "${GREEN}[*] Computing SHA256 checksum...${RESET}"
 ARCHIVE_NAME="$(basename "$OUTPUT_TAR")"
 ARCHIVE_SUM="$(sha256sum "$OUTPUT_TAR" | awk '{print $1}')"
-su -c "printf '%s  %s\n' '$ARCHIVE_SUM' '$ARCHIVE_NAME' > '$SUMS_FILE' && chmod 644 '$SUMS_FILE'"
-echo -e "${GREEN}[✓] SHA256: $ARCHIVE_SUM${RESET}"
+su -c "printf '%s  %s\n' '$ARCHIVE_SUM' '$ARCHIVE_NAME' > '$SUMS_FILE'"
+echo -e "${GREEN}[✓] SHA256 ($ARCHIVE_NAME): $ARCHIVE_SUM${RESET}"
+
+# Check if archive exceeds GitHub Release 2 GiB per-asset limit (2,147,483,648 bytes)
+TAR_BYTES="$(stat -c '%s' "$OUTPUT_TAR" 2>/dev/null || wc -c < "$OUTPUT_TAR")"
+if [ "$TAR_BYTES" -ge 2097152000 ]; then
+    echo -e "${YELLOW}[!] Archive ($TAR_BYTES bytes) exceeds 2.0 GiB per-asset limit. Generating multi-part chunks...${RESET}"
+    su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; cd '$OUTPUT_DIR' && rm -f '${ARCHIVE_NAME}.part'* && split -b 1500M -d -a 2 '$ARCHIVE_NAME' '${ARCHIVE_NAME}.part' && sha256sum '${ARCHIVE_NAME}.part'* >> '$SUMS_FILE' && chmod 644 '${ARCHIVE_NAME}.part'* '$SUMS_FILE'"
+    echo -e "${GREEN}[✓] Multi-part split complete and appended to SHA256SUMS.${RESET}"
+else
+    su -c "chmod 644 '$SUMS_FILE'"
+fi
 
 # Restore Termux environment permissions & SELinux contexts
 su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; \

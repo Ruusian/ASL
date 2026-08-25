@@ -317,76 +317,105 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
 
     if [ "$DISTRO_TYPE" != "skip" ]; then
         if [ "$IS_MODDED" = "true" ]; then
-            RELEASE_URL="https://github.com/Ruusian/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
-            RELEASE_URL_ALT="https://github.com/Ruusian/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
+            echo -e "${GREEN}[*] Fetching release metadata & checksums...${RESET}"
+            SHA256SUMS_URL="https://github.com/Ruusian/ASL/releases/latest/download/SHA256SUMS"
+            TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
             TEMP_TAR="$PREFIX/tmp/asl-modded-temp.tar.xz"
-            echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
-            echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
+            rm -f "$TEMP_TAR" "$TEMP_SUMS" "$PREFIX/tmp"/asl-debian-modded-arm64.tar.xz.part* 2>/dev/null || true
 
-            if (curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_TAR" "$RELEASE_URL" || curl -fsSL --connect-timeout 15 --max-time 600 --retry 2 -o "$TEMP_TAR" "$RELEASE_URL_ALT" || wget -q --timeout=15 --tries=2 -O "$TEMP_TAR" "$RELEASE_URL_ALT") && [ -s "$TEMP_TAR" ]; then
-                echo -e "${GREEN}[*] Verifying downloaded archive checksum...${RESET}"
-                SHA256SUMS_URL="https://github.com/Ruusian/ASL/releases/latest/download/SHA256SUMS"
-                SHA256SUMS_URL_ALT="https://github.com/Ruusian/ASL/releases/latest/download/SHA256SUMS"
-                TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
-                EXPECTED=""
-                if ! (curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL" || curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL_ALT" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL_ALT"); then
-                    echo -e "${YELLOW}[!] Could not download SHA256SUMS (HTTP rate limit or release asset unavailable). Falling back to Debian base...${RESET}"
-                    rm -f "$TEMP_TAR" "$TEMP_SUMS"
-                    IS_MODDED=false
+            if ! (curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL") || [ ! -s "$TEMP_SUMS" ]; then
+                echo -e "${YELLOW}[!] Could not download SHA256SUMS (HTTP rate limit or release asset unavailable). Falling back to Debian base...${RESET}"
+                rm -f "$TEMP_TAR" "$TEMP_SUMS"
+                IS_MODDED=false
+            else
+                PART_FILES=$(awk '{ if ($NF ~ /^asl-debian-modded-arm64\.tar\.xz\.part/) print $NF }' "$TEMP_SUMS" | sort -u)
+                if [ -n "$PART_FILES" ]; then
+                    echo -e "${GREEN}[*] Multi-part release detected. Downloading rootfs parts...${RESET}"
+                    DL_OK=true
+                    for pfile in $PART_FILES; do
+                        echo -e "${CYAN}    Downloading $pfile...${RESET}"
+                        P_URL="https://github.com/Ruusian/ASL/releases/latest/download/$pfile"
+                        P_DST="$PREFIX/tmp/$pfile"
+                        if ! (curl -fsSL --connect-timeout 15 --max-time 1800 --retry 3 -o "$P_DST" "$P_URL" || wget -q --timeout=30 --tries=3 -O "$P_DST" "$P_URL") || [ ! -s "$P_DST" ]; then
+                            echo -e "${YELLOW}[!] Failed to download $pfile.${RESET}"
+                            DL_OK=false
+                            break
+                        fi
+                        EXP_PSUM=$(awk -v f="$pfile" '$NF == f { sub(/^\*/, "", $1); print $1 }' "$TEMP_SUMS" | head -n 1)
+                        ACT_PSUM=$(sha256sum "$P_DST" | awk '{ print $1 }')
+                        if [ -n "$EXP_PSUM" ] && [ "$EXP_PSUM" != "$ACT_PSUM" ]; then
+                            echo -e "${YELLOW}[!] Checksum verification failed for $pfile.${RESET}"
+                            DL_OK=false
+                            break
+                        fi
+                    done
+                    if [ "$DL_OK" = "true" ]; then
+                        echo -e "${GREEN}[*] Reassembling rootfs archive from parts...${RESET}"
+                        cat "$PREFIX/tmp"/asl-debian-modded-arm64.tar.xz.part* > "$TEMP_TAR"
+                        rm -f "$PREFIX/tmp"/asl-debian-modded-arm64.tar.xz.part*
+                    else
+                        rm -f "$PREFIX/tmp"/asl-debian-modded-arm64.tar.xz.part* "$TEMP_TAR"
+                        IS_MODDED=false
+                    fi
                 else
-                    EXPECTED=$(awk '{ h=$1; sub(/^\*/, "", h); if ($NF == "asl-debian-modded-arm64.tar.xz" && h ~ /^[[:xdigit:]]{64}$/) print h }' "$TEMP_SUMS" | head -n 1)
-                    rm -f "$TEMP_SUMS"
-                    if [ -z "$EXPECTED" ]; then
-                        echo -e "${YELLOW}[!] SHA256SUMS missing valid checksum. Falling back to Debian base...${RESET}"
+                    RELEASE_URL="https://github.com/Ruusian/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
+                    echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
+                    echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
+                    if ! (curl -fsSL --connect-timeout 15 --max-time 1800 --retry 3 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=30 --tries=3 -O "$TEMP_TAR" "$RELEASE_URL") || [ ! -s "$TEMP_TAR" ]; then
+                        echo -e "${YELLOW}[!] Modded release asset download failed. Falling back to Debian base...${RESET}"
                         rm -f "$TEMP_TAR"
                         IS_MODDED=false
                     fi
                 fi
 
                 if [ "$IS_MODDED" = "true" ]; then
-                    ACTUAL=$(sha256sum "$TEMP_TAR" | awk '{ print $1 }')
-                    if [ "$ACTUAL" != "$EXPECTED" ]; then
-                        echo -e "${YELLOW}[!] Checksum verification failed for modded rootfs. Falling back to Debian base...${RESET}"
-                        rm -f "$TEMP_TAR"
-                        IS_MODDED=false
-                    else
-                        echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
-                        echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
-                        ensure_chroot_unmounted_for_replace || exit 1
-                        tar_flags="--no-same-owner --no-same-permissions"
-                        if [ "${ASL_EXEC_MODE:-root}" = "root" ] || [ "${ASL_EXEC_MODE:-root}" = "shizuku" ]; then
-                            tar_flags="--numeric-owner"
-                        fi
-                        if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar $tar_flags -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
-                            echo -e "${YELLOW}[!] Failed to extract modded rootfs. Falling back to Debian base...${RESET}"
+                    EXPECTED=$(awk '{ h=$1; sub(/^\*/, "", h); if ($NF == "asl-debian-modded-arm64.tar.xz" && h ~ /^[[:xdigit:]]{64}$/) print h }' "$TEMP_SUMS" | head -n 1)
+                    rm -f "$TEMP_SUMS"
+                    if [ -n "$EXPECTED" ]; then
+                        echo -e "${GREEN}[*] Verifying reassembled archive checksum...${RESET}"
+                        ACTUAL=$(sha256sum "$TEMP_TAR" | awk '{ print $1 }')
+                        if [ "$ACTUAL" != "$EXPECTED" ]; then
+                            echo -e "${YELLOW}[!] Checksum verification failed for modded rootfs. Falling back to Debian base...${RESET}"
                             rm -f "$TEMP_TAR"
                             IS_MODDED=false
                         else
-                            rm -f "$TEMP_TAR"
-                            # Register proot-distro container definition & override for ASL
-                            mkdir -p "$PREFIX/etc/proot-distro"
-                            cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.sh"
+                            echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
+                        fi
+                    fi
+                fi
+
+                if [ "$IS_MODDED" = "true" ]; then
+                    echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
+                    ensure_chroot_unmounted_for_replace || exit 1
+                    tar_flags="--no-same-owner --no-same-permissions"
+                    if [ "${ASL_EXEC_MODE:-root}" = "root" ] || [ "${ASL_EXEC_MODE:-root}" = "shizuku" ]; then
+                        tar_flags="--numeric-owner"
+                    fi
+                    if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar $tar_flags -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
+                        echo -e "${YELLOW}[!] Failed to extract modded rootfs. Falling back to Debian base...${RESET}"
+                        rm -f "$TEMP_TAR"
+                        IS_MODDED=false
+                    else
+                        rm -f "$TEMP_TAR"
+                        # Register proot-distro container definition & override for ASL
+                        mkdir -p "$PREFIX/etc/proot-distro"
+                        cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.sh"
 # ASL Subsystem proot-distro container definition
 DISTRO_NAME="ASL Debian Subsystem"
 TARBALL_URL="https://github.com/Ruusian/ASL"
 ROOTFS_DIR="$DEBIANPATH"
 EOF
-                            cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
+                        cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
 # ASL Subsystem proot-distro container override
 DISTRO_NAME="ASL Debian Subsystem"
 ROOTFS_DIR="$DEBIANPATH"
 EOF
-                            # Configure DNS & hosts & APT performance
-                            asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
-                            asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
-                            echo -e "${GREEN}[✓] ASL Exclusive Debian Modded Rootfs provisioned successfully!${RESET}"
-                        fi
+                        # Configure DNS & hosts & APT performance
+                        asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
+                        asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
+                        echo -e "${GREEN}[✓] ASL Exclusive Debian Modded Rootfs provisioned successfully!${RESET}"
                     fi
                 fi
-            else
-                rm -f "$TEMP_TAR" 2>/dev/null || true
-                echo -e "${YELLOW}[!] Modded release asset download failed (HTTP 429 rate limit or asset unavailable). Falling back to Debian Trixie base image...${RESET}"
-                IS_MODDED=false
             fi
         fi
 
