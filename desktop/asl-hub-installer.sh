@@ -53,14 +53,17 @@ install_asl_hub_deb() {
     done
     chmod 755 "$asl_cli_dir/asl" 2>/dev/null || asl_exec "chmod 755 '$asl_cli_dir/asl'"
 
-    cat << 'CLI_EOF' > "$DEBIANPATH/usr/local/bin/asl-cli"
+    local tmp_cli="$HOME/.asl_cli.tmp"
+    cat << 'CLI_EOF' > "$tmp_cli"
 #!/bin/bash
 export ASL_CHROOT_SELF=1
 export DEBIANPATH=/
 export ASL_EXEC_MODE=direct
 exec /bin/bash /usr/local/share/asl-cli/asl "$@"
 CLI_EOF
+    cp "$tmp_cli" "$DEBIANPATH/usr/local/bin/asl-cli" 2>/dev/null || asl_exec "cp '$tmp_cli' '$DEBIANPATH/usr/local/bin/asl-cli'"
     chmod 755 "$DEBIANPATH/usr/local/bin/asl-cli" 2>/dev/null || asl_exec "chmod 755 '$DEBIANPATH/usr/local/bin/asl-cli'"
+    rm -f "$tmp_cli"
 
     # Verify deployed app compiles
     if asl_chroot_exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; python3 -m py_compile /usr/local/bin/asl-control-center" 2>/dev/null; then

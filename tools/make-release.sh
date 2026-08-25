@@ -64,12 +64,16 @@ asl_exec "printf '%s  %s\n' '$ARCHIVE_SUM' '$ARCHIVE_NAME' > '$(dirname "$OUTPUT
 echo -e "${GREEN}[✓] SHA256SUMS generated ($ARCHIVE_SUM)${RESET}"
 
 if command -v gh >/dev/null 2>&1; then
-    echo -e "${GREEN}[*] Creating GitHub Release $RELEASE_TAG and uploading modded asset...${RESET}"
+    echo -e "${GREEN}[*] Creating GitHub Release $RELEASE_TAG and uploading modded asset via gh CLI...${RESET}"
     RELEASE_SUMS="$(dirname "$OUTPUT_TAR")/SHA256SUMS"
     gh release create "$RELEASE_TAG" "$OUTPUT_TAR" "$RELEASE_SUMS" --title "ASL Modded Subsystem Release $RELEASE_TAG" --notes "Prebuilt modded ASL rootfs with Turnip Mesa Vulkan, Box64, Wine64, and XFCE desktop pre-configured." --repo Ruusian/ASL 2>/dev/null || \
     gh release upload "$RELEASE_TAG" "$OUTPUT_TAR" "$RELEASE_SUMS" --clobber --repo Ruusian/ASL
     echo -e "${GREEN}[✓] GitHub release asset uploaded successfully!${RESET}"
+elif [ -f "$SCRIPT_DIR/tools/release-helper.py" ]; then
+    echo -e "${GREEN}[*] Uploading modded asset to GitHub Releases via release-helper API...${RESET}"
+    su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; python3 '$SCRIPT_DIR/tools/release-helper.py' upload '$RELEASE_TAG' '$OUTPUT_TAR' && python3 '$SCRIPT_DIR/tools/release-helper.py' upload '$RELEASE_TAG' '$(dirname "$OUTPUT_TAR")/SHA256SUMS'"
+    echo -e "${GREEN}[✓] GitHub release asset uploaded successfully!${RESET}"
 else
-    echo -e "${YELLOW}[!] GitHub CLI (gh) not found. To upload manually, run:${RESET}"
-    echo -e "    gh release create $RELEASE_TAG $OUTPUT_TAR $(dirname "$OUTPUT_TAR")/SHA256SUMS"
+    echo -e "${YELLOW}[!] Release uploader not available. To upload manually, run:${RESET}"
+    echo -e "    python3 tools/release-helper.py upload $RELEASE_TAG $OUTPUT_TAR"
 fi
