@@ -16,6 +16,10 @@ tmp/
 *.key
 *.pem
 *.p12
+*.env
+*.env.*
+*.sqlite
+*.db
 remote_password
 ngrok_tokens.txt
 ngrok_exhausted.txt

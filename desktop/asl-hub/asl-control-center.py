@@ -17,7 +17,7 @@ import glob
 import time
 import gi
 
-APP_VERSION = "1.6.0"
+APP_VERSION = "2.5.1"
 
 if not os.environ.get("DISPLAY"):
     sys.stderr.write("[!] Error: $DISPLAY environment variable is not set.\n"
@@ -123,6 +123,7 @@ class ASLHubWindow(Gtk.Window):
         tabs = [
             (self.create_system_tab(), "system", "System & GPU", "video-display"),
             (self.create_gaming_tab(), "gaming", "Gaming & Wine", "applications-games"),
+            (self.create_remote_tab(), "remote", "Remote Tunnels", "network-transmit-receive"),
             (self.create_gamepad_tab(), "gamepad", "Gamepad", "input-gaming"),
             (self.create_dev_tab(), "dev", "Dev Suite", "applications-development"),
             (self.create_sec_tab(), "sec", "Security Audit", "changes-prevent"),
@@ -885,6 +886,62 @@ class ASLHubWindow(Gtk.Window):
                         self.asl_cmd("security-suite install basic"))
         self.add_button(grid, 0, 1, 2, "Install Full Defensive Security Suite",
                         self.asl_cmd("security-suite install audit"))
+
+        box.pack_start(grid, False, False, 10)
+        return box
+
+    def create_remote_tab(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        grid = Gtk.Grid()
+        grid.set_column_spacing(15)
+        grid.set_row_spacing(10)
+
+        lbl = Gtk.Label()
+        lbl.set_markup("<b>All Remote Tunnels &amp; Auto-Connect</b>")
+        lbl.set_halign(Gtk.Align.START)
+        grid.attach(lbl, 0, 0, 2, 1)
+
+        self.add_button(grid, 0, 1, 1, "Start All Tunnels (LAN + Oracle + Serveo)",
+                        self.asl_cmd("remote all"))
+        self.add_button(grid, 1, 1, 1, "Start Auto-Connect Daemon",
+                        self.asl_cmd("remote autoconnect start"))
+        self.add_button(grid, 0, 2, 1, "LAN SSH Server Start",
+                        self.asl_cmd("remote lan start"))
+        self.add_button(grid, 1, 2, 1, "LAN SSH Server Stop",
+                        self.asl_cmd("remote lan stop"))
+
+        lbl2 = Gtk.Label()
+        lbl2.set_markup("<b>Oracle VPS Private Relay Host</b>")
+        lbl2.set_halign(Gtk.Align.START)
+        grid.attach(lbl2, 0, 3, 2, 1)
+
+        self.add_button(grid, 0, 4, 1, "Start Oracle VPS Tunnel",
+                        self.asl_cmd("remote oracle start"))
+        self.add_button(grid, 1, 4, 1, "Stop Oracle VPS Tunnel",
+                        self.asl_cmd("remote oracle stop"))
+        self.add_button(grid, 0, 5, 1, "Show VPS Configuration",
+                        self.asl_cmd("remote oracle config"))
+        self.add_button(grid, 1, 5, 1, "Generate Dedicated SSH Keypair",
+                        self.asl_cmd("remote oracle gen-key"))
+        self.add_button(grid, 0, 6, 1, "Push Public Key to VPS",
+                        self.asl_cmd("remote oracle push-pubkey"))
+        self.add_button(grid, 1, 6, 1, "Remove Oracle VPS Config & Keys",
+                        self.asl_cmd("remote oracle remove"),
+                        confirm="Completely remove Oracle VPS configuration and keys?")
+
+        lbl3 = Gtk.Label()
+        lbl3.set_markup("<b>Serveo &amp; Ngrok Tunnels</b>")
+        lbl3.set_halign(Gtk.Align.START)
+        grid.attach(lbl3, 0, 7, 2, 1)
+
+        self.add_button(grid, 0, 8, 1, "Start Serveo Tunnel",
+                        self.asl_cmd("remote serveo start"))
+        self.add_button(grid, 1, 8, 1, "Stop Serveo Tunnel",
+                        self.asl_cmd("remote serveo stop"))
+        self.add_button(grid, 0, 9, 1, "Start Ngrok Tunnel",
+                        self.asl_cmd("remote ngrok start"))
+        self.add_button(grid, 1, 9, 1, "Rotate Ngrok Token",
+                        self.asl_cmd("remote ngrok rotate"))
 
         box.pack_start(grid, False, False, 10)
         return box
