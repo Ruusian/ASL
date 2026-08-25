@@ -123,8 +123,9 @@ def upload_asset(release_id, file_path):
 
     upload_url = f"https://uploads.github.com/repos/{REPO}/releases/{release_id}/assets?name={filename}"
     content_type = "application/x-xz" if filename.endswith(".xz") else "text/plain"
-
     token = get_token()
+
+    # Use streaming file upload with curl -T (stream from disk without loading full file into RAM)
     cmd = [
         "curl", "-sSL", "-X", "POST",
         "--connect-timeout", "60",
@@ -132,12 +133,13 @@ def upload_asset(release_id, file_path):
         "--retry", "3",
         "-H", "User-Agent: ASL-Release-Tool",
         "-H", f"Content-Type: {content_type}",
-        "--data-binary", f"@{file_path}",
+        "-T", file_path,
         upload_url
     ]
     if token:
         cmd.insert(4, f"Authorization: token {token}")
         cmd.insert(4, "-H")
+
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = proc.communicate()
     try:
@@ -149,7 +151,7 @@ def upload_asset(release_id, file_path):
             print("[!] Upload returned error:", resp)
             return False
     except Exception as e:
-        print("[!] Error parsing upload response:", e, out.decode("utf-8", errors="ignore")[:300])
+        print("[!] Error parsing upload response:", e, "\nStdout:", out.decode("utf-8", errors="ignore")[:500], "\nStderr:", err.decode("utf-8", errors="ignore")[:500])
         return False
 
 def delete_release_by_tag(tag):

@@ -109,6 +109,8 @@ cat << 'EOF' > "$EXCLUDE_FILE"
 ./root/.prime/*
 ./root/.kilo
 ./root/.kilo/*
+./root/.cua-driver
+./root/.cua-driver/*
 ./root/.config/gh
 ./root/.config/gh/*
 ./root/.config/Code
@@ -125,6 +127,26 @@ cat << 'EOF' > "$EXCLUDE_FILE"
 ./root/.config/opencode/*
 ./root/.config/obsidian
 ./root/.config/obsidian/*
+./root/.config/vlc
+./root/.config/vlc/*
+./root/.config/qwen-code-desktop
+./root/.config/qwen-code-desktop/*
+./root/.config/browser-harness
+./root/.config/browser-harness/*
+./root/.local/share/uv
+./root/.local/share/uv/*
+./root/.local/share/opencode
+./root/.local/share/opencode/*
+./root/.local/share/kilo
+./root/.local/share/kilo/*
+./root/.local/share/tirith
+./root/.local/share/tirith/*
+./root/.local/share/opentui
+./root/.local/share/opentui/*
+./root/.local/share/epiphany
+./root/.local/share/epiphany/*
+./root/.local/share/Trash
+./root/.local/share/Trash/*
 ./root/.git-credentials
 ./root/.gitconfig
 ./root/.ssh
@@ -153,17 +175,18 @@ cat << 'EOF' > "$EXCLUDE_FILE"
 
 # Large personal games, backups, and temporary test artifacts
 ./root/Obsidian
+./opt/obsidian
+./opt/obsidian/*
 ./opt/ninesols
 ./opt/proton-wine.android-bionic-backup
 ./opt/proton-wine.android-bionic-backup/*
-./root/CamCap.java
-./root/capture_cam.sh
-./root/test_hardware.sh
-./root/phone_screen.png
-./root/phone_screen_fixed.png
-./root/bisect_sys_out.txt
-./root/narrow_out.txt
-./root/threshold_out.txt
+./root/CamCap*
+./root/capture_cam*
+./root/test_hardware*
+./root/phone_screen*
+./root/bisect_sys_out*
+./root/narrow_out*
+./root/threshold_out*
 ./root/Downloads/*
 ./root/tmp/*
 
@@ -184,11 +207,11 @@ cat << 'EOF' > "$EXCLUDE_FILE"
 ./var/tmp/*
 EOF
 
-echo -e "${GREEN}[*] Archiving and compressing modded Debian rootfs (xz -T3 -2, thermally throttled)...${RESET}"
-rm -f "$OUTPUT_TAR"
+echo -e "${GREEN}[*] Archiving and compressing modded Debian rootfs (xz -T2 -3, thermally throttled & memory-capped)...${RESET}"
+su -c "rm -f '$OUTPUT_TAR'"
 
 su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; \
-    tar --exclude-from='$EXCLUDE_FILE' --numeric-owner -I 'nice -n 19 xz -T3 -2' -cf '$OUTPUT_TAR' -C '$DEBIANPATH' ."
+    tar --exclude-from='$EXCLUDE_FILE' --numeric-owner -I 'nice -n 19 xz -T2 -3 --memlimit-compress=400MiB' -cf '$OUTPUT_TAR' -C '$DEBIANPATH' ."
 
 rm -f "$EXCLUDE_FILE"
 
@@ -205,6 +228,13 @@ ARCHIVE_NAME="$(basename "$OUTPUT_TAR")"
 ARCHIVE_SUM="$(sha256sum "$OUTPUT_TAR" | awk '{print $1}')"
 su -c "printf '%s  %s\n' '$ARCHIVE_SUM' '$ARCHIVE_NAME' > '$SUMS_FILE' && chmod 644 '$SUMS_FILE'"
 echo -e "${GREEN}[✓] SHA256: $ARCHIVE_SUM${RESET}"
+
+# Restore Termux environment permissions & SELinux contexts
+su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; \
+    restorecon -RF /data/data/com.termux/files/usr/share/asl /data/data/com.termux/files/usr/bin/asl /data/data/com.termux/files/home/ASL 2>/dev/null || \
+    chcon -R u:object_r:app_data_file:s0:c54,c258,c512,c768 /data/data/com.termux/files/usr/share/asl /data/data/com.termux/files/usr/bin/asl /data/data/com.termux/files/home/ASL 2>/dev/null || true; \
+    chown -R 10566:10566 /data/data/com.termux/files/usr/share/asl /data/data/com.termux/files/usr/bin/asl /data/data/com.termux/files/home/ASL 2>/dev/null || true; \
+    chmod -R u+rwX,go+rX /data/data/com.termux/files/usr/share/asl 2>/dev/null || true"
 
 echo -e "${CYAN}====================================================${RESET}"
 echo -e "${GREEN}[✓] ASL Modded Rootfs Packaging Complete!            ${RESET}"
