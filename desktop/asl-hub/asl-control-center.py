@@ -32,7 +32,7 @@ ASL_ENV = dict(
     os.environ,
     PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin",
     DISPLAY=os.environ.get("DISPLAY", ":0"),
-    PULSE_SERVER=os.environ.get("PULSE_SERVER", "127.0.0.1"),
+    PULSE_SERVER=os.environ.get("PULSE_SERVER", "127.0.0.1:4713"),
     XDG_DATA_DIRS=os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share"),
     TMPDIR="/tmp"
 )
@@ -835,6 +835,13 @@ class ASLHubWindow(Gtk.Window):
 
     def _check_audio(self):
         try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.3)
+            res = s.connect_ex(('127.0.0.1', 4713))
+            s.close()
+            if res == 0:
+                return "<span color='#81c784'>Running</span>"
             for p in glob.glob('/proc/[0-9]*/cmdline'):
                 try:
                     with open(p, 'rb') as f:

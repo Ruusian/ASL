@@ -614,30 +614,33 @@ audio_control() {
     case "$action" in
         start) start_audio ;;
         stop)
-            if read_state && [ "$PULSE_OWNED" = 1 ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then
+            if read_state && [ "${PULSE_OWNED:-0}" = 1 ] && [ -n "${PULSE_PID:-}" ] && process_matches "$PULSE_PID" "pulseaudio" "$PULSE_START"; then
                 if kill -TERM "$PULSE_PID" 2>/dev/null; then
-    PULSE_OWNED=0 PULSE_PID='' PULSE_START=''
+                    PULSE_OWNED=0 PULSE_PID='' PULSE_START=''
                     write_state || return 1
                     echo "[✓] ASL-managed PulseAudio stopped."
                 else
                     echo "[!] Failed to stop ASL-managed PulseAudio."
                     return 1
                 fi
+            elif pgrep -x pulseaudio >/dev/null 2>&1; then
+                pkill -TERM -x pulseaudio 2>/dev/null || pkill -9 -x pulseaudio 2>/dev/null || true
+                echo "[✓] PulseAudio server stopped."
             else
-                echo "[*] No ASL-managed PulseAudio server is running."
+                echo "[*] No PulseAudio server is running."
             fi
             ;;
         status|"")
-            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
-            if pgrep -x pulseaudio >/dev/null 2>&1 || pactl info >/dev/null 2>&1; then
+            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1:4713}"
+            if pgrep -x pulseaudio >/dev/null 2>&1 || pactl --server=127.0.0.1:4713 info >/dev/null 2>&1; then
                 echo "PulseAudio Server: RUNNING"
             else
                 echo "PulseAudio Server: STOPPED"
             fi
             ;;
         test)
-            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
-            if ! pgrep -x pulseaudio >/dev/null 2>&1 && ! pactl info >/dev/null 2>&1; then
+            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1:4713}"
+            if ! pgrep -x pulseaudio >/dev/null 2>&1 && ! pactl --server=127.0.0.1:4713 info >/dev/null 2>&1; then
                 start_audio || return 1
             fi
             echo "[*] Playing audio test tone..."
@@ -647,7 +650,7 @@ audio_control() {
                     if [ -f "$s" ]; then sound_file="$s"; break; fi
                 done
                 if [ -n "$sound_file" ]; then
-                    paplay "$sound_file" 2>/dev/null && echo "[✓] Audio playback successful." || echo "[*] Audio pipeline active."
+                    paplay --server=127.0.0.1:4713 "$sound_file" 2>/dev/null || paplay "$sound_file" 2>/dev/null && echo "[✓] Audio playback successful." || echo "[*] Audio pipeline active."
                 elif command -v speaker-test >/dev/null 2>&1; then
                     speaker-test -t sine -f 440 -l 1 >/dev/null 2>&1 && echo "[✓] Audio playback successful." || echo "[*] Audio pipeline active."
                 else
@@ -660,10 +663,10 @@ audio_control() {
             fi
             ;;
         volume)
-            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
+            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1:4713}"
             if [ -n "$level" ]; then
                 if command -v pactl >/dev/null; then
-                    pactl set-sink-volume @DEFAULT_SINK@ "${level}%" 2>/dev/null && echo "[✓] Master volume set to ${level}%." || echo "[!] pactl failed to set volume."
+                    pactl --server=127.0.0.1:4713 set-sink-volume @DEFAULT_SINK@ "${level}%" 2>/dev/null && echo "[✓] Master volume set to ${level}%." || echo "[!] pactl failed to set volume."
                 else
                     echo "[!] pactl is not installed."
                 fi
