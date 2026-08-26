@@ -67,10 +67,10 @@ gtk-theme-name=\"$gtk_theme\"
 gtk-icon-theme-name=\"$icon_theme\"
 gtk-cursor-theme-name=\"$cursor_theme\"
 GTK2EOF
-        if [ \"$target_user\" != \"root\" ]; then
-            chown -R \"$target_user:$target_user\" \"$target_home/.config/gtk-3.0\" \"$target_home/.gtkrc-2.0\" 2>/dev/null || true
+        if [ '$target_user' != 'root' ]; then
+            chown -R '$target_user:$target_user' '$target_home/.config/gtk-3.0' '$target_home/.gtkrc-2.0' 2>/dev/null || true
         fi
-        fc-cache -fv /usr/share/fonts \"$target_home/.local/share/fonts\" 2>/dev/null || true
+        fc-cache -fv /usr/share/fonts '$target_home/.local/share/fonts' 2>/dev/null || true
     " 2>/dev/null || true
 
     if [ -n "$dbus_env" ]; then
@@ -78,16 +78,19 @@ GTK2EOF
             export DISPLAY=:0
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
             $dbus_env
-            timeout -k 1s 2 xfconf-query -c xsettings -p /Net/ThemeName -s \"$gtk_theme\" 2>/dev/null || timeout -k 1s 2 xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s \"$gtk_theme\" 2>/dev/null || true
-            timeout -k 1s 2 xfconf-query -c xfwm4 -p /general/theme -s \"$gtk_theme\" 2>/dev/null || timeout -k 1s 2 xfconf-query -c xfwm4 -p /general/theme -n -t string -s \"$gtk_theme\" 2>/dev/null || true
-            timeout -k 1s 2 xfconf-query -c xsettings -p /Net/IconThemeName -s \"$icon_theme\" 2>/dev/null || timeout -k 1s 2 xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s \"$icon_theme\" 2>/dev/null || true
-            timeout -k 1s 2 xfconf-query -c xsettings -p /Gtk/CursorThemeName -s \"$cursor_theme\" 2>/dev/null || timeout -k 1s 2 xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s \"$cursor_theme\" 2>/dev/null || true
+            timeout -k 1s 2 xfconf-query -c xsettings -p /Net/ThemeName -s '$gtk_theme' 2>/dev/null || timeout -k 1s 2 xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s '$gtk_theme' 2>/dev/null || true
+            timeout -k 1s 2 xfconf-query -c xfwm4 -p /general/theme -s '$gtk_theme' 2>/dev/null || timeout -k 1s 2 xfconf-query -c xfwm4 -p /general/theme -n -t string -s '$gtk_theme' 2>/dev/null || true
+            timeout -k 1s 2 xfconf-query -c xsettings -p /Net/IconThemeName -s '$icon_theme' 2>/dev/null || timeout -k 1s 2 xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s '$icon_theme' 2>/dev/null || true
+            timeout -k 1s 2 xfconf-query -c xsettings -p /Gtk/CursorThemeName -s '$cursor_theme' 2>/dev/null || timeout -k 1s 2 xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s '$cursor_theme' 2>/dev/null || true
         "
     fi
     echo "[✓] Applied desktop theme: $gtk_theme (Icons: $icon_theme)"
 }
 
 case "${1:-status}" in
+    blacklight)
+        set_xfce_theme "Blacklight" "bes-icon-black" "Blacklight"
+        ;;
     win11|win11-dark)
         set_xfce_theme "Fluent-Dark" "Fluent-dark"
         ;;
@@ -126,6 +129,7 @@ case "${1:-status}" in
         ;;
     list)
         echo "Available ASL Desktop Presets:"
+        echo "  blacklight - Blacklight dark theme + bes-icon-black icons + Blacklight cursors"
         echo "  win11      - Windows 11 Fluent Dark theme + Fluent-dark icons"
         echo "  win11-light - Windows 11 Fluent Light theme + Fluent-light icons"
         echo "  win11-compact - Windows 11 Fluent Dark Compact theme + Fluent-dark icons"

@@ -1,7 +1,7 @@
 # ASL (Android Subsystem for Linux) System Architecture
 
 ## Overview
-ASL is a universal, high-performance Linux container, subsystem management engine, and gaming framework running on Android ARM64 devices across Root (`su`), Shizuku (`rish`), and PRoot execution modes.
+ASL is a universal, high-performance Linux container and subsystem management engine running on Android ARM64 devices across Root (`su`), Shizuku (`rish`), and PRoot execution modes.
 
 ```
 +-------------------------------------------------------------------+
@@ -21,9 +21,7 @@ ASL is a universal, high-performance Linux container, subsystem management engin
 +-------------------------------------------------------------------+
 |     Multi-Distro Linux Subsystem RootFS (/data/local/tmp/...)    |
 |   (Debian Modded / Trixie, Ubuntu 24.04, Arch, Alpine, Kali)      |
-|    - Box64 ARM64 -> x86_64 Dynarec Execution                      |
-|    - Wine 64-bit Windows Binary Runtime                           |
-|    - Mesa Turnip Vulkan + Zink D3D Driver Stack                   |
+|    - Mesa Turnip Vulkan + Zink OpenGL/Vulkan Driver Stack         |
 |    - GTK3 GUI Control Center (asl-hub using os.posix_spawn)       |
 +-------------------------------------------------------------------+
 ```

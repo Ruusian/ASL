@@ -21,26 +21,26 @@ setup_android_aids() {
             return 1
         fi
     fi
-    if ! asl_chroot_exec "
+    if ! asl_chroot_exec '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         set -e
         ensure_group() {
-            local name=\"\$1\" gid=\"\$2\" existing_name existing_gid existing_gid_num
-            existing_name=\$(getent group \"\$name\" 2>/dev/null || true)
-            existing_gid=\$(getent group \"\$gid\" 2>/dev/null || true)
-            if [ -n \"\$existing_name\" ]; then
-                existing_gid_num=\$(printf '%s' \"\$existing_name\" | cut -d: -f3)
-                if [ \"\$existing_gid_num\" != \"\$gid\" ]; then
-                    echo \"[!] Group \$name exists with GID \$existing_gid_num, expected \$gid.\" >&2
+            local name="$1" gid="$2" existing_name existing_gid existing_gid_num
+            existing_name=$(getent group "$name" 2>/dev/null || true)
+            existing_gid=$(getent group "$gid" 2>/dev/null || true)
+            if [ -n "$existing_name" ]; then
+                existing_gid_num=$(printf "%s" "$existing_name" | cut -d: -f3)
+                if [ "$existing_gid_num" != "$gid" ]; then
+                    echo "[!] Group $name exists with GID $existing_gid_num, expected $gid." >&2
                     exit 1
                 fi
-            elif [ -n \"\$existing_gid\" ]; then
+            elif [ -n "$existing_gid" ]; then
                 local gid_name
-                gid_name=\$(printf '%s' \"\$existing_gid\" | cut -d: -f1)
-                echo \"[!] GID \$gid is already assigned to \$gid_name, not \$name.\" >&2
+                gid_name=$(printf "%s" "$existing_gid" | cut -d: -f1)
+                echo "[!] GID $gid is already assigned to $gid_name, not $name." >&2
                 exit 1
             else
-                groupadd -g \"\$gid\" \"\$name\"
+                groupadd -g "$gid" "$name"
             fi
         }
 
@@ -59,7 +59,7 @@ setup_android_aids() {
         ensure_group aid_everybody 9997
 
         for g in aid_graphics aid_input aid_audio aid_camera aid_wifi aid_sdcard_rw aid_media_rw aid_sdcard_r aid_sdcard_all aid_gpu_service aid_shell aid_inet aid_everybody; do
-            id -nG root | tr \" \" \"\\n\" | grep -qx \"\$g\" || usermod -aG \"\$g\" root
+            id -nG root | tr " " "\n" | grep -qx "$g" || usermod -aG "$g" root
         done
 
         # Create symlinks from root user folders to shared Android storage
@@ -69,7 +69,7 @@ setup_android_aids() {
             [ -d /sdcard/Pictures ] && [ ! -e /root/Pictures ] && ln -sf /sdcard/Pictures /root/Pictures || true
             [ -d /sdcard/Music ] && [ ! -e /root/Music ] && ln -sf /sdcard/Music /root/Music || true
         fi
-    "; then
+    '; then
         echo "[!] Android AID GID mapping failed."
         return 1
     fi

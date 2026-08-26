@@ -52,63 +52,63 @@ asl_dev_suite_install() {
         apt-get update
 
         install_python() {
-            echo \"[*] Installing Python3 development toolchain...\"
+            echo '[*] Installing Python3 development toolchain...'
             apt-get install -y python3 python3-pip python3-venv python3-dev build-essential
         }
 
         install_webdev() {
-            echo \"[*] Installing Node.js & Web Development toolchain...\"
+            echo '[*] Installing Node.js & Web Development toolchain...'
             apt-get install -y nodejs npm
         }
 
         install_neovim() {
-            echo \"[*] Installing Neovim & Git tooling...\"
+            echo '[*] Installing Neovim & Git tooling...'
             apt-get install -y neovim git curl ripgrep fd-find
         }
 
         install_golang() {
-            echo \"[*] Installing Golang toolchain...\"
+            echo '[*] Installing Golang toolchain...'
             apt-get install -y golang-go
         }
 
         install_rust() {
-            echo \"[*] Installing Rust & Cargo toolchain...\"
+            echo '[*] Installing Rust & Cargo toolchain...'
             apt-get install -y rustc cargo
         }
 
-install_vscode() {
-            echo \"[*] Installing VS Code Server (code-server)...\"
+        install_vscode() {
+            echo '[*] Installing VS Code Server (code-server)...'
             if ! command -v code-server >/dev/null 2>&1; then
                 if command -v npm >/dev/null 2>&1; then
-                    echo \"[*] Installing code-server via npm (integrity-checked)...\"
-                    npm install -g code-server || { echo \"[!] npm install of code-server failed.\"; }
+                    echo '[*] Installing code-server via npm (integrity-checked)...'
+                    npm install -g code-server || { echo '[!] npm install of code-server failed.'; }
                 else
-                    echo \"[*] Installing code-server from pinned GitHub release...\"
+                    echo '[*] Installing code-server from pinned GitHub release...'
                     CS_VER=v4.96.4
                     case \"\$(uname -m 2>/dev/null)\" in
                         aarch64|arm64) CS_ARCH=arm64 ;;
                         armv7l|armhf)  CS_ARCH=armv7l ;;
                         x86_64|amd64)  CS_ARCH=amd64 ;;
-                        *) echo \"[!] Unsupported architecture for code-server.\"; return 1 ;;
+                        *) echo '[!] Unsupported architecture for code-server.'; return 1 ;;
                     esac
                     TMP_DIR=\$(mktemp -d) || return 1
                     CS_URL=\"https://github.com/coder/code-server/releases/download/\${CS_VER}/code-server-\${CS_VER#v}-linux-\${CS_ARCH}.tar.gz\"
                     if ! curl -fsSL --connect-timeout 15 --max-time 120 -o \"\$TMP_DIR/cs.tar.gz\" \"\$CS_URL\"; then
-                        echo \"[!] Failed to download code-server.\"
+                        echo '[!] Failed to download code-server.'
                         rm -rf \"\$TMP_DIR\"
                         return 1
                     fi
                     SHA_URL=\"https://github.com/coder/code-server/releases/download/\${CS_VER}/SHA256SUMS\"
                     EXPECTED=\$(curl -fsSL --connect-timeout 15 --max-time 30 \"\$SHA_URL\" 2>/dev/null | grep -E \"code-server-\${CS_VER#v}-linux-\${CS_ARCH}.tar.gz\" | awk '{print \$1}' | head -n1)
                     if [ -z \"\$EXPECTED\" ]; then
-                        echo \"[!] Could not fetch checksum for code-server; continuing (HTTPS download).\"
+                        echo '[!] Could not fetch checksum for code-server; continuing (HTTPS download).'
                     elif ! echo \"\$EXPECTED  \$TMP_DIR/cs.tar.gz\" | sha256sum -c - >/dev/null 2>&1; then
-                        echo \"[!] code-server checksum verification failed; aborting.\"
+                        echo '[!] code-server checksum verification failed; aborting.'
                         rm -rf \"\$TMP_DIR\"
                         return 1
                     fi
                     tar -xzf \"\$TMP_DIR/cs.tar.gz\" -C /usr/local/lib 2>/dev/null || {
-                        echo \"[!] Failed to extract code-server.\"
+                        echo '[!] Failed to extract code-server.'
                         rm -rf \"\$TMP_DIR\"
                         return 1
                     }
@@ -117,7 +117,7 @@ install_vscode() {
                 fi
             fi
         }
-        case \"$preset\" in
+        case '$preset' in
             python) install_python ;;
             webdev|node) install_webdev ;;
             neovim|nvim) install_neovim ;;
@@ -132,8 +132,8 @@ install_vscode() {
                 install_rust
                 ;;
             *)
-                echo \"[!] Unknown dev suite preset: $preset\"
-                echo \"Valid presets: python, webdev, neovim, go, rust, vscode, all\"
+                echo '[!] Unknown dev suite preset: $preset'
+                echo 'Valid presets: python, webdev, neovim, go, rust, vscode, all'
                 exit 1
                 ;;
         esac

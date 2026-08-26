@@ -197,7 +197,7 @@ run_in_chroot() {
     case "${ASL_EXEC_MODE:-root}" in
         shizuku)
             if rish -c "id" >/dev/null 2>&1; then
-                rish -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" 2>/dev/null || \
+                rish -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export HOME=/root USER=root LOGNAME=root HERMES_HOME=/root/.hermes PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" 2>/dev/null || \
                 proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
             else
                 proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
@@ -207,7 +207,7 @@ run_in_chroot() {
             proot-distro login asl-debian -- /bin/bash -c "${timeout_cmd}printf '%s' '$command_b64' | base64 -d | /bin/bash"
             ;;
         root|*)
-            asl_exec "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --noprofile --norc -c \"${timeout_cmd}printf \\\"%s\\\" \\\"$command_b64\\\" | /usr/bin/base64 -d | /bin/bash\"; else ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash; fi'" || return $?
+            asl_exec "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export HOME=/root USER=root LOGNAME=root HERMES_HOME=/root/.hermes PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --noprofile --norc -c \"${timeout_cmd}printf \\\"%s\\\" \\\"$command_b64\\\" | /usr/bin/base64 -d | /bin/bash\"; else ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash; fi'" || return $?
             ;;
     esac
 }
@@ -230,58 +230,56 @@ launch_desktop_app() {
         echo "[!] No application specified to launch."
         return 1
     fi
-    run_in_chroot "
+    local app_b64
+    app_b64=$(printf '%s' "$APP" | base64 | tr -d '\n')
+    run_in_chroot '
         export DISPLAY=:0
-        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH
-        TARGET=\"$APP\"
-        if [[ \"\$TARGET\" == *.desktop ]] && [ ! -f \"\$TARGET\" ]; then
-            if [ -f \"/usr/share/applications/\$TARGET\" ]; then
-                TARGET=\"/usr/share/applications/\$TARGET\"
-            elif [ -f \"/root/Desktop/\$TARGET\" ]; then
-                TARGET=\"/root/Desktop/\$TARGET\"
+        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
+        TARGET=$(printf "%s" "'"$app_b64"'" | base64 -d)
+        if [[ "$TARGET" == *.desktop ]] && [ ! -f "$TARGET" ]; then
+            if [ -f "/usr/share/applications/$TARGET" ]; then
+                TARGET="/usr/share/applications/$TARGET"
+            elif [ -f "/root/Desktop/$TARGET" ]; then
+                TARGET="/root/Desktop/$TARGET"
             fi
-        elif [ ! -f \"\$TARGET\" ]; then
-            if [ -f \"/usr/share/applications/\${TARGET}.desktop\" ]; then
-                TARGET=\"/usr/share/applications/\${TARGET}.desktop\"
-            elif [ -f \"/root/Desktop/\${TARGET}.desktop\" ]; then
-                TARGET=\"/root/Desktop/\${TARGET}.desktop\"
+        elif [ ! -f "$TARGET" ]; then
+            if [ -f "/usr/share/applications/${TARGET}.desktop" ]; then
+                TARGET="/usr/share/applications/${TARGET}.desktop"
+            elif [ -f "/root/Desktop/${TARGET}.desktop" ]; then
+                TARGET="/root/Desktop/${TARGET}.desktop"
             fi
         fi
 
-        if [ -f \"\$TARGET\" ] && [[ \"\$TARGET\" == *.desktop ]]; then
-            APP_BASE=\$(basename \"\$TARGET\" .desktop)
+        if [ -f "$TARGET" ] && [[ "$TARGET" == *.desktop ]]; then
+            APP_BASE=$(basename "$TARGET" .desktop)
             if command -v gio >/dev/null 2>&1; then
-                nohup gio launch \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
+                nohup gio launch "$TARGET" >/tmp/app_launch.log 2>&1 &
             elif command -v gtk-launch >/dev/null 2>&1; then
-                nohup gtk-launch \"\$APP_BASE\" >/tmp/app_launch.log 2>&1 &
+                nohup gtk-launch "$APP_BASE" >/tmp/app_launch.log 2>&1 &
             else
-                EXEC_LINE=\$(grep -E '^Exec=' \"\$TARGET\" | head -n1 | cut -d'=' -f2-)
-                EXEC_CMD=\$(echo \"\$EXEC_LINE\" | sed -E 's/%[fFuUiIck]//g')
-                if [ -n \"\$EXEC_CMD\" ]; then
-                    nohup /bin/bash -c \"\$EXEC_CMD\" >/tmp/app_launch.log 2>&1 &
+                EXEC_LINE=$(grep -E "^Exec=" "$TARGET" | head -n1 | cut -d"=" -f2-)
+                EXEC_CMD=$(echo "$EXEC_LINE" | sed -E "s/%[fFuUiIck]//g")
+                if [ -n "$EXEC_CMD" ]; then
+                    nohup /bin/bash -c "$EXEC_CMD" >/tmp/app_launch.log 2>&1 &
                 else
-                    echo \"[!] Could not parse Exec line from \$TARGET\"
+                    echo "[!] Could not parse Exec line from $TARGET"
                 fi
             fi
         else
-            if command -v asl-wine-launch >/dev/null 2>&1; then
-                nohup asl-wine-launch \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
-            else
-                nohup \"\$TARGET\" >/tmp/app_launch.log 2>&1 &
-            fi
+                nohup "$TARGET" >/tmp/app_launch.log 2>&1 &
         fi
         sleep 0.5
-        if [ -s /tmp/app_launch.log ] && grep -qiE 'error|failed|cannot open' /tmp/app_launch.log 2>/dev/null; then
-            echo \"[!] Diagnostics (/tmp/app_launch.log):\"
+        if [ -s /tmp/app_launch.log ] && grep -qiE "error|failed|cannot open" /tmp/app_launch.log 2>/dev/null; then
+            echo "[!] Diagnostics (/tmp/app_launch.log):"
             tail -n 5 /tmp/app_launch.log
         fi
-    "
+    '
 }
 
 show_help() {
     echo "============================================================"
     echo "    Android Subsystem for Linux (ASL) Console v2.5.1"
-    echo "  Root-Accelerated Linux Environment & Gaming Container"
+    echo "  Root-Accelerated Linux Environment Container"
     echo "============================================================"
     echo "Usage: asl [dashboard|command] [args]  (or superkit [command])"
     echo ""
@@ -289,8 +287,8 @@ show_help() {
     echo "  dashboard, menu  Open the interactive terminal dashboard"
     echo "  overview         Show concise chroot, desktop, audio, X11, and GPU state"
     echo "  wizard, init     Launch Guided First-Time Setup Wizard"
-    echo "  mode [gaming|performance|balanced] Configure performance profile"
-    echo "  hud [on|off|toggle|status] Toggle MangoHud / DXVK performance overlay"
+    echo "  mode [performance|balanced]    Configure performance profile"
+    echo "  hud [on|off|toggle|status] Toggle MangoHud performance overlay"
     echo "  thermal          Display battery and CPU/GPU thermal temperatures"
     echo ""
     echo "Core Chroot Commands:"
@@ -309,27 +307,24 @@ show_help() {
     echo "AI & 24/7 Service Hub:"
     echo "  service [act]    24/7 Service Manager & Boot Autostart (start|stop|restart|check|loop|enable|disable|status)"
     echo "  omniroute [act]  OmniRoute Local Multi-Model AI Proxy (start|stop|restart|logs|status)"
+    echo "  openclaude       Setup & configure OpenClaude agentic environment with memory & web search"
     echo "  ps, top          Interactive Process & Resource Manager"
     echo ""
-    echo "MoBox Gaming Commands:"
-    echo "  setup-gaming     Auto-install Wine, Box64, DXVK, and VKD3D dependencies"
-    echo "  game [exe]       Launch Windows .exe with Box64 + Wine"
-    echo "  benchmark        Run GPU hardware acceleration & Vulkan rendering benchmark"
-    echo "  gpu              Detect SoC & configure Turnip/Zink/VirGL"
-    echo "  wine-bundle [act] Manage offline Wine Mono & Gecko bundles (install|status|clean)"
-    echo "  wine-version [act] Manage Wine / Proton-GE engines (status|set|install)"
-    echo "  gamepad [act]    Bluetooth gamepad evdev passthrough (status|sync|test)"
     echo ""
     echo "Modded Debian & Host Application Commands:"
     echo "  host [app]       Launch Modded Debian applications & launchers"
-    echo "                   Options: wine, explorer, winefile, winecfg, winetricks, openbox, xfce, picker, list, launch <id>"
+    echo "                   Options: xfce, list, launch <id>"
     echo "  apps             Alias for 'asl host' launcher menu"
     echo "  hub, asl-hub     Deploy/Launch GTK3 Control Center (ASL Hub)"
     echo "  dev-suite [act]  Install IDE & dev environments (python|webdev|neovim|go|rust|vscode)"
-    echo "  security-suite   Install defensive security audit tools (basic|audit|nmap|wireshark)"
-    echo "  clean [all|apt]  Purge package archives, caches, and temporary files"
+    echo "  security-suite   Defensive security audit & tools (basic|audit|all|nmap|wireshark)"
+    echo "  clean [safe|deep] Purge package archives, caches, and temporary files"
     echo "  orphan-killer    Detect & kill rogue processes; trigger fail-safe reboot if unkillable"
     echo "  repair [all]     Automated integrity repair for mounts, locks, and permissions"
+    echo "  swap [setup|optimize] 5GB virtual swap pool & memory optimization"
+    echo "  kernel-check     Audit kernel 4.14+ subsystems, namespaces, and drivers"
+    echo "  config [show]    Manage declarative system configuration (/etc/asl.conf)"
+    echo "  path [opts]      Convert file paths between Android host and Linux container"
     echo ""
     echo "Termux Desktop & Remote Commands:"
     echo "  desktop start    Start ASL-managed XFCE4 desktop"
@@ -984,16 +979,16 @@ dashboard() {
         render_opt 5 "" "Snapshots & Backups" "$sel"; printf "  "; render_opt 11 "" "PulseAudio Control" "$sel"; echo ""
         render_opt 6 "a" "Android AID Groups" "$sel"; printf "  "; render_opt 12 "" "Sync Debian Launchers" "$sel"; echo ""
         printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
-        printf "%s╭── Gaming Engine ─────────────────╮%s  %s╭── Android Bridge ────────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
-        render_opt 13 "g" "Run Windows .exe" "$sel"; printf "  "; render_opt 17 "k" "CPU Wake Lock Toggle" "$sel"; echo ""
+        printf "%s╭── GPU & Performance ─────────────╮%s  %s╭── Android Bridge ────────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        render_opt 13 "g" "GPU Hardware Profile" "$sel"; printf "  "; render_opt 17 "k" "CPU Wake Lock Toggle" "$sel"; echo ""
         render_opt 14 "m" "Performance Profile" "$sel"; printf "  "; render_opt 18 "o" "Open File in Host App" "$sel"; echo ""
-        render_opt 15 "" "Setup Wine / Box64" "$sel"; printf "  "; render_opt 19 "c" "System Clipboard Sync" "$sel"; echo ""
-        render_opt 16 "" "MangoHud & Gamepad" "$sel"; printf "  "; render_opt 20 "n" "Notification / Toast" "$sel"; echo ""
+        render_opt 15 "" "MangoHud & Gamepad" "$sel"; printf "  "; render_opt 19 "c" "System Clipboard Sync" "$sel"; echo ""
+        render_opt 16 "" "Benchmark GPU" "$sel"; printf "  "; render_opt 20 "n" "Notification / Toast" "$sel"; echo ""
         printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         printf "%s╭── Diagnostics & System ──────────╮%s  %s╭── AI & Service Hub ──────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
-        render_opt 21 "p" "Resource Manager" "$sel"; printf "  "; render_opt 25 "" "Host Apps Launcher" "$sel"; echo ""
+        render_opt 21 "p" "Resource Manager" "$sel"; printf "  "; render_opt 25 "" "Apps & Dev Suites" "$sel"; echo ""
         render_opt 22 "t" "Thermal Monitor" "$sel"; printf "  "; render_opt 26 "z" "Guided Setup Wizard" "$sel"; echo ""
-        render_opt 23 "" "Environment Doctor" "$sel"; printf "  "; render_opt 27 "i" "OmniRoute AI Proxy" "$sel"; echo ""
+        render_opt 23 "" "Doctor & Auto-Repair" "$sel"; printf "  "; render_opt 27 "i" "OmniRoute AI Proxy" "$sel"; echo ""
         render_opt 24 "" "GPU Hardware Profile" "$sel"; printf "  "; render_opt 28 "b" "24/7 Service Manager" "$sel"; echo ""
         printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         printf "%s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_CYAN" "$C_RESET"
@@ -1108,16 +1103,9 @@ dashboard() {
                     ;;
                 s|S) choice="1"; need_refresh=1 ;;
                 x|X) choice="2"; need_refresh=1 ;;
-                e|E) choice="3"; need_refresh=1 ;;
-                r) choice="4"; need_refresh=1 ;;
-                b|B) choice="5"; need_refresh=1 ;;
                 a|A) choice="6"; need_refresh=1 ;;
                 d|D) choice="7"; need_refresh=1 ;;
-                f|F) choice="8"; need_refresh=1 ;;
-                y|Y) choice="9"; need_refresh=1 ;;
                 v|V) choice="10"; need_refresh=1 ;;
-                u|U) choice="11"; need_refresh=1 ;;
-                l|L) choice="12"; need_refresh=1 ;;
                 g|G) choice="13"; need_refresh=1 ;;
                 m|M) choice="14"; need_refresh=1 ;;
                 k|K) choice="17"; need_refresh=1 ;;
@@ -1180,7 +1168,14 @@ dashboard() {
                     6) read -r -p "Backup tar.gz file path to restore: " r_file; bash "$REAL_SCRIPT" restore "$r_file" ;;
                 esac
                 pause_dashboard ;;
-            6|a|A) bash "$REAL_SCRIPT" aid setup; pause_dashboard ;;
+            6|a|A)
+                echo "Android AID GID Groups: 1) Setup/Sync GIDs  2) Status"
+                read -r -p "Select action [1-2, default: 1]: " a_act
+                case "$a_act" in
+                    2) bash "$REAL_SCRIPT" aid status ;;
+                    *) bash "$REAL_SCRIPT" aid setup ;;
+                esac
+                pause_dashboard ;;
             7|d|D) bash "$REAL_SCRIPT" desktop start; pause_dashboard ;;
             8)
                 echo "Desktop actions: 1) status  2) restart  3) stop  4) force-stop"
@@ -1193,11 +1188,11 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             9)
-                echo "Appearance options: 1) Theme preset  2) Termux:X11 Resolution"
-                read -r -p "Select option [1-2]: " app_act
+                echo "Appearance options: 1) Theme preset  2) Termux:X11 Resolution  3) List all themes"
+                read -r -p "Select option [1-3]: " app_act
                 case "$app_act" in
                     1)
-                        echo "Presets: tokyonight, aesthetic, graphite, habiboow, dark, light, nord, dracula, greybird"
+                        echo "Presets: blacklight, win11, win11-light, win11-compact, tokyonight, aesthetic, graphite, habiboow, dark, light, nord, dracula, greybird"
                         read -r -p "Theme name: " t_preset
                         [ -n "$t_preset" ] && bash "$REAL_SCRIPT" theme "$t_preset"
                         ;;
@@ -1205,6 +1200,9 @@ dashboard() {
                         echo "Presets: 720p, 1080p, native"
                         read -r -p "Resolution preset: " r_preset
                         [ -n "$r_preset" ] && bash "$REAL_SCRIPT" resolution "$r_preset"
+                        ;;
+                    3)
+                        bash "$REAL_SCRIPT" theme list
                         ;;
                 esac
                 pause_dashboard ;;
@@ -1338,37 +1336,19 @@ dashboard() {
                 pause_dashboard ;;
             12) bash "$REAL_SCRIPT" desktop sync-apps; pause_dashboard ;;
             13|g|G)
-                echo "Gaming actions: 1) Run .exe  2) Wine Explorer  3) Wine File Manager  4) Winecfg  5) Winetricks  6) Setup Gaming Layer"
-                read -r -p "Select action [1-6]: " g_act
-                case "$g_act" in
-                    2) bash "$REAL_SCRIPT" game desktop ;;
-                    3) bash "$REAL_SCRIPT" game winefile ;;
-                    4) bash "$REAL_SCRIPT" game winecfg ;;
-                    5) bash "$REAL_SCRIPT" game winetricks ;;
-                    6) bash "$REAL_SCRIPT" setup-gaming ;;
-                    *)
-                        read -r -p "Full path to Windows .exe (or leave empty for GUI file picker): " exe_path
-                        if [ -n "$exe_path" ]; then
-                            bash "$REAL_SCRIPT" game run "$exe_path"
-                        else
-                            bash "$REAL_SCRIPT" game picker
-                        fi
-                        ;;
-                esac
-                pause_dashboard ;;
+                bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
             14|m|M)
-                echo "Performance Profile: 1) gaming  2) performance  3) balanced  4) status"
-                read -r -p "Select mode [1-4]: " m_act
+                echo "Performance Profile: 1) performance  2) balanced  3) status"
+                read -r -p "Select mode [1-3]: " m_act
                 case "$m_act" in
-                    1) bash "$REAL_SCRIPT" mode gaming ;;
-                    2) bash "$REAL_SCRIPT" mode performance ;;
-                    3) bash "$REAL_SCRIPT" mode balanced ;;
+                    1) bash "$REAL_SCRIPT" mode performance ;;
+                    2) bash "$REAL_SCRIPT" mode balanced ;;
                     *) bash "$REAL_SCRIPT" mode status ;;
                 esac
                 pause_dashboard ;;
-            15) bash "$REAL_SCRIPT" setup-gaming; pause_dashboard ;;
-            16)
-                echo "Gaming Overlay & Input: 1) MangoHud HUD toggle  2) Gamepad / Joystick status & test"
+            15)
+                echo "MangoHud & Gamepad:"
+                echo "  1) MangoHud HUD toggle  2) Gamepad / Joystick status & test"
                 read -r -p "Select option [1-2]: " g_opt
                 case "$g_opt" in
                     1)
@@ -1392,6 +1372,8 @@ dashboard() {
                         ;;
                 esac
                 pause_dashboard ;;
+            16)
+                bash "$REAL_SCRIPT" benchmark; pause_dashboard ;;
             17|k|K)
                 echo "Wake lock actions: 1) status  2) enable (on)  3) disable (off)"
                 read -r -p "Select action [1-3]: " w_act
@@ -1406,10 +1388,13 @@ dashboard() {
                 if [ -n "$target_open" ]; then bash "$REAL_SCRIPT" open "$target_open"; fi
                 pause_dashboard ;;
             19|c|C)
-                echo "Clipboard actions: 1) paste (read)  2) copy (write)"
-                read -r -p "Select action [1-2]: " c_act
+                echo "Clipboard actions: 1) paste (read)  2) copy (write)  3) start sync daemon  4) stop sync daemon  5) sync status"
+                read -r -p "Select action [1-5]: " c_act
                 case "$c_act" in
                     2) read -r -p "Text to copy to clipboard: " c_text; bash "$REAL_SCRIPT" clip copy "$c_text" ;;
+                    3) bash "$REAL_SCRIPT" clip-sync start ;;
+                    4) bash "$REAL_SCRIPT" clip-sync stop ;;
+                    5) bash "$REAL_SCRIPT" clip-sync status ;;
                     *) bash "$REAL_SCRIPT" clip paste ;;
                 esac
                 pause_dashboard ;;
@@ -1430,9 +1415,102 @@ dashboard() {
                 pause_dashboard ;;
             21|p|P) process_manager ;;
             22|t|T) bash "$REAL_SCRIPT" thermal; pause_dashboard ;;
-            23) bash "$REAL_SCRIPT" doctor; pause_dashboard ;;
+            23)
+                echo "Diagnostics & System Integrity:"
+                echo "  1) Run Environment Doctor (asl doctor)"
+                echo "  2) Automated System Integrity Repair (asl repair)"
+                echo "  3) Storage & Cache Cleaner (asl clean)"
+                echo "  4) Kernel 4.14 Feature Check (asl kernel-check)"
+                echo "  5) Orphan Process Cleaner (asl clean-orphans)"
+                echo "  6) Virtual Swap & Memory Optimization (asl swap)"
+                read -r -p "Select action [1-6]: " doc_act
+                case "$doc_act" in
+                    2) bash "$REAL_SCRIPT" repair ;;
+                    3)
+                        echo "Storage Cleaner: 1) Safe Clean (apt, tmp, cache)  2) Deep Clean  3) Dry Run / Status"
+                        read -r -p "Choice [1-3]: " cl_act
+                        case "$cl_act" in
+                            2) bash "$REAL_SCRIPT" clean deep ;;
+                            3) bash "$REAL_SCRIPT" clean dry-run ;;
+                            *) bash "$REAL_SCRIPT" clean safe ;;
+                        esac
+                        ;;
+                    4) bash "$REAL_SCRIPT" kernel-check ;;
+                    5) bash "$REAL_SCRIPT" clean-orphans ;;
+                    6)
+                        echo "Swap Manager: 1) Setup 5GB Swap Pool  2) Optimize Memory  3) Swap Status  4) Cleanup Swap"
+                        read -r -p "Choice [1-4]: " sw_act
+                        case "$sw_act" in
+                            1) bash "$REAL_SCRIPT" swap setup ;;
+                            2) bash "$REAL_SCRIPT" swap optimize ;;
+                            4) bash "$REAL_SCRIPT" swap cleanup ;;
+                            *) bash "$REAL_SCRIPT" swap status ;;
+                        esac
+                        ;;
+                    *) bash "$REAL_SCRIPT" doctor ;;
+                esac
+                pause_dashboard ;;
             24) bash "$REAL_SCRIPT" gpu; pause_dashboard ;;
-            25|apps|host) show_host_apps_menu ;;
+            25|apps|host)
+                echo "Host Applications & Suites:"
+                echo "  1) Interactive Applications & Games Hub (asl game menu)"
+                echo "  2) Developer Environment Toolchains (VS Code, Neovim, Python, Node, Go, Rust)"
+                echo "  3) Defensive Security & Auditing Toolsuite (Nmap, Wireshark, Tshark, Socat)"
+                echo "  4) ASL Declarative Configuration (asl config)"
+                echo "  5) Path Translation Utility (Host <-> Chroot)"
+                echo "  6) OpenClaude AI Agent Setup"
+                read -r -p "Select action [1-6, default: 1]: " apps_act
+                case "$apps_act" in
+                    2)
+                        echo "Dev Suite: 1) Install All  2) VS Code  3) Neovim  4) Python  5) Node.js  6) Go  7) Rust  8) Status"
+                        read -r -p "Choice [1-8]: " dev_act
+                        case "$dev_act" in
+                            1) bash "$REAL_SCRIPT" dev-suite install all ;;
+                            2) bash "$REAL_SCRIPT" dev-suite install vscode ;;
+                            3) bash "$REAL_SCRIPT" dev-suite install neovim ;;
+                            4) bash "$REAL_SCRIPT" dev-suite install python ;;
+                            5) bash "$REAL_SCRIPT" dev-suite install nodejs ;;
+                            6) bash "$REAL_SCRIPT" dev-suite install golang ;;
+                            7) bash "$REAL_SCRIPT" dev-suite install rust ;;
+                            *) bash "$REAL_SCRIPT" dev-suite status ;;
+                        esac
+                        ;;
+                    3)
+                        echo "Security Suite: 1) Install Basic  2) Install All  3) Run Security Audit  4) Status"
+                        read -r -p "Choice [1-4]: " sec_act
+                        case "$sec_act" in
+                            1) bash "$REAL_SCRIPT" security-suite install basic ;;
+                            2) bash "$REAL_SCRIPT" security-suite install all ;;
+                            3) bash "$REAL_SCRIPT" security-suite audit ;;
+                            *) bash "$REAL_SCRIPT" security-suite status ;;
+                        esac
+                        ;;
+                    4)
+                        echo "ASL Config: 1) Show Configuration  2) Initialize Default asl.conf"
+                        read -r -p "Choice [1-2]: " cfg_act
+                        case "$cfg_act" in
+                            2) bash "$REAL_SCRIPT" config init ;;
+                            *) bash "$REAL_SCRIPT" config show ;;
+                        esac
+                        ;;
+                    5)
+                        read -r -p "Enter path to translate: " p_trans
+                        if [ -n "$p_trans" ]; then
+                            echo "Unix container path:   $(bash "$REAL_SCRIPT" path -u "$p_trans")"
+                            echo "Android host path:     $(bash "$REAL_SCRIPT" path -a "$p_trans")"
+                            echo "Host chroot file path: $(bash "$REAL_SCRIPT" path -c "$p_trans")"
+                        else
+                            bash "$REAL_SCRIPT" path -m
+                        fi
+                        ;;
+                    6)
+                        bash "$REAL_SCRIPT" openclaude
+                        ;;
+                    *)
+                        show_host_apps_menu
+                        ;;
+                esac
+                pause_dashboard ;;
             26|z|Z|wizard|init) bash "$REAL_SCRIPT" wizard; pause_dashboard ;;
             27|i|I)
                 echo "OmniRoute Local AI Proxy (Port 20128):"
@@ -1443,58 +1521,12 @@ dashboard() {
                 echo "  5) View OmniRoute Live Log"
                 read -r -p "Select action [1-5]: " omni_act
                 case "$omni_act" in
-                    1)
-                        if [ -x "$HOME/omniroute-daemon.sh" ]; then
-                            echo "[*] Starting OmniRoute AI proxy as root..."
-                            su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 &
-                            sleep 1
-                            if (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null || pgrep -f "omniroute" >/dev/null 2>&1 || su -c "pgrep -f omniroute" >/dev/null 2>&1; then
-                                echo "[✓] OmniRoute is ACTIVE on http://127.0.0.1:20128"
-                            else
-                                echo "[!] Notice: Starting in background. Check logs."
-                            fi
-                        else
-                            echo "[!] Error: $HOME/omniroute-daemon.sh not found."
-                        fi
-                        ;;
-                    2)
-                        echo "[*] Stopping OmniRoute daemon..."
-                        pkill -f "omniroute" 2>/dev/null || true
-                        su -c "pkill -f omniroute" 2>/dev/null || true
-                        echo "[✓] OmniRoute stopped."
-                        ;;
-                    3)
-                        echo "[*] Restarting OmniRoute daemon..."
-                        pkill -f "omniroute" 2>/dev/null || true
-                        su -c "pkill -f omniroute" 2>/dev/null || true
-                        sleep 1
-                        if [ -x "$HOME/omniroute-daemon.sh" ]; then
-                            su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 &
-                            echo "[✓] OmniRoute restarted."
-                        fi
-                        ;;
-                    4)
-                        echo "=== OmniRoute Local AI Proxy Status ==="
-                        if asl_is_omniroute_running; then
-                            echo " Status:  ACTIVE"
-                            echo " Port:    127.0.0.1:20128 (REST / SSE / OpenAI API / Anthropic API)"
-                            local opid
-                            opid=$(pgrep -f "omniroute" 2>/dev/null | head -n 1 || true)
-                            [ -z "$opid" ] && opid=$(su -c "pgrep -f omniroute 2>/dev/null | head -n 1" 2>/dev/null || true)
-                            echo " PID:     ${opid:-active}"
-                        else
-                            echo " Status:  INACTIVE"
-                            echo " Port:    127.0.0.1:20128 (Unbound)"
-                        fi
-                        ;;
-                    5)
-                        if [ -f "$HOME/omniroute.log" ]; then
-                            echo "=== Last 25 lines of $HOME/omniroute.log ==="
-                            tail -n 25 "$HOME/omniroute.log"
-                        else
-                            echo "[!] No log file found at $HOME/omniroute.log"
-                        fi
-                        ;;
+                    1) bash "$REAL_SCRIPT" omniroute start ;;
+                    2) bash "$REAL_SCRIPT" omniroute stop ;;
+                    3) bash "$REAL_SCRIPT" omniroute restart ;;
+                    4) bash "$REAL_SCRIPT" omniroute status ;;
+                    5) bash "$REAL_SCRIPT" omniroute logs ;;
+                    *) bash "$REAL_SCRIPT" omniroute status ;;
                 esac
                 pause_dashboard ;;
             28|b|B)
@@ -1645,24 +1677,6 @@ case "${1:-}" in
         ensure_mounted
         run_in_chroot "$@"
         ;;
-    dxvk)
-        shift
-        ensure_mounted
-        bash "$ASL_DIR/gaming/wine-box64.sh" dxvk "$@"
-        ;;
-    game|wine)
-        shift
-        ensure_mounted
-        bash "$ASL_DIR/gaming/wine-box64.sh" "$@"
-        ;;
-    setup-gaming|setup)
-        ensure_mounted
-        bash "$ASL_DIR/gaming/wine-box64.sh" setup
-        ;;
-    benchmark|bench)
-        ensure_mounted
-        bash "$ASL_DIR/gaming/wine-box64.sh" benchmark
-        ;;
     gpu)
         bash "$ASL_DIR/core/gpu-detect.sh"
         ;;
@@ -1740,7 +1754,7 @@ case "${1:-}" in
                 ;;
         esac
         ;;
-    desktop)
+    desktop|d|gui)
         shift
         DESKTOP_ACTION="${1:-start}"
         case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, or refresh-x11."; exit 1 ;; esac
@@ -1790,20 +1804,20 @@ case "${1:-}" in
         TARGET_MODE="${1:-status}"
         MODE_STATE="$HOME/.asl/asl_mode_state"
         case "$TARGET_MODE" in
-            gaming|game)
-                echo "[*] Applying Gaming Performance Profile & CPU Governor..."
-                asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
-                asl_exec "echo gaming > '$MODE_STATE'" 2>/dev/null || true
-                echo "[✓] Gaming mode active: CPU governor set to performance, Turnip flags enabled."
+            gpu|turbo)
+                echo "[*] Applying GPU Performance Profile & CPU Governor..."
+                asl_exec 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$g" 2>/dev/null || true; done' 2>/dev/null || true
+                asl_exec "echo gpu > '$MODE_STATE'" 2>/dev/null || true
+                echo "[✓] GPU performance mode active: CPU governor set to performance."
                 ;;
             performance|perf)
                 echo "[*] Applying Maximum Performance Mode..."
-                asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
+                asl_exec 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$g" 2>/dev/null || true; done' 2>/dev/null || true
                 asl_exec "echo performance > '$MODE_STATE'" 2>/dev/null || true
                 echo "[✓] Performance mode active: CPU governor set to performance."
                 ;;
             balanced|normal)
-                asl_exec "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > \"\$g\" 2>/dev/null || echo powersave > \"\$g\" 2>/dev/null || true; done" 2>/dev/null || true
+                asl_exec 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > "$g" 2>/dev/null || echo powersave > "$g" 2>/dev/null || true; done' 2>/dev/null || true
                 asl_exec "rm -f '$MODE_STATE'" 2>/dev/null || true
                 unset TU_DEBUG
                 echo "[✓] Balanced profile active: CPU governor reset."
@@ -1812,13 +1826,13 @@ case "${1:-}" in
                 GOV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
                 TU_MODE=$(asl_exec "cat '$MODE_STATE' 2>/dev/null" 2>/dev/null | tr -d '[:space:]')
                 if [ -n "$TU_MODE" ]; then
-                    echo "Current Profile Mode: Gaming ($TU_MODE) | Governor: $GOV"
+                    echo "Current Profile Mode: $TU_MODE | Governor: $GOV"
                 else
                     echo "Current Profile Mode: Balanced | Governor: $GOV"
                 fi
                 ;;
             *)
-                echo "Usage: asl mode [gaming|performance|balanced|status]"
+                echo "Usage: asl mode [gpu|performance|balanced|status]"
                 exit 1
                 ;;
         esac
@@ -1864,10 +1878,6 @@ case "${1:-}" in
             fi
         fi
         ;;
-    swap|memory)
-        shift
-        bash "$ASL_DIR/core/swap-manager.sh" "$@"
-        ;;
     kernel-check|kernel)
         shift
         bash "$ASL_DIR/core/kernel-check.sh" "$@"
@@ -1901,14 +1911,6 @@ case "${1:-}" in
     aid|gids)
         shift
         bash "$ASL_DIR/core/android-aid.sh" "$@"
-        ;;
-    wine-bundle)
-        shift
-        bash "$ASL_DIR/core/wine-bundle.sh" "$@"
-        ;;
-    wine-version)
-        shift
-        bash "$ASL_DIR/core/wine-version.sh" "$@"
         ;;
     gamepad)
         shift
@@ -1947,13 +1949,8 @@ case "${1:-}" in
         SUB_CMD="${1:-menu}"
         shift || true
         case "$SUB_CMD" in
-            wine|explorer) bash "$ASL_DIR/gaming/wine-box64.sh" desktop "$@" ;;
-            winefile) bash "$ASL_DIR/gaming/wine-box64.sh" winefile "$@" ;;
-            winecfg) bash "$ASL_DIR/gaming/wine-box64.sh" winecfg "$@" ;;
-            winetricks) bash "$ASL_DIR/gaming/wine-box64.sh" winetricks "$@" ;;
-            openbox) bash "$ASL_DIR/gaming/wine-box64.sh" openbox "$@" ;;
             xfce|desktop) bash "$ASL_DIR/desktop/start-desktop.sh" start "$@" ;;
-            picker|gui) bash "$ASL_DIR/gaming/wine-box64.sh" picker "$@" ;;
+
             list)
                 ensure_mounted
                 echo "=== Modded Debian Application Launchers ==="

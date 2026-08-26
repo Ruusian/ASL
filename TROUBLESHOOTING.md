@@ -107,7 +107,7 @@ asl mode balanced
 
 ### Issue: No Sound / PulseAudio Not Responding
 
-**Symptom**: Desktop apps or Wine games have no audio output
+**Symptom**: Desktop applications have no audio output
 
 **Diagnostic & Solutions**:
 
@@ -147,25 +147,26 @@ asl desktop start
 
 ---
 
-### Issue: 3D Games Stuttering or Crashing (Box64 / Wine)
+### Issue: 3D Graphics Stuttering or Hardware Acceleration Disabled
 
-**Symptom**: Game graphics lag or crash during startup
+**Symptom**: 3D applications or desktop rendering lag
 
 **Optimization Steps**:
 
-1. **Switch Box64 Dynarec Profile**:
-   - For maximum frame rates: `asl game precision fast`
-   - For sensitive float/NaN calculations: `asl game precision safe`
+1. **Apply GPU Hardware Profile**:
+   ```bash
+   asl gpu apply
+   ```
 
 2. **Verify GPU Hardware Node & Vulkan ICD**:
    ```bash
    asl doctor
-   asl game benchmark
+   asl gpu profile
    ```
 
-3. **Enable DXVK Async Translation**:
+3. **Enable Performance Turbo Mode**:
    ```bash
-   asl dxvk enable
+   asl turbo
    ```
 
 4. **Toggle MangoHud Telemetry Overlay**:

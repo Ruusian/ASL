@@ -47,15 +47,14 @@ Verified Scripts:
   ✓ core/thermal.sh
 ```
 
-### Test 3: Desktop/Gaming/Tools Scripts
+### Test 3: Desktop/Tools Scripts
 ```
-Command: for dir in desktop gaming tools; do for f in "$dir"/*.sh; do bash -n "$f"; done; done
+Command: for dir in desktop tools; do for f in "$dir"/*.sh; do bash -n "$f"; done; done
 Result: ✅ PASS
 Verified Scripts:
   ✓ desktop/remote.sh
   ✓ desktop/start-desktop.sh (with FD management fixes)
   ✓ desktop/theme.sh
-  ✓ gaming/wine-box64.sh
   ✓ tools/make-release.sh
 ```
 

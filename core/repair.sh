@@ -46,7 +46,7 @@ asl_repair_run() {
 
     # Step 2: Fix rootfs permissions & GPU/IPC sockets
     if [ "$target" = "permissions" ] || [ "$target" = "all" ]; then
-        echo "[2/5] Repairing critical directory permissions, GPU device nodes, and stale IPC sockets..."
+        echo "[2/4] Repairing critical directory permissions, GPU device nodes, and stale IPC sockets..."
         asl_exec "
             chmod 666 /dev/kgsl-3d0 2>/dev/null || true
             chmod 666 /dev/dri/renderD128 2>/dev/null || true
@@ -58,6 +58,8 @@ asl_repair_run() {
             chmod 755 '$DEBIANPATH/dev/pts' 2>/dev/null || true
             mkdir -p '$DEBIANPATH/run/user/0' 2>/dev/null || true
             chmod 700 '$DEBIANPATH/run/user/0' 2>/dev/null || true
+            chmod +x '$DEBIANPATH/root/Desktop'/*.desktop 2>/dev/null || true
+            chmod +x '$DEBIANPATH/usr/share/applications'/*.desktop 2>/dev/null || true
             rm -f '$DEBIANPATH/tmp/.X11-unix/X0.lock' 2>/dev/null || true
             rm -f '$DEBIANPATH/tmp/pulse-socket.lock' 2>/dev/null || true
         "

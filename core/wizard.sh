@@ -1,6 +1,6 @@
 #!/bin/bash
 # ASL: Guided First-Time Setup Wizard & Initialization Engine
-# Interactive configuration for new users (Gaming, Development, Security, or Full Workstation).
+# Interactive configuration for new users (GPU/Graphics, Development, Security, or Full Workstation).
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,35 +19,30 @@ ensure_chroot_mounted() {
     fi
 }
 
-run_preset_gaming() {
+run_preset_graphics() {
     echo ""
-    echo "[*] Setting up Gaming Workstation environment..."
+    echo "[*] Setting up GPU & Graphics Acceleration environment..."
     ensure_chroot_mounted || return 1
     local err_count=0
 
-    echo "[1/4] Auto-detecting GPU hardware and applying acceleration..."
+    echo "[1/3] Auto-detecting GPU hardware and applying acceleration..."
     source "$SCRIPT_DIR/core/gpu-profile.sh"
     asl_gpu_apply || err_count=$((err_count + 1))
 
-    echo "[2/4] Deploying Wine, Box64, and offline Mono/Gecko bundles..."
-    if [ -f "$SCRIPT_DIR/core/wine-bundle.sh" ]; then
-        bash "$SCRIPT_DIR/core/wine-bundle.sh" install || err_count=$((err_count + 1))
-    fi
-
-    echo "[3/4] Enabling MangoHud performance overlay..."
+    echo "[2/3] Enabling MangoHud performance overlay..."
     if [ -f "$SCRIPT_DIR/core/hud.sh" ]; then
         bash "$SCRIPT_DIR/core/hud.sh" on || err_count=$((err_count + 1))
     fi
 
-    echo "[4/4] Synchronizing Bluetooth & USB gamepad input nodes..."
+    echo "[3/3] Synchronizing Bluetooth & USB gamepad input nodes..."
     if [ -f "$SCRIPT_DIR/core/gamepad.sh" ]; then
         bash "$SCRIPT_DIR/core/gamepad.sh" sync || err_count=$((err_count + 1))
     fi
 
     if [ "$err_count" -eq 0 ]; then
-        echo "[✓] Gaming Workstation setup completed!"
+        echo "[✓] GPU & Graphics setup completed!"
     else
-        echo "[!] Gaming Workstation setup completed with $err_count warning(s)."
+        echo "[!] GPU & Graphics setup completed with $err_count warning(s)."
     fi
 }
 
@@ -80,7 +75,7 @@ run_preset_workstation() {
     echo "[*] Setting up Full Linux Workstation..."
     ensure_chroot_mounted || return 1
 
-    run_preset_gaming
+    run_preset_graphics
     run_preset_dev
     run_preset_security
 
@@ -101,7 +96,7 @@ asl_wizard_interactive() {
     echo " Let's configure your environment in a few quick steps."
     echo ""
     echo " Select your primary use case:"
-    echo "   [1] 🎮 Gaming Workstation  (Wine, Box64, Turnip Vulkan, MangoHud, Gamepad)"
+    echo "   [1] 🎮 GPU & Graphics      (Turnip Vulkan, MangoHud, Gamepad)"
     echo "   [2] 💻 Software Developer   (Python, Node.js, Neovim, Go, Rust, VS Code)"
     echo "   [3] 🛡️ Security Auditing    (Nmap, Wireshark/TShark, Netcat, Socat)"
     echo "   [4] 🚀 Full Workstation    (Install All Toolsuites + ASL Hub Desktop App)"
@@ -110,7 +105,7 @@ asl_wizard_interactive() {
     choice="${choice:-4}"
 
     case "$choice" in
-        1) run_preset_gaming ;;
+        1) run_preset_graphics ;;
         2) run_preset_dev ;;
         3) run_preset_security ;;
         4|*) run_preset_workstation ;;
@@ -132,8 +127,10 @@ asl_wizard_interactive() {
         *) res_preset="720p" ;;
     esac
 
-    if [ -f "$SCRIPT_DIR/desktop/start-desktop.sh" ]; then
-        bash "$SCRIPT_DIR/desktop/start-desktop.sh" resolution "$res_preset" || true
+    if [ -f "$SCRIPT_DIR/bin/asl" ]; then
+        bash "$SCRIPT_DIR/bin/asl" resolution "$res_preset" || true
+    elif [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ]; then
+        "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" resolution "$res_preset" || true
     fi
 
     echo ""
@@ -152,11 +149,11 @@ case "${1:-}" in
         shift
         preset="${1:-workstation}"
         case "$preset" in
-            gaming) run_preset_gaming ;;
+            gaming|graphics|gpu) run_preset_graphics ;;
             dev) run_preset_dev ;;
             security|sec) run_preset_security ;;
             workstation|full|all) run_preset_workstation ;;
-            *) echo "Unknown preset: $preset. Valid: gaming, dev, security, workstation" ;;
+            *) echo "Unknown preset: $preset. Valid: graphics, dev, security, workstation" ;;
         esac
         ;;
     *)

@@ -46,8 +46,8 @@ asl_gamepad_status() {
         echo "[✓] Total active input devices: $found"
     fi
 
-    if asl_exec "grep -q -F ' $DEBIANPATH/dev/input ' /proc/mounts" 2>/dev/null; then
-        echo "Debian Chroot Passthrough State: ACTIVE (/dev/input mounted)"
+    if asl_exec "grep -q -E ' $DEBIANPATH/dev(/input)? ' /proc/mounts" 2>/dev/null || [ -d "$DEBIANPATH/dev/input" ]; then
+        echo "Debian Chroot Passthrough State: ACTIVE (/dev/input accessible)"
     else
         echo "Debian Chroot Passthrough State: INACTIVE (/dev/input unmounted)"
     fi
@@ -81,20 +81,20 @@ asl_gamepad_sync() {
 asl_gamepad_test() {
     asl_gamepad_sync
     echo "[*] Testing gamepad input detection inside Debian chroot..."
-    asl_chroot_exec "
+    asl_chroot_exec '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         if command -v jstest >/dev/null 2>&1; then
-            echo \"Running jstest on /dev/input/js0 (Press Ctrl+C to exit)...\"
+            echo "[*] Running jstest on /dev/input/js0 (Press Ctrl+C to exit)..."
             jstest --normal /dev/input/js0 2>/dev/null || jstest /dev/input/event0
         elif command -v evtest >/dev/null 2>&1; then
-            echo \"Running evtest...\"
+            echo "[*] Running evtest..."
             evtest
         else
-            echo \"Installing joystick diagnostic tools (joystick, evtest)...\"
+            echo "[*] Installing joystick diagnostic tools (joystick, evtest)..."
             apt-get update && apt-get install -y joystick evtest
-            echo \"Run 'asl gamepad test' again to test live inputs.\"
+            echo "[*] Run '\''asl gamepad test'\'' again to test live inputs."
         fi
-    "
+    '
 }
 
 case "${1:-status}" in

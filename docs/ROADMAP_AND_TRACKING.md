@@ -4,25 +4,20 @@
 - [x] **Universal 3-Tier Execution Engine** (Root `su`, Shizuku `rish`, PRoot `proot-distro`)
 - [x] **Multi-Distro Subsystem Provisioner** (Debian Modded, Debian Trixie Base, Ubuntu 24.04 LTS, Arch Linux, Alpine, Kali)
 - [x] **Execution Mode CLI Manager** (`asl exec-mode [root|shizuku|proot|status]`)
-- [x] **Box64 Dynarec Precision Profile Switcher** (`asl game precision [safe|fast|status]`)
+- [x] **GPU Hardware Acceleration Engine & Profile Switcher** (`asl gpu [profile|apply]`)
 - [x] **Automated Chroot Mount Error Rollback Trap** (`core/mount-chroot.sh`)
 - [x] **Hardened Loopback Remote Access** (`desktop/remote.sh` 127.0.0.1 default binding)
 - [x] **Shared Execution Abstraction Engine** (`core/common.sh`)
 - [x] **Debian 13 (Trixie) ARM64 RootFS Integration**
 - [x] **GTK3 Dashboard (`asl-gui` / `asl-hub`) with `posix_spawn` multithreading deadlock fix**
 - [x] **Native Debian Desktop GTK3 Control Center ("ASL Hub") App & Launcher**
-- [x] **Box64 ARM64 -> x86_64 Dynarec + Wine 64-bit Execution Stack**
 - [x] **Mesa Turnip Vulkan + Zink D3D Driver Integration**
-- [x] **MangoHud & DXVK_HUD Performance Overlay Manager (`asl hud`)**
-- [x] **Wine Mono / Gecko Offline Bundle Installer (`asl wine-bundle`)**
-- [x] **Wine & Proton-GE Version Engine Manager (`asl wine-version`)**
+- [x] **MangoHud Performance Overlay Manager (`asl hud`)**
 - [x] **Bluetooth & Evdev Gamepad Passthrough (`asl gamepad`)**
 - [x] **IDE & Developer Environment Toolsuite (`asl dev-suite`)**
 - [x] **Containerized Defensive Security Audit Suite (`asl security-suite`)**
 - [x] **Storage Cleaner & Automated Integrity Repair (`asl clean` & `asl repair`)**
-- [x] **DXVK & VKD3D-Proton Runtime Configuration (`asl dxvk`)**
 - [x] **Termux:X11 Dynamic Display Resolution & Low-Latency PulseAudio Optimizer**
-- [x] **Windows Binary Execution Layer (`asl game`)**
 - [x] **Full Subsystem Backup & Point-in-Time Snapshot Management (`asl backup` & `asl snapshot`)**
 - [x] **Declarative System Configuration Manager (`/etc/asl.conf` / `asl config`)**
 - [x] **Host <-> Subsystem Path Translation Utility (`asl path`)**

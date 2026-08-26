@@ -23,7 +23,7 @@ asl_orphan_kill() {
 
         # Match known stuck background spin-loop signatures (py3compile, node-gyp, stuck pip)
         if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
-           (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 2>/dev/null ])); then
+           (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 ] 2>/dev/null)); then
             rogue_pids+=("$pid")
             echo "[!] Detected rogue/stuck process: PID $pid ($comm, CPU: ${pcpu}%, Time: $etime) -> $cmd"
         fi
@@ -36,7 +36,7 @@ asl_orphan_kill() {
             [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
             echo "$cmd" | grep -qE "openclaude|claude-code" && continue
             if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
-               (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 2>/dev/null ])); then
+               (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 ] 2>/dev/null)); then
                 local already=0
                 for existing in "${rogue_pids[@]}"; do
                     [ "$existing" -eq "$pid" ] 2>/dev/null && { already=1; break; }

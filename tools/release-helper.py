@@ -27,14 +27,17 @@ def get_token():
                     content = f.read()
                     for line in content.splitlines():
                         if "oauth_token:" in line:
-                            return line.split("oauth_token:")[1].strip()
-                        elif "gho_" in line:
-                            for part in line.split(":"):
-                                if "gho_" in part:
-                                    sub = part.split("@")[0]
-                                    for word in sub.split():
-                                        if word.startswith("gho_"):
-                                            return word
+                            val = line.split("oauth_token:")[1].strip()
+                            if val:
+                                return val
+                        for prefix in ("ghp_", "gho_", "github_pat_"):
+                            if prefix in line:
+                                for part in line.split(":"):
+                                    if prefix in part:
+                                        sub = part.split("@")[0]
+                                        for word in sub.split():
+                                            if word.startswith(prefix):
+                                                return word
             except Exception:
                 pass
     return ""
@@ -199,7 +202,7 @@ if __name__ == "__main__":
             rel = get_release_by_tag(tag)
             if not rel:
                 print(f"[*] Release {tag} not found. Creating it...")
-                rel = create_release(tag, f"ASL Modded Subsystem Release {tag}", "ASL Prebuilt Modded Debian Rootfs with Turnip Vulkan, Box64, Wine64, and XFCE GTK3 Desktop.")
+                rel = create_release(tag, f"ASL Modded Subsystem Release {tag}", "ASL Prebuilt Modded Debian Rootfs with Turnip Vulkan and XFCE GTK3 Desktop.")
             if rel:
                 upload_asset(rel["id"], fpath)
         elif action == "create" and len(sys.argv) > 2:

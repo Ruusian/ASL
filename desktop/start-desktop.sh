@@ -10,6 +10,8 @@ source "$SCRIPT_DIR/core/gpu-profile.sh"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/asl/desktop"
 STATE_FILE="$STATE_DIR/state"
 LAUNCHER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+export TMPDIR="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+mkdir -p "$TMPDIR" 2>/dev/null || true
 
 asl_require_default_debianpath
 
@@ -150,6 +152,29 @@ start_gpu() {
     fi
 }
 
+start_vnc() {
+    local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+    if [ ! -S "$termux_tmp/.X11-unix/X0" ] && command -v socat >/dev/null 2>&1; then
+        socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=700 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
+    fi
+    if ! asl_chroot_exec "pgrep -f 'x11vnc.*:0'" >/dev/null 2>&1; then
+        echo "[*] Initializing x11vnc server on DISPLAY :0..."
+        asl_exec "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/x11vnc \
+            -display :0 -noshm -forever -shared -nopw -loop -rfbport 5900 \
+            -threads -nap -nowait_bog \
+            -wait 10 -defer 10 -deferupdate 20 \
+            -ncache 10 -ncache_cr \
+            -wireframe -scrollcopyrect always \
+            -speeds 250,100,50 \
+            -cursor arrow -noxdamage \
+            >'$DEBIANPATH/tmp/x11vnc.log' 2>&1 &" || true
+    fi
+    if ! asl_chroot_exec "pgrep -f 'websockify.*6080'" >/dev/null 2>&1; then
+        echo "[*] Initializing noVNC websockify bridge on port 6080..."
+        asl_exec "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/python3 /usr/bin/websockify --web /usr/share/novnc 6080 localhost:5900 >'$DEBIANPATH/tmp/websockify.log' 2>&1 &" || true
+    fi
+}
+
 cleanup_started() {
     if [ -n "${SESSION_PID:-}" ] && (process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"); then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || true; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
@@ -165,6 +190,7 @@ start_desktop() {
     if read_state; then
         if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then
             echo "[*] Desktop is already running on $DISPLAY_ID."
+            start_vnc 2>/dev/null || true
             return 0
         fi
         rm -f "$STATE_FILE"
@@ -265,7 +291,8 @@ start_desktop() {
     local gpu_exports
     gpu_exports=$(asl_gpu_env_exports 2>/dev/null || true)
     mkdir -p "$termux_tmp"
-    local launcher_script="$termux_tmp/asl-start-xfce.sh"
+    local launcher_script
+    launcher_script=$(mktemp "$termux_tmp/asl-start-xfce-XXXXXX.sh" 2>/dev/null) || launcher_script="$termux_tmp/asl-start-xfce-${EUID:-$$}.sh"
     umask 022
     cat << LAUNCHER_EOF > "$launcher_script"
 #!/bin/bash
@@ -296,9 +323,51 @@ export GIO_USE_VFS=local
 export WEBKIT_FORCE_SANDBOX=0
 export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
+export GSK_RENDERER=cairo
 $gpu_exports
 
-mkdir -p /etc/pulse "$target_home/.config/pulse" /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
+mkdir -p /etc/pulse "$target_home/.config/pulse" "$target_home/Desktop" "$target_home/.config/gtk-3.0" /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
+for app_id in asl-hub code chromium thunar xfce4-terminal synaptic pavucontrol; do
+    if [ -f "/usr/share/applications/${app_id}.desktop" ] && [ ! -f "$target_home/Desktop/${app_id}.desktop" ]; then
+        cp -f "/usr/share/applications/${app_id}.desktop" "$target_home/Desktop/" 2>/dev/null || true
+    fi
+done
+for f in "$target_home/Desktop"/*.desktop; do
+    if [ -f "$f" ]; then
+        chmod +x "$f" 2>/dev/null || true
+        chk=$(sha256sum "$f" 2>/dev/null | awk '{print $1}')
+        gio set -t string "$f" metadata::xfce-exe-checksum "$chk" 2>/dev/null || true
+        gio set -t string "$f" metadata::trusted true 2>/dev/null || true
+    fi
+done
+if [ ! -f "$target_home/.config/gtk-3.0/settings.ini" ]; then
+cat << 'GTK3_EOF' > "$target_home/.config/gtk-3.0/settings.ini"
+[Settings]
+gtk-theme-name=Blacklight
+gtk-icon-theme-name=bes-icon-black
+gtk-cursor-theme-name=Blacklight
+gtk-cursor-theme-size=28
+gtk-font-name=Sans 10.5
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle=hintslight
+gtk-xft-rgba=rgb
+gtk-application-prefer-dark-theme=1
+GTK3_EOF
+fi
+if [ ! -f "$target_home/.gtkrc-2.0" ]; then
+cat << 'GTK2_EOF' > "$target_home/.gtkrc-2.0"
+gtk-theme-name = "Blacklight"
+gtk-icon-theme-name = "bes-icon-black"
+gtk-font-name = "Sans 10.5"
+gtk-cursor-theme-name = "Blacklight"
+gtk-cursor-theme-size = 28
+gtk-xft-antialias = 1
+gtk-xft-hinting = 1
+gtk-xft-hintstyle = "hintslight"
+gtk-xft-rgba = "rgb"
+GTK2_EOF
+fi
 [ -f /tmp/.Xauthority ] && cp -f /tmp/.Xauthority "$target_home/.Xauthority" 2>/dev/null && chmod 600 "$target_home/.Xauthority" 2>/dev/null || true
 ln -sf /usr/share/applications/org.pulseaudio.pavucontrol.desktop /usr/share/applications/pavucontrol.desktop 2>/dev/null || true
 cat << 'PULSE_CONF_EOF' > /etc/pulse/client.conf
@@ -354,20 +423,17 @@ rm -f /tmp/xfce-keepalive 2>/dev/null
 
     xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/use_compositing -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/theme -s Blacklight 2>/dev/null || xfconf-query -c xfwm4 -p /general/theme -n -t string -s Blacklight 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xsettings -p /Net/IconThemeName -s bes-icon-black 2>/dev/null || xfconf-query -c xsettings -p /Net/IconThemeName -n -t string -s bes-icon-black 2>/dev/null || true
-    xfconf-query -c xsettings -p /Net/ThemeName -s Blacklight 2>/dev/null || xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Blacklight 2>/dev/null || true
-    xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Blacklight 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeName -n -t string -s Blacklight 2>/dev/null || true
-    xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 28 2>/dev/null || xfconf-query -c xsettings -p /Gtk/CursorThemeSize -n -t int -s 28 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/HintStyle -s hintslight 2>/dev/null || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/RGBA -s rgb 2>/dev/null || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s /usr/share/backgrounds/blacklight/Blacklight_wireframe_nostars.png 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -n -t string -s /usr/share/backgrounds/blacklight/Blacklight_wireframe_nostars.png 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -s 5 2>/dev/null || xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/image-style -n -t int -s 5 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/style -s 2 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/style -n -t int -s 2 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -s 48 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -n -t int -s 48 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -s true 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -s true 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -n -t bool -s true 2>/dev/null || true
 ) &
 
 rm -f /etc/xdg/autostart/light-locker.desktop "$HOME/.config/autostart/light-locker.desktop" 2>/dev/null || true
@@ -384,8 +450,9 @@ else
     exec /usr/bin/xfwm4
 fi
 LAUNCHER_EOF
-    chmod 755 "$launcher_script"
+    chmod 755 "$launcher_script" 2>/dev/null || true
     asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp -f '$launcher_script' '$DEBIANPATH/tmp/asl-start-xfce.sh' && chmod 755 '$DEBIANPATH/tmp/asl-start-xfce.sh'" 2>/dev/null || cp -f "$launcher_script" "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
+    rm -f "$launcher_script" 2>/dev/null || true
     LAUNCHER_PID=
     case "${ASL_EXEC_MODE:-root}" in
         proot|shizuku)
@@ -442,7 +509,8 @@ LAUNCHER_EOF
     fi
     write_state || { cleanup_started; return 1; }
     am start -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
-    echo "[✓] Desktop started on $DISPLAY_ID. Open the Termux:X11 Android app."
+    start_vnc 2>/dev/null || true
+    echo "[✓] Desktop started on $DISPLAY_ID. Open the Termux:X11 Android app or noVNC web viewer."
 }
 
 stop_desktop() {
@@ -452,11 +520,6 @@ stop_desktop() {
     fi
     local failed=0 pid
     echo "[*] Stopping ASL-managed desktop..."
-    # Wine shutdown can block indefinitely under Box64. Terminate only
-    # processes actually rooted in this chroot, then continue cleanup.
-    chroot_pkill TERM '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64)([^A-Za-z0-9_]|$)'
-    sleep 1
-    chroot_pkill 9 '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64)([^A-Za-z0-9_]|$)'
     chroot_pkill TERM '(^|[^A-Za-z0-9_])(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|xfconf-query|picom)([^A-Za-z0-9_]|$)'
     if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START" || process_matches "$SESSION_PID" "startxfce4" "$SESSION_START" || process_matches "$SESSION_PID" "asl-start-xfce" "$SESSION_START"; then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || failed=1; fi
     sleep 1
@@ -480,17 +543,14 @@ stop_desktop() {
 }
 
 force_stop_desktop() {
-    echo "[*] Force-stopping all GUI, X11, GPU, Wine, Box64, and audio processes..."
-    # Do not invoke wineserver -k: it may block indefinitely under Box64.
-    chroot_pkill TERM '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64)([^A-Za-z0-9_]|$)'
-    sleep 1
-    chroot_pkill 9 '(^|[^A-Za-z0-9_])(wine|wine64|wineserver|box64|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|xfconf-query|picom|dbus-daemon|dbus-launch|x11vnc)([^A-Za-z0-9_]|$)'
+    echo "[*] Force-stopping all GUI, X11, GPU, and audio processes..."
+    chroot_pkill 9 '(^|[^A-Za-z0-9_])(xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd|xfconf-query|picom|dbus-daemon|dbus-launch|x11vnc)([^A-Za-z0-9_]|$)'
     chroot_pkill 9 '(^|[^A-Za-z0-9_])(asl-start-xfce)([^A-Za-z0-9_]|$)'
     host_pkill 9 '(^|[^A-Za-z0-9_])(termux-x11|virgl_test_server_android|pulseaudio|socat)([^A-Za-z0-9_]|$)'
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     rm -rf "$termux_tmp/.X11-unix"/X* "$termux_tmp/.X0-lock" "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$DEBIANPATH/tmp/.X11-vnc" "$DEBIANPATH/tmp/.vnc"/*.pid "$STATE_FILE" "$STATE_FILE.tmp."* 2>/dev/null || true
     sleep 1
-    echo "[✓] Complete stop: All GUI and gaming processes terminated and state cleared."
+    echo "[✓] Complete stop: All GUI processes terminated and state cleared."
 }
 
 status_desktop() {
@@ -596,7 +656,17 @@ audio_control() {
             if ! pgrep -x pulseaudio >/dev/null; then start_audio || return 1; fi
             echo "[*] Playing audio test tone..."
             if command -v paplay >/dev/null; then
-                paplay /usr/share/sounds/freedesktop/stereo/bell.oga 2>/dev/null || echo "[*] Audio pipeline active."
+                local sound_file=""
+                for s in "$PREFIX/share/sounds/freedesktop/stereo/bell.oga" "$DEBIANPATH/usr/share/sounds/freedesktop/stereo/bell.oga" /usr/share/sounds/freedesktop/stereo/bell.oga; do
+                    if [ -f "$s" ]; then sound_file="$s"; break; fi
+                done
+                if [ -n "$sound_file" ]; then
+                    paplay "$sound_file" 2>/dev/null || echo "[*] Audio pipeline active."
+                elif command -v speaker-test >/dev/null 2>&1; then
+                    speaker-test -t sine -f 440 -l 1 >/dev/null 2>&1 || echo "[*] Audio pipeline active."
+                else
+                    echo "[*] Audio pipeline active (PulseAudio server running)."
+                fi
             else
                 echo "[!] paplay is not installed in Termux."
             fi

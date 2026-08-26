@@ -76,17 +76,13 @@ termux-home/*
 *.bun*
 *.cache*
 *.claude*
-*.config*
 *.dbus*
 *.gnupg*
 *.gvfs*
-*.local*
 *.mozilla*
 *.npm*
 *.wget-hsts
 *.wine*
-Desktop*
-./Desktop*
 Documents*
 ./Documents*
 Downloads*
@@ -102,13 +98,13 @@ Templates*
 Videos*
 ./Videos*
 
-# Sensitive tokens, keys & personal auth files
-root/.*
-./root/.*
-root/*
-./root/*
-root/.openclaude*
+# Sensitive tokens, keys, AI agent sessions & personal caches
+root/.ICEauthority
+root/.bash_history
+root/.bun*
+root/.cache*
 root/.claude*
+root/.openclaude*
 root/.claude-mem*
 root/.qwen*
 root/.hermes*
@@ -119,9 +115,6 @@ root/.dsh*
 root/.prime*
 root/.kilo*
 root/.cua-driver*
-root/.config*
-root/.local*
-root/.cache*
 root/.npm*
 root/.wine*
 root/.ssh*
@@ -216,10 +209,12 @@ else
 fi
 
 # Restore Termux environment permissions & SELinux contexts
+HOST_UID="$(id -u 2>/dev/null || echo 10566)"
+HOST_GID="$(id -g 2>/dev/null || echo 10566)"
 su -c "export PATH=/data/data/com.termux/files/usr/bin:\$PATH; \
     restorecon -RF /data/data/com.termux/files/usr/share/asl /data/data/com.termux/files/usr/bin/asl /data/data/com.termux/files/home/ASL 2>/dev/null || \
     chcon -R u:object_r:app_data_file:s0:c54,c258,c512,c768 /data/data/com.termux/files/usr/share/asl /data/data/com.termux/files/usr/bin/asl /data/data/com.termux/files/home/ASL 2>/dev/null || true; \
-    chown -R 10566:10566 /data/data/com.termux/files/usr/share/asl /data/data/com.termux/files/usr/bin/asl /data/data/com.termux/files/home/ASL 2>/dev/null || true; \
+    chown -R ${HOST_UID}:${HOST_GID} /data/data/com.termux/files/usr/share/asl /data/data/com.termux/files/usr/bin/asl /data/data/com.termux/files/home/ASL 2>/dev/null || true; \
     chmod -R u+rwX,go+rX /data/data/com.termux/files/usr/share/asl 2>/dev/null || true"
 
 echo -e "${CYAN}====================================================${RESET}"

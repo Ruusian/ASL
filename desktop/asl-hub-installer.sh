@@ -42,14 +42,20 @@ install_asl_hub_deb() {
     # Deploy the real ASL CLI into the chroot so the Hub's buttons work.
     # Inside the chroot the CLI must operate on the current rootfs, so we set
     # ASL_CHROOT_SELF=1 (handled in core/common.sh) and provide an asl-cli
-    # wrapper that does not collide with the wine-shim /usr/local/bin/asl.
+    # wrapper for chroot execution.
     echo "[*] Deploying ASL CLI into Linux rootfs..."
     local asl_cli_dir="$DEBIANPATH/usr/local/share/asl-cli"
     mkdir -p "$asl_cli_dir" 2>/dev/null || asl_exec "mkdir -p '$asl_cli_dir'"
     cp "$SCRIPT_DIR/bin/asl" "$asl_cli_dir/asl" 2>/dev/null || asl_exec "cp '$SCRIPT_DIR/bin/asl' '$asl_cli_dir/asl'"
-    mkdir -p "$asl_cli_dir/core" 2>/dev/null || asl_exec "mkdir -p '$asl_cli_dir/core'"
-    for f in "$SCRIPT_DIR"/core/*.sh; do
-        cp "$f" "$asl_cli_dir/core/" 2>/dev/null || asl_exec "cp '$f' '$asl_cli_dir/core/'"
+    for subdir in core desktop tools; do
+        if [ -d "$SCRIPT_DIR/$subdir" ]; then
+            mkdir -p "$asl_cli_dir/$subdir" 2>/dev/null || asl_exec "mkdir -p '$asl_cli_dir/$subdir'"
+            for f in "$SCRIPT_DIR/$subdir"/*; do
+                if [ -f "$f" ]; then
+                    cp "$f" "$asl_cli_dir/$subdir/" 2>/dev/null || asl_exec "cp '$f' '$asl_cli_dir/$subdir/'"
+                fi
+            done
+        fi
     done
     chmod 755 "$asl_cli_dir/asl" 2>/dev/null || asl_exec "chmod 755 '$asl_cli_dir/asl'"
 
@@ -94,7 +100,7 @@ Icon=preferences-system
 Terminal=false
 Type=Application
 Categories=System;Settings;GTK;
-Keywords=ASL;Control;Center;Wine;GPU;
+Keywords=ASL;Control;Center;GPU;Performance;
 DESKEOF
 
     cp "$tmp_desk" "$DEBIANPATH/usr/share/applications/asl-hub.desktop" 2>/dev/null || asl_exec "cp '$tmp_desk' '$DEBIANPATH/usr/share/applications/asl-hub.desktop'"

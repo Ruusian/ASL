@@ -66,17 +66,16 @@ asl_gpu_icd_name() {
 
 asl_gpu_apply() {
     asl_gpu_detect
-    unset GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE MESA_VK_WINSYS TU_DEBUG MESA_SHADER_CACHE_DIR VK_ICD_FILENAMES VK_DRIVER_FILES MESA_GL_VERSION_OVERRIDE MESA_GLES_VERSION_OVERRIDE ZINK_DESCRIPTORS MESA_NO_ERROR BOX64_MMAP32 VKD3D_CONFIG TU_PERF
+    unset GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE MESA_VK_WINSYS TU_DEBUG MESA_SHADER_CACHE_DIR VK_ICD_FILENAMES VK_DRIVER_FILES MESA_GL_VERSION_OVERRIDE MESA_GLES_VERSION_OVERRIDE ZINK_DESCRIPTORS MESA_NO_ERROR TU_PERF
 
     case "$ASL_GPU_PROFILE" in
-        adreno-turnip-zink|gaming-max|dx12-vkd3d)
+        adreno-turnip-zink)
             export GALLIUM_DRIVER=zink
             export MESA_LOADER_DRIVER_OVERRIDE=zink
             export MESA_VK_WINSYS=x11
             export MESA_VK_WSI_DEBUG=sw
             export ZINK_DESCRIPTORS=lazy
             export MESA_NO_ERROR=1
-            export BOX64_MMAP32=1
             export MESA_GL_VERSION_OVERRIDE=4.3COMPAT
             export MESA_GLES_VERSION_OVERRIDE=3.2
             local icd_chroot
@@ -109,10 +108,6 @@ asl_gpu_apply() {
                     export TU_DEBUG="noconform"
                     ;;
             esac
-            
-            if [ "$ASL_GPU_PROFILE" = "dx12-vkd3d" ]; then
-                export VKD3D_CONFIG=dxr11,dxr
-            fi
             ;;
         mali-virgl|generic-virgl|*)
             export GALLIUM_DRIVER=virpipe
@@ -144,8 +139,6 @@ asl_gpu_env_exports() {
     [ -n "${TU_DEBUG:-}" ] && res="${res}export TU_DEBUG=\"${TU_DEBUG}\"\n"
     [ -n "${ZINK_DESCRIPTORS:-}" ] && res="${res}export ZINK_DESCRIPTORS=\"${ZINK_DESCRIPTORS}\"\n"
     [ -n "${MESA_NO_ERROR:-}" ] && res="${res}export MESA_NO_ERROR=\"${MESA_NO_ERROR}\"\n"
-    [ -n "${BOX64_MMAP32:-}" ] && res="${res}export BOX64_MMAP32=\"${BOX64_MMAP32}\"\n"
-    [ -n "${VKD3D_CONFIG:-}" ] && res="${res}export VKD3D_CONFIG=\"${VKD3D_CONFIG}\"\n"
     res="${res}export MESA_SHADER_CACHE_DIR=\"${MESA_SHADER_CACHE_DIR:-/tmp/.mesa_cache}\"\n"
     res="${res}export MESA_GL_SHADER_CACHE_DIR=\"${MESA_GL_SHADER_CACHE_DIR:-/tmp/.mesa_cache}\"\n"
     res="${res}export MESA_VK_SHADER_CACHE_DIR=\"${MESA_VK_SHADER_CACHE_DIR:-/tmp/.mesa_cache}\"\n"

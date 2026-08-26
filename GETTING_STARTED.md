@@ -46,7 +46,7 @@ bash install.sh
 
 During installation, you can select the Linux distribution flavor:
 
-- **Debian Modded [RECOMMENDED]**: Turnip Mesa Vulkan, Box64, Wine64, XFCE4 desktop pre-configured.
+- **Debian Modded [RECOMMENDED]**: Turnip Mesa Vulkan, GPU Drivers, XFCE4 desktop pre-configured.
 - **Clean Debian Trixie Base**: Minimal official Debian Trixie arm64 rootfs.
 - **Ubuntu 24.04 LTS Base**: Clean Ubuntu Noble arm64 base.
 - **Arch / Kali / Alpine Base**: Alternative Linux distributions.
@@ -183,16 +183,13 @@ asl remote lan start   # Start LAN SSH server
 asl remote oracle start# Connect to dedicated VPS tunnel
 ```
 
-### Gaming & Performance
+### Graphics & Performance
 
 ```bash
-asl game               # Launch gaming hub
-asl game /path/app.exe # Run Windows .exe
-asl game precision fast# Set Box64 max FPS profile
-asl game precision safe# Set Box64 safe precision profile
-asl mode gaming        # Set CPU governor to performance
+asl gpu apply          # Detect and apply GPU acceleration
+asl turbo              # Set CPU/GPU governor to performance
 asl mode balanced      # Set CPU governor to balanced
-asl hud on             # Enable MangoHud / DXVK HUD overlay
+asl hud on             # Enable MangoHud overlay
 ```
 
 ### Diagnostics
@@ -230,9 +227,6 @@ export DISPLAY=:0
 
 # PulseAudio TCP server
 export PULSE_SERVER=127.0.0.1:4713
-
-# Wine prefix
-export WINEPREFIX=/root/.wine
 ```
 
 ### Files & Locations
@@ -307,7 +301,6 @@ asl desktop start
 
 - **Read [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md)** for complete CLI syntax
 - **Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for technical architecture
-- **Read [docs/GAMING_GUIDE.md](docs/GAMING_GUIDE.md)** for Box64 & Vulkan setup
 - **Read [TROUBLESHOOTING.md](TROUBLESHOOTING.md)** for common issues & solutions
 
 ---

@@ -15,7 +15,7 @@ if [ -d "$TARGET_DIR/.git" ]; then
     # to avoid pulling code from a hijacked or mistyped remote.
     origin_url=$(git config --get remote.origin.url 2>/dev/null || echo "")
     case "$origin_url" in
-        *github.com/Ruusian/ASL*|*github.com/Ruusian/ASL*)
+        *github.com/Ruusian/ASL*)
             git pull origin master 2>/dev/null || true
             ;;
         *)
@@ -210,7 +210,7 @@ if { [ -t 0 ] || [ -c /dev/tty ]; } && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "\n${CYAN}====================================================${RESET}"
     echo -e "${CYAN} 🐧 Select Linux Subsystem Distribution / Edition:   ${RESET}"
     echo -e "${CYAN}====================================================${RESET}"
-    echo -e "  1) ${GREEN}Debian Modded Rootfs${RESET} (Pre-configured Turnip Mesa Vulkan, Box64, Wine64 & XFCE)"
+    echo -e "  1) ${GREEN}Debian Modded Rootfs${RESET} (Pre-configured Turnip Mesa Vulkan & XFCE Desktop)"
     echo -e "  2) ${CYAN}Debian Clean Base${RESET} (Official Debian Trixie via proot-distro)"
     echo -e "  3) ${CYAN}Ubuntu LTS Base${RESET} (Official Ubuntu 24.04 via proot-distro)"
     echo -e "  4) ${CYAN}Arch Linux Base${RESET} (Official Arch via proot-distro)"
@@ -505,5 +505,5 @@ echo -e "${CYAN}====================================================${RESET}"
 echo -e "Type ${YELLOW}asl${RESET} to open the interactive dashboard."
 echo -e "Type ${YELLOW}asl start${RESET} to mount your Linux chroot environment."
 echo -e "Type ${YELLOW}asl desktop start${RESET} to launch XFCE4 desktop with Termux:X11."
-echo -e "Type ${YELLOW}asl setup-gaming${RESET} to install Wine and Box64; add DXVK per Wine prefix with Winetricks."
+echo -e "Type ${YELLOW}asl hub${RESET} to launch the ASL Hub Control Center."
 echo -e "${CYAN}====================================================${RESET}"

@@ -23,7 +23,7 @@
 
 **Android Subsystem for Linux (ASL)** is an autonomous, high-performance Linux container engine, gaming runtime, GTK3 desktop control center, and remote tunneling workstation designed for ARM64 Android devices.
 
-Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or tablet into a native Linux workstation and x86_64 gaming station with zero SELinux panics or host OS crashes across **Root (`su`)**, **Shizuku (`rish`)**, and **PRoot (Zero-Root)** environments.
+Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or tablet into a native Linux workstation with zero SELinux panics or host OS crashes across **Root (`su`)**, **Shizuku (`rish`)**, and **PRoot (Zero-Root)** environments.
 
 ---
 
@@ -37,8 +37,8 @@ Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or
  │  ┌────────────────────────────────────────────────────────────────────────────┐  │
  │  │        Debian 13 Trixie / Multi-Distro Subsystem & GTK3 Control Suite      │  │
  │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
- │  │  │  XFCE4 Desktop   │  │  Box64 + Wine64  │  │ Turnip / Zink / DXVK     │  │  │
- │  │  │  (Termux:X11 :0) │  │  Dynarec Engine  │  │ Direct3D 11/12 Vulkan    │  │  │
+ │  │  │  XFCE4 Desktop   │  │ GPU & Vulkan     │  │ Turnip / Zink Acceleration │  │
+ │  │  │  (Termux:X11 :0) │  │ Hardware Layer   │  │ OpenGL / Vulkan Drivers  │  │  │
  │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
  │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
  │  │  │ ASL Hub (GTK3)   │  │ Dev & Security   │  │ OmniRoute AI Gateway     │  │  │
@@ -110,7 +110,7 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 Pass non-interactive distribution flags or select interactively during setup:
 
 ```bash
-# ASL Modded Rootfs (Turnip Vulkan, Box64, Wine64, XFCE & ASL Hub pre-configured):
+# ASL Modded Rootfs (Turnip Vulkan, GPU Drivers, XFCE & ASL Hub pre-configured):
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --modded
 
 # Standard Clean Debian Trixie Base:
@@ -160,11 +160,9 @@ asl
 - **Serveo & Ngrok**: Instant public jump-host and multi-token rotation tunneling on demand.
 - **24/7 Autostart & Service Watchdog**: Detached double-fork background daemon (`service-manager.sh`) with TCP throughput tuning and automatic service recovery.
 
-### 🎮 4. Direct3D 11/12 Gaming & Box64 Dynarec Engine
-- **Turnip Mesa Vulkan & Zink**: Hardware-accelerated OpenGL/Direct3D for Qualcomm Adreno 6xx/7xx and VirGL/Zink fallback for Mali GPUs.
-- **Box64 Dynarec Precision Switcher**: Toggle dynamically between high FPS (`asl game precision fast`) and strict IEEE-754 compatibility (`asl game precision safe`).
-- **MangoHud & DXVK_HUD Telemetry**: Real-time FPS, CPU/GPU temperature, and VRAM overlay (`asl hud on`).
-- **Wine Mono & Gecko Offline Bundles**: Package offline `.msi` installers for .NET and MSHTML runtimes (`asl wine-bundle`).
+### 🎮 4. Direct GPU Acceleration & Input Engine
+- **Turnip Mesa Vulkan & Zink**: Hardware-accelerated OpenGL/Direct3D for Qualcomm Adreno 6xx/7xx/8xx and VirGL/Zink fallback for Mali GPUs.
+- **MangoHud Telemetry**: Real-time FPS, CPU/GPU temperature, and VRAM overlay (`asl hud on`).
 - **Bluetooth Gamepad Passthrough**: Synchronize `/dev/input/event*` wireless controllers directly into the subsystem (`asl gamepad`).
 
 ### 🤖 5. OmniRoute AI Gateway Integration
@@ -195,15 +193,12 @@ asl
 | **Package Installer** | `asl install <pkg>` | Install Debian APT packages inside subsystem |
 | **Package Search** | `asl search <query>` | Search available APT packages |
 | **Execution Mode** | `asl exec-mode [root\|shizuku\|proot]` | Inspect or switch execution mode |
-| **Setup Wizard** | `asl wizard` / `asl init` | Guided first-time setup for Gaming, Dev, Security presets |
+| **Setup Wizard** | `asl wizard` / `asl init` | Guided first-time setup for Graphics, Dev, Security presets |
 | **GTK3 Control Center**| `asl hub` / `asl gui` | Launch ASL Hub GTK3 desktop control center |
-| **Wine Application** | `asl game <path_to_exe>` | Execute Windows `.exe` via Box64 + Wine64 |
-| **Dynarec Precision** | `asl game precision [safe\|fast]` | Switch Box64 dynarec profile (FPS vs Float Precision) |
-| **DirectX Overrides** | `asl dxvk [enable\|status]` | Configure DXVK Direct3D async translation |
-| **Wine Bundles** | `asl wine-bundle [install\|status\|clean]` | Package offline Wine Mono (.NET) & Gecko MSI bundles |
-| **Wine Manager** | `asl wine-version [set\|status\|install]` | Switch between Debian system Wine and Proton-GE engines |
+| **GPU Acceleration** | `asl gpu [profile\|apply]` | Configure Turnip/Zink GPU acceleration profiles |
+| **Turbo Governor** | `asl turbo` / `asl gpu` | Apply maximum CPU/GPU performance governor |
 | **Gamepad Passthrough**| `asl gamepad [sync\|test]` | Synchronize host Bluetooth/USB evdev gamepads into chroot |
-| **Performance HUD** | `asl hud [on\|off\|toggle\|status]` | Toggle MangoHud & DXVK_HUD telemetry overlay |
+| **Performance HUD** | `asl hud [on\|off\|toggle\|status]` | Toggle MangoHud telemetry overlay |
 | **Thermal Diagnostics**| `asl thermal [watch]` | Monitor battery and CPU/GPU thermal zone sensors |
 | **Desktop Session** | `asl desktop [start\|stop\|restart]`| Start/stop hardware-accelerated XFCE4 desktop on Termux:X11 |
 | **Remote Dispatcher** | `asl remote [status\|all\|gui]` | Inspect or start all remote access bridges |
@@ -231,7 +226,6 @@ All in-depth architectural specifications, hardware tuning guides, and developer
 | Document | Purpose & Description |
 | :--- | :--- |
 | 🏗️ **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** | Technical subsystem architecture, 3-tier execution model, `os.posix_spawn` invariant, runtime separation. |
-| 🎮 **[`docs/GAMING_GUIDE.md`](docs/GAMING_GUIDE.md)** | Direct3D Vulkan gaming, Box64 dynarec precision, Turnip/Zink drivers, MangoHud, Wine configuration. |
 | ⚡ **[`docs/PERFORMANCE_TUNING.md`](docs/PERFORMANCE_TUNING.md)** | Kernel sysctl TCP tuning, CPU governor boost, PulseAudio low-latency buffers, virtual swap management. |
 | 🛠️ **[`docs/CLI_AND_UTILITIES.md`](docs/CLI_AND_UTILITIES.md)** | Complete CLI subcommand syntax reference, helper scripts, installer flags, environment variables. |
 | 🗺️ **[`docs/ROADMAP_AND_TRACKING.md`](docs/ROADMAP_AND_TRACKING.md)** | Feature tracking, completed milestones, architectural invariants, future development roadmap. |

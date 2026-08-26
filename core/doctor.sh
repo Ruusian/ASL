@@ -19,6 +19,9 @@ check() {
 # Allow custom or dynamic DEBIANPATH across execution modes
 
 case "${ASL_EXEC_MODE:-root}" in
+    direct)
+        check exec-mode required "native container environment (DIRECT mode)" PASS
+        ;;
     root)
         if [ "$(su -c 'id -u' 2>/dev/null)" = 0 ]; then
             check exec-mode required "su grants root access (ROOT mode)" PASS
@@ -46,10 +49,27 @@ if command -v getenforce >/dev/null 2>&1; then
     se_mode=$(getenforce 2>/dev/null || echo "Unknown")
     check selinux optional "mode=$se_mode" PASS
 fi
-if [ -d "$DEBIANPATH" ] || asl_exec "test -d '$DEBIANPATH'" 2>/dev/null || [ -d "$PREFIX/var/lib/proot-distro/containers/asl-debian" ]; then check debian-root required "$DEBIANPATH exists" PASS; else check debian-root required "$DEBIANPATH is missing" FAIL; fi
-if is_mounted; then mounted=1; check chroot optional "mounted" PASS; else mounted=0; check chroot optional "not mounted; chroot checks skipped" WARN; fi
-if command -v termux-x11 >/dev/null; then check termux-x11 required "client installed" PASS; else check termux-x11 required "install with: pkg install termux-x11" FAIL; fi
-if command -v pulseaudio >/dev/null; then check pulseaudio required "client installed" PASS; else check pulseaudio required "install with: pkg install pulseaudio" FAIL; fi
+if [ -d "$DEBIANPATH" ] || asl_exec "test -d '$DEBIANPATH'" 2>/dev/null || [ -d "$PREFIX/var/lib/proot-distro/containers/asl-debian" ] || [ "${ASL_EXEC_MODE:-}" = "direct" ]; then check debian-root required "$DEBIANPATH exists" PASS; else check debian-root required "$DEBIANPATH is missing" FAIL; fi
+if [ "${ASL_EXEC_MODE:-}" = "direct" ]; then
+    mounted=1
+    check chroot optional "active container environment" PASS
+elif is_mounted; then
+    mounted=1
+    check chroot optional "mounted" PASS
+else
+    mounted=0
+    check chroot optional "not mounted; chroot checks skipped" WARN
+fi
+if [ "${ASL_EXEC_MODE:-}" = "direct" ]; then
+    if [ -S /tmp/.X11-unix/X0 ] || [ -f /tmp/.X0-lock ] || pgrep -f "termux-x11|Xorg" >/dev/null 2>&1 || [ -n "${DISPLAY:-}" ]; then
+        check termux-x11 required "X11 display server available (${DISPLAY:-:0})" PASS
+    else
+        check termux-x11 optional "X11 server not running (run 'asl desktop' on host)" WARN
+    fi
+else
+    if command -v termux-x11 >/dev/null; then check termux-x11 required "client installed" PASS; else check termux-x11 required "install with: pkg install termux-x11" FAIL; fi
+fi
+if command -v pulseaudio >/dev/null || command -v pactl >/dev/null || [ -e /tmp/pulse-socket ]; then check pulseaudio required "PulseAudio sound system ready" PASS; else check pulseaudio required "install with: pkg install pulseaudio" FAIL; fi
 if [ -d /sdcard ] && [ -w /sdcard ]; then check storage optional "/sdcard is writable" PASS; else check storage optional "/sdcard is unavailable or not writable" WARN; fi
 asl_gpu_detect
 if [ -e /dev/dri ] || [ -e /dev/kgsl-3d0 ]; then check gpu optional "profile=$ASL_GPU_PROFILE; host GPU node present" PASS; else check gpu optional "profile=$ASL_GPU_PROFILE; no known host GPU node" WARN; fi

@@ -132,7 +132,7 @@ asl_swap_setup() {
     # Protect critical processes from OOM killer
     echo "[*] Setting OOM protection for critical processes..."
     local critical_pids
-    critical_pids=$(pgrep -f "(box64|wine|pulseaudio|sshd)" 2>/dev/null || true)
+    critical_pids=$(pgrep -f "(pulseaudio|sshd|xfce4-session|dbus-daemon)" 2>/dev/null || true)
     for pid in $critical_pids; do
         if [ -n "$pid" ]; then
             su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || echo -1000 > "/proc/$pid/oom_score_adj" 2>/dev/null || true

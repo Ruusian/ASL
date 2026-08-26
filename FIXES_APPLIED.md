@@ -21,7 +21,7 @@
 ---
 
 ### ✅ 3. Safe Subshell Execution for Desktop Application Launchers (HIGH)
-**Files**: `bin/asl`, `gaming/wine-box64.sh`
+**Files**: `bin/asl`
 
 **Changes Made**:
 - Replaced dangerous `eval "nohup $EXEC_CMD ..."` calls with safe explicit subshell invocation `nohup /bin/bash -c "$EXEC_CMD" >/tmp/app_launch.log 2>&1 &`.

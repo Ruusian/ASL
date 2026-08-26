@@ -118,20 +118,23 @@ with open(conf_file, 'w') as f:
         return 0
     fi
 
-    asl_exec "
-python3 -c '
+    local py_script
+    py_script=$(cat << PYEOF
 import configparser, os
-conf_file = \"$target_file\"
+conf_file = "$target_file"
 config = configparser.ConfigParser()
 if os.path.exists(conf_file):
     config.read(conf_file)
-if \"$section\" not in config:
-    config[\"$section\"] = {}
-config[\"$section\"][\"$key\"] = \"$val\"
-with open(conf_file, \"w\") as f:
+if "$section" not in config:
+    config["$section"] = {}
+config["$section"]["$key"] = "$val"
+with open(conf_file, "w") as f:
     config.write(f)
-'
-" 2>/dev/null || true
+PYEOF
+)
+    local py_b64
+    py_b64=$(printf '%s' "$py_script" | base64 | tr -d '\n')
+    asl_exec "python3 -c \"\$(printf '%s' '$py_b64' | base64 -d)\"" 2>/dev/null || true
 }
 
 show_config() {

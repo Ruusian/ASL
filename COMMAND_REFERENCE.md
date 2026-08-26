@@ -55,10 +55,10 @@ asl init                               # Alias for asl wizard
 ```
 
 Preset options available in wizard:
-1. **Gaming Workstation** (Box64, Wine64, Turnip Mesa Vulkan, DXVK, MangoHud)
+1. **GPU & Graphics Acceleration** (Turnip Mesa Vulkan, Zink, MangoHud, Gamepad)
 2. **Software Developer** (Python 3, Node.js, Neovim, Go, Rust, VS Code Server)
 3. **Security Auditing** (Nmap, Wireshark/TShark, Netcat, Socat, Hydra)
-4. **Full Workstation** (Complete desktop suite, developer tools & gaming stack)
+4. **Full Workstation** (Complete desktop suite, developer tools & graphics stack)
 
 ---
 
@@ -262,60 +262,25 @@ asl remote autoconnect stop         # Stop autoconnect daemon
 
 ---
 
-## 🎮 Gaming, Box64 & Direct3D
+## 🎮 GPU Acceleration & Graphics Engine
 
-### `asl game` / `asl wine`
-Execute Windows applications (`.exe`) via Box64 Dynarec + Wine64, or open the interactive Gaming Hub.
+### `asl gpu [profile|apply]`
+Configure and apply hardware-accelerated Turnip Vulkan and Mesa Zink graphics drivers.
 
 ```bash
-asl game                            # Open interactive Gaming & Host Applications Hub
-asl game <path/to/app.exe>          # Launch any Windows .exe directly
-asl game setup                      # Install gaming stack (Wine, Box64, Mesa, Vulkan tools)
-asl game benchmark                  # Run OpenGL / Vulkan hardware benchmark (glmark2, vulkaninfo)
+asl gpu apply                        # Detect GPU hardware and apply acceleration
+asl gpu profile                      # Inspect detected GPU and Vulkan ICD
 ```
 
 ---
 
-### `asl game precision [safe|fast|status]`
-Switch Box64 dynamic recompilation precision profile dynamically.
+### `asl turbo` / `asl mode gpu`
+Apply maximum CPU/GPU performance governor and OOM protection.
 
 ```bash
-asl game precision fast             # Fast mode (max FPS for 3D gaming: FASTROUND=1, FASTNAN=1, X87DOUBLE=0)
-asl game precision safe             # Safe mode (strict float/NaN accuracy: FASTROUND=0, FASTNAN=0, X87DOUBLE=1)
-asl game precision status           # Query current active dynarec precision profile
-```
-
----
-
-### `asl dxvk [enable|status]`
-Configure DirectX-to-Vulkan translation layer (`/etc/dxvk.conf`).
-
-```bash
-asl dxvk enable                     # Enable DXVK async pipeline configuration
-asl dxvk status                     # Inspect DXVK configuration state
-```
-
----
-
-### `asl wine-bundle [install|status|clean]`
-Manage offline Wine Mono (.NET Framework) and Wine Gecko (MSHTML engine) MSI bundles.
-
-```bash
-asl wine-bundle install             # Download and configure offline Mono & Gecko bundles
-asl wine-bundle status              # Check bundle installation state
-asl wine-bundle clean               # Purge downloaded bundle installers
-```
-
----
-
-### `asl wine-version [status|set|install]`
-Switch active Wine execution engine between Debian system-wine and Proton-GE.
-
-```bash
-asl wine-version status             # Check current active Wine engine
-asl wine-version set proton-ge      # Switch to Proton-GE custom engine
-asl wine-version set system-wine    # Switch to standard Debian system Wine
-asl wine-version install proton-ge  # Download and install latest Proton-GE release
+asl turbo                            # Switch CPU governor to performance
+asl mode balanced                    # Switch to balanced profile
+asl mode status                      # Query active governor profile
 ```
 
 ---
@@ -466,7 +431,7 @@ asl notify "ASL" "Build finished"   # Post Android system notification
 Create Android home screen launcher shortcut for container applications.
 
 ```bash
-asl shortcut winecfg                # Create shortcut for Wine configuration
+asl shortcut xfce4-terminal         # Create shortcut for XFCE terminal
 ```
 
 ---

@@ -40,8 +40,10 @@ asl_path_convert() {
         echo "ASL Storage Mount Points:"
         echo "  /sdcard                    -> /storage/emulated/0"
         echo "  /storage/emulated/0        -> /storage/emulated/0"
-        echo "  /termux/home               -> /data/data/com.termux/files/home"
-        echo "  /termux/tmp                -> /data/data/com.termux/files/usr/tmp"
+        echo "  /termux-home               -> /data/data/com.termux/files/home"
+        echo "  /termux                    -> /data/data/com.termux"
+        echo "  /data/data/com.termux      -> /data/data/com.termux"
+        echo "  /tmp                       -> /data/data/com.termux/files/usr/tmp"
         return 0
     fi
 
@@ -62,9 +64,9 @@ asl_path_convert() {
             elif [[ "$input_path" == "/sdcard"* ]]; then
                 echo "$input_path"
             elif [[ "$input_path" == "/data/data/com.termux/files/home"* ]]; then
-                echo "${input_path/#\/data\/data\/com.termux\/files\/home//termux/home}"
+                echo "${input_path/#\/data\/data\/com.termux\/files\/home//termux-home}"
             elif [[ "$input_path" == "/data/data/com.termux/files/usr/tmp"* ]]; then
-                echo "${input_path/#\/data\/data\/com.termux\/files\/usr\/tmp//termux/tmp}"
+                echo "${input_path/#\/data\/data\/com.termux\/files\/usr\/tmp//tmp}"
             elif [[ "$input_path" == "$DEBIANPATH"* ]]; then
                 local rel="${input_path#$DEBIANPATH}"
                 [ -z "$rel" ] && rel="/"
@@ -79,10 +81,16 @@ asl_path_convert() {
                 echo "${input_path/#\/sdcard//storage/emulated/0}"
             elif [[ "$input_path" == "/mnt/sdcard"* ]]; then
                 echo "${input_path/#\/mnt\/sdcard//storage/emulated/0}"
+            elif [[ "$input_path" == "/termux-home"* ]]; then
+                echo "${input_path/#\/termux-home//data/data/com.termux/files/home}"
             elif [[ "$input_path" == "/termux/home"* ]]; then
                 echo "${input_path/#\/termux\/home//data/data/com.termux/files/home}"
-            elif [[ "$input_path" == "/termux/tmp"* ]]; then
-                echo "${input_path/#\/termux\/tmp//data/data/com.termux/files/usr/tmp}"
+            elif [[ "$input_path" == "/termux/files/home"* ]]; then
+                echo "${input_path/#\/termux\/files\/home//data/data/com.termux/files/home}"
+            elif [[ "$input_path" == "/termux"* ]]; then
+                echo "${input_path/#\/termux//data/data/com.termux}"
+            elif [[ "$input_path" == "/tmp"* ]]; then
+                echo "${input_path/#\/tmp//data/data/com.termux/files/usr/tmp}"
             elif [[ "$input_path" == "/"* ]]; then
                 echo "$DEBIANPATH$input_path"
             else

@@ -360,7 +360,7 @@ asl_service_check() {
         fi
     fi
 
-    # 4. Oracle VPS Tunnel Check (if enabled by user state)
+    # 3. Oracle VPS Tunnel Check (if enabled by user state)
     if [ -f "$prefix/tmp/asl-oracle.state" ]; then
         if [ -f "$SCRIPT_DIR/desktop/remote.sh" ] && ! bash "$SCRIPT_DIR/desktop/remote.sh" oracle status 2>/dev/null | grep -q "RUNNING"; then
             echo "[!] Oracle VPS tunnel state ACTIVE but process down or unresponsive — restoring tunnel..."
@@ -369,7 +369,7 @@ asl_service_check() {
         fi
     fi
 
-    # 5. Serveo Tunnel Check (if enabled by user state)
+    # 4. Serveo Tunnel Check (if enabled by user state)
     if [ -f "$prefix/tmp/asl-serveo.state" ]; then
         if [ -f "$SCRIPT_DIR/desktop/remote.sh" ] && ! bash "$SCRIPT_DIR/desktop/remote.sh" serveo status 2>/dev/null | grep -q "RUNNING"; then
             echo "[!] Serveo tunnel state ACTIVE but process down or unresponsive — restoring tunnel..."
@@ -378,7 +378,7 @@ asl_service_check() {
         fi
     fi
 
-    # 4.5. OmniRoute Local AI Proxy Check
+    # 5. OmniRoute Local AI Proxy Check
     if [ -x "$HOME/omniroute-daemon.sh" ] || command -v omniroute >/dev/null 2>&1; then
         if ! pgrep -f "omniroute" >/dev/null 2>&1 && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
             echo "[!] OmniRoute AI proxy down — starting as root..."
@@ -387,18 +387,7 @@ asl_service_check() {
         fi
     fi
 
-#     # 4. Ngrok Tunnel Check (if enabled by user state)
-#     if [ -f "$prefix/tmp/asl-ngrok.state" ]; then
-#         if ! pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || ! curl -s http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
-#             echo "[!] Ngrok tunnel unresponsive — cycling active authtoken pool..."
-#             if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
-#                 bash "$SCRIPT_DIR/desktop/remote.sh" ngrok start >/dev/null 2>&1 || true
-#                 healed=$((healed + 1))
-#             fi
-#         fi
-#     fi
-
-    # 5. Chroot Mount & Swap Check
+    # 6. Chroot Mount & Swap Check
     if ! is_mounted; then
         echo "[!] Debian chroot unmounted — re-mounting Linux virtual filesystems..."
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
@@ -482,7 +471,7 @@ asl_service_loop() {
     nohup bash -c '
         exec -a "asl-watchdog-loop" bash -c "
             while true; do
-                echo \"[$(date +\"%Y-%m-%d %H:%M:%S\")] Watchdog health check...\"
+                echo \"[\$(date +\"%Y-%m-%d %H:%M:%S\")] Watchdog health check...\"
                 bash \"'"$mgr_path"'\" check 2>&1
                 sleep 180
             done

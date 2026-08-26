@@ -27,7 +27,7 @@ Have an idea? Share it:
 
 - Open a GitHub Discussion or Issue with tag `[FEATURE]`
 - Describe the use case and expected behavior
-- Example: "Add support for automatic Wine prefix creation"
+- Example: "Add support for automatic GPU profile switching"
 
 ### 3. **Improve Documentation** 📚
 Documentation helps everyone:

@@ -46,18 +46,6 @@ if [ -f "\$INPUT_PERMS_BACKUP" ]; then
     rm -f "\$INPUT_PERMS_BACKUP" 2>/dev/null || true
 fi
 
-chroot_pkill() {
-    sig="\$1"
-    for pid in \$(pgrep -f 'wine|wine64|wineserver|box64' 2>/dev/null || true); do
-        if [ "\$(readlink /proc/\$pid/root 2>/dev/null)" = "$DEBIANPATH" ]; then
-            kill -\$sig \$pid 2>/dev/null || true
-        fi
-    done
-}
-chroot_pkill TERM
-sleep 1
-chroot_pkill KILL
-
 pids=""
 for pid_dir in /proc/[0-9]*; do
     pid=\$(basename "\$pid_dir")

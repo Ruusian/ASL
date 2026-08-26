@@ -69,11 +69,6 @@ EOFSHIM
             chmod +x "$DEBIANPATH/usr/bin/pkg" 2>/dev/null || true
             cp -f "$DEBIANPATH/usr/local/bin/pkg" "$DEBIANPATH/bin/pkg" 2>/dev/null || true
             chmod +x "$DEBIANPATH/bin/pkg" 2>/dev/null || true
-
-    # Fix invalid backslash escaping in asl-wine-launch WINEPREFIX if present
-    if [ -f "$DEBIANPATH/usr/local/bin/asl-wine-launch" ]; then
-        sed -i 's|export WINEPREFIX="\\/root/.wine"|export WINEPREFIX="/root/.wine"|g' "$DEBIANPATH/usr/local/bin/asl-wine-launch" 2>/dev/null || true
-    fi
         fi
         echo "[✓] PRoot user-space subsystem active — environment ready at $DEBIANPATH."
         exit 0
@@ -327,11 +322,6 @@ EOFSHIM
     chmod +x \"$DEBIANPATH/usr/bin/pkg\" 2>/dev/null || true
     cp -f \"$DEBIANPATH/usr/local/bin/pkg\" \"$DEBIANPATH/bin/pkg\" 2>/dev/null || true
     chmod +x \"$DEBIANPATH/bin/pkg\" 2>/dev/null || true
-
-    # Fix invalid backslash escaping in asl-wine-launch WINEPREFIX if present
-    if [ -f "$DEBIANPATH/usr/local/bin/asl-wine-launch" ]; then
-        sed -i 's|export WINEPREFIX="\\/root/.wine"|export WINEPREFIX="/root/.wine"|g' "$DEBIANPATH/usr/local/bin/asl-wine-launch" 2>/dev/null || true
-    fi
 
     trap - ERR
 " || {
