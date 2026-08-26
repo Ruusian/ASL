@@ -107,9 +107,9 @@ write_state() {
 
 start_audio() {
     PULSE_OWNED=0 PULSE_PID='' PULSE_START=''
-    export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
-    if pgrep -x pulseaudio >/dev/null 2>&1 || pactl info >/dev/null 2>&1; then
+    if pgrep -x pulseaudio >/dev/null 2>&1 || pactl --server=127.0.0.1:4713 info >/dev/null 2>&1; then
         echo "[*] Reusing existing PulseAudio server."
+        export PULSE_SERVER="127.0.0.1:4713"
         return 0
     fi
     if ! command -v pulseaudio >/dev/null; then
@@ -117,14 +117,15 @@ start_audio() {
         return 1
     fi
     echo "[*] Initializing PulseAudio sound server..."
-    if [ "$(id -u)" = "0" ] && [ -f /etc/debian_version ]; then
-        pulseaudio --system --disallow-exit --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-native-protocol-unix socket=/tmp/pulse-socket auth-anonymous=1 tsched=0" --daemonize 2>/dev/null || \
-        pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-native-protocol-unix socket=/tmp/pulse-socket auth-anonymous=1 tsched=0" --exit-idle-time=-1 2>/dev/null || true
-    else
-        pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-native-protocol-unix socket=/tmp/pulse-socket auth-anonymous=1 tsched=0" --exit-idle-time=-1 2>/dev/null || true
-    fi
+    (
+        unset PULSE_SERVER
+        pulseaudio -D --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --exit-idle-time=-1 2>/dev/null || \
+        pulseaudio --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --exit-idle-time=-1 --daemonize=yes 2>/dev/null || \
+        nohup pulseaudio --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --exit-idle-time=-1 >/dev/null 2>&1 &
+    )
     sleep 1
-    if pactl info >/dev/null 2>&1; then
+    export PULSE_SERVER="127.0.0.1:4713"
+    if pactl --server=127.0.0.1:4713 info >/dev/null 2>&1; then
         echo "[✓] PulseAudio server active."
         return 0
     fi
