@@ -781,10 +781,16 @@ class ASLHubWindow(Gtk.Window):
 
     def _check_audio(self):
         try:
-            pids = subprocess.check_output(["pgrep", "-f", "pulseaudio"], stderr=subprocess.DEVNULL)
-            return "running" if pids.strip() else "stopped"
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            for p in glob.glob('/proc/[0-9]*/cmdline'):
+                try:
+                    with open(p, 'rb') as f:
+                        if b'pulseaudio' in f.read():
+                            return "running"
+                except OSError:
+                    continue
             return "stopped"
+        except Exception:
+            return "unknown"
 
     def _check_disk(self):
         try:
