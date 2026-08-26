@@ -9,6 +9,10 @@ asl_detect_mode() {
         echo "$ASL_EXEC_MODE"
         return
     fi
+    if [ -f /etc/debian_version ] && [ ! -d "/data/local/tmp/chrootDebian" ]; then
+        echo "direct"
+        return
+    fi
     if [ -f "$MODE_CONFIG" ]; then
         local saved_mode=""
         read -r saved_mode < "$MODE_CONFIG" 2>/dev/null || true
@@ -33,10 +37,9 @@ asl_detect_mode() {
 ASL_EXEC_MODE=$(asl_detect_mode)
 export ASL_EXEC_MODE
 
-# Self-contained mode: when the ASL CLI is deployed inside the chroot (e.g. by
-# asl-hub-installer.sh), commands target the current rootfs directly instead of
-# re-entering the chroot. DEBIANPATH is the chroot's own root.
-if [ "${ASL_CHROOT_SELF:-0}" = "1" ]; then
+# Self-contained mode: when running inside the Debian chroot, commands
+# target the current rootfs directly instead of re-entering the chroot.
+if [ "${ASL_CHROOT_SELF:-0}" = "1" ] || [ -f /etc/debian_version -a ! -d "/data/local/tmp/chrootDebian" ]; then
     ASL_EXEC_MODE="direct"
     DEBIANPATH="/"
 fi
@@ -44,7 +47,9 @@ export ASL_EXEC_MODE DEBIANPATH
 
 # Default DEBIANPATH fallback based on execution mode
 if [ -z "${DEBIANPATH:-}" ] || [ "$DEBIANPATH" = "/data/local/tmp/chrootDebian" ]; then
-    if [ "$ASL_EXEC_MODE" = "proot" ]; then
+    if [ "$ASL_EXEC_MODE" = "direct" ]; then
+        DEBIANPATH="/"
+    elif [ "$ASL_EXEC_MODE" = "proot" ]; then
         DEBIANPATH="$HOME/.asl/chrootDebian"
     else
         DEBIANPATH="/data/local/tmp/chrootDebian"
@@ -252,6 +257,9 @@ fi
 export C_RESET C_BOLD C_CYAN C_BLUE C_GREEN C_YELLOW C_RED C_PURPLE C_DIM C_SHADOW
 
 is_mounted() {
+    if [ "${ASL_CHROOT_SELF:-0}" = "1" ] || [ "${ASL_EXEC_MODE:-}" = "direct" ]; then
+        return 0
+    fi
     local target="${1:-$DEBIANPATH}"
     (awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null) && return 0
     case "$ASL_EXEC_MODE" in

@@ -17,7 +17,7 @@ import glob
 import time
 import gi
 
-APP_VERSION = "2.5.1"
+APP_VERSION = "2.6.0"
 
 if not os.environ.get("DISPLAY"):
     sys.stderr.write("[!] Error: $DISPLAY environment variable is not set.\n"
@@ -29,11 +29,11 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Pango
 
 ASL_ENV = dict(os.environ, PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-MAX_LOG_LINES = 500
+MAX_LOG_LINES = 600
 KILL_ESCALATION_MS = 5000
-STATUS_REFRESH_SEC = 30
+STATUS_REFRESH_SEC = 15
 CONFIG_PATH = os.path.expanduser("~/.config/asl-hub.conf")
-MAX_HISTORY = 20
+MAX_HISTORY = 25
 
 EXIT_CODE_HINTS = {
     126: "permission denied or not executable",
@@ -58,7 +58,7 @@ class ASLHubWindow(Gtk.Window):
                 background-color: #1a1b26;
                 color: #c0caf5;
                 font-family: 'Cantarell', 'Inter', 'Noto Sans', sans-serif;
-                font-size: 10.5pt;
+                font-size: 10pt;
             }
             headerbar {
                 background-image: linear-gradient(to bottom, #1f2335, #1a1b26);
@@ -68,9 +68,11 @@ class ASLHubWindow(Gtk.Window):
             headerbar label.title {
                 color: #7dcfff;
                 font-weight: bold;
+                font-size: 11pt;
             }
             headerbar label.subtitle {
                 color: #9aa5ce;
+                font-size: 9pt;
             }
             notebook header {
                 background-color: #16161e;
@@ -78,7 +80,7 @@ class ASLHubWindow(Gtk.Window):
                 padding: 2px 4px 0 4px;
             }
             notebook tab {
-                padding: 6px 14px;
+                padding: 6px 12px;
                 border-radius: 6px 6px 0 0;
                 background-color: #1f2335;
                 color: #a9b1d6;
@@ -95,7 +97,7 @@ class ASLHubWindow(Gtk.Window):
                 color: #c0caf5;
                 border: 1px solid #3b4261;
                 border-radius: 6px;
-                padding: 6px 12px;
+                padding: 5px 10px;
                 font-weight: 500;
             }
             button:hover {
@@ -119,7 +121,11 @@ class ASLHubWindow(Gtk.Window):
                 border: 1px solid #3b4261;
                 border-radius: 8px;
                 background-color: #24283b;
-                padding: 4px;
+                padding: 6px;
+            }
+            frame > label {
+                color: #7aa2f7;
+                font-weight: bold;
             }
             textview text {
                 background-color: #15161e;
@@ -158,8 +164,8 @@ class ASLHubWindow(Gtk.Window):
 
     def __init__(self):
         super().__init__(title="ASL Hub - Android Subsystem for Linux")
-        self.set_default_size(860, 640)
-        self.set_border_width(12)
+        self.set_default_size(920, 680)
+        self.set_border_width(10)
         self.apply_custom_css()
 
         self.active_pid = None
@@ -171,21 +177,29 @@ class ASLHubWindow(Gtk.Window):
         self.search_matches = []
         self.search_idx = 0
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.add(main_box)
 
         # Header
         header = Gtk.HeaderBar()
         header.set_show_close_button(True)
         header.set_title("ASL Hub Control Center")
-        header.set_subtitle(f"Debian 13 Trixie ARM64 — v{APP_VERSION}")
+        header.set_subtitle(f"Debian 13 Trixie ARM64 — ASL v{APP_VERSION}")
+
         btn_about = Gtk.Button(label="About")
         btn_about.connect("clicked", self.show_about)
         header.pack_end(btn_about)
+
+        btn_doctor = Gtk.Button(label="Doctor")
+        btn_doctor.set_tooltip_text("Run comprehensive ASL diagnostic checks")
+        btn_doctor.connect("clicked", lambda w: self.run_cmd(self.asl_cmd("doctor")))
+        header.pack_end(btn_doctor)
+
         btn_shell = Gtk.Button(label="Shell")
-        btn_shell.set_tooltip_text("Open a terminal shell inside the ASL environment")
+        btn_shell.set_tooltip_text("Open terminal emulator inside ASL")
         btn_shell.connect("clicked", self.open_shell)
         header.pack_end(btn_shell)
+
         self.set_titlebar(header)
 
         # Keyboard shortcuts
@@ -203,24 +217,25 @@ class ASLHubWindow(Gtk.Window):
         self.add_accel_group(accel)
 
         # Live status panel
-        status_frame = Gtk.Frame(label="System Status")
+        status_frame = Gtk.Frame(label="Live System Metrics")
         self.status_grid = Gtk.Grid()
         self.status_grid.set_column_spacing(20)
         self.status_grid.set_row_spacing(4)
-        self.status_grid.set_border_width(8)
+        self.status_grid.set_border_width(6)
         self.status_labels = {}
         for i, key in enumerate(("mounts", "gpu", "audio", "display", "disk", "ram")):
             lbl = Gtk.Label(label="—")
             lbl.set_halign(Gtk.Align.START)
+            lbl.set_use_markup(True)
             self.status_labels[key] = lbl
             self.status_grid.attach(lbl, i % 3, i // 3, 1, 1)
         status_frame.add(self.status_grid)
         main_box.pack_start(status_frame, False, False, 0)
 
-        # Stack & Switcher for tabs (with icons)
+        # Stack & Switcher for tabs
         stack = Gtk.Stack()
         stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-        stack.set_transition_duration(200)
+        stack.set_transition_duration(180)
 
         switcher = Gtk.StackSwitcher()
         switcher.set_stack(stack)
@@ -229,24 +244,26 @@ class ASLHubWindow(Gtk.Window):
 
         tabs = [
             (self.create_system_tab(), "system", "System & GPU", "video-display"),
+            (self.create_audio_tab(), "audio", "Audio & Media", "audio-volume-high"),
             (self.create_remote_tab(), "remote", "Remote Tunnels", "network-transmit-receive"),
             (self.create_gamepad_tab(), "gamepad", "Gamepad", "input-gaming"),
             (self.create_dev_tab(), "dev", "Dev Suite", "applications-development"),
             (self.create_sec_tab(), "sec", "Security Audit", "changes-prevent"),
             (self.create_maint_tab(), "maint", "Maintenance", "system-run"),
+            (self.create_services_tab(), "services", "AI & Services", "preferences-system-windows"),
         ]
         for widget, name, title, icon in tabs:
             stack.add_titled(widget, name, title)
             stack.child_set_property(widget, "icon-name", icon)
 
-        # Command history / custom command row
+        # Custom command row
         hist_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        hist_lbl = Gtk.Label(label="Command:")
+        hist_lbl = Gtk.Label(label="ASL Command:")
         hist_row.pack_start(hist_lbl, False, False, 0)
         self.history_entry = Gtk.Entry()
         self.history_entry.set_hexpand(True)
         self.history_entry.set_placeholder_text(
-            "Type a command or pick from history, then press Enter")
+            "Type ASL command (e.g. status, doctor, mode gpu) and press Enter")
         self.history_entry.connect("activate", self.run_entry_command)
         self.history_completion = Gtk.EntryCompletion()
         self.history_store = Gtk.ListStore(str)
@@ -256,19 +273,19 @@ class ASLHubWindow(Gtk.Window):
         self.history_entry.set_completion(self.history_completion)
         hist_row.pack_start(self.history_entry, True, True, 0)
         btn_rerun = Gtk.Button(label="Run")
-        btn_rerun.set_tooltip_text("Run the command in the entry (or selected history item)")
+        btn_rerun.set_tooltip_text("Execute command in chroot")
         btn_rerun.connect("clicked", self.run_entry_command)
         hist_row.pack_start(btn_rerun, False, False, 0)
         main_box.pack_start(hist_row, False, False, 0)
 
         # Log Output Box
-        log_frame = Gtk.Frame(label="Command Execution Log")
+        log_frame = Gtk.Frame(label="Command Execution Console")
         log_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
 
-        # Search bar (hidden until Ctrl+F)
+        # Search bar
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.set_placeholder_text(
-            "Search log... (Enter = next match, Shift+Enter = previous)")
+            "Search log... (Enter = next, Shift+Enter = previous)")
         self.search_entry.connect("search-changed", self.on_search_changed)
         self.search_entry.connect("activate", self.on_search_activate)
         self.search_entry.connect("key-press-event", self.on_search_key_press)
@@ -277,7 +294,7 @@ class ASLHubWindow(Gtk.Window):
         log_box.pack_start(self.search_entry, False, False, 0)
 
         log_scroll = Gtk.ScrolledWindow()
-        log_scroll.set_min_content_height(140)
+        log_scroll.set_min_content_height(130)
         self.log_view = Gtk.TextView()
         self.log_view.set_editable(False)
         self.log_view.set_monospace(True)
@@ -285,7 +302,7 @@ class ASLHubWindow(Gtk.Window):
         log_scroll.add(self.log_view)
         log_box.pack_start(log_scroll, True, True, 0)
 
-        # Text tags for themed log output (palette adapts to dark themes)
+        # Themed text tags
         buf = self.log_view.get_buffer()
         dark = self._is_dark_theme()
         c_ok = "#81c784" if dark else "#2e7d32"
@@ -293,31 +310,28 @@ class ASLHubWindow(Gtk.Window):
         c_warn = "#ffb74d" if dark else "#e65100"
         c_info = "#64b5f6" if dark else "#1565c0"
         self.tag_cmd = buf.create_tag("cmd", weight=Pango.Weight.BOLD)
-        self.tag_ok = buf.create_tag("ok", foreground=c_ok,
-                                     weight=Pango.Weight.BOLD)
-        self.tag_fail = buf.create_tag("fail", foreground=c_fail,
-                                       weight=Pango.Weight.BOLD)
+        self.tag_ok = buf.create_tag("ok", foreground=c_ok, weight=Pango.Weight.BOLD)
+        self.tag_fail = buf.create_tag("fail", foreground=c_fail, weight=Pango.Weight.BOLD)
         self.tag_warn = buf.create_tag("warn", foreground=c_warn)
         self.tag_info = buf.create_tag("info", foreground=c_info)
-        self.tag_search = buf.create_tag("search", background="#ffee58",
-                                         foreground="#000000")
+        self.tag_search = buf.create_tag("search", background="#ffee58", foreground="#000000")
         self.tag_time = buf.create_tag("time", style=Pango.Style.ITALIC)
 
-        # Control row: stop, save, clear, spinner, status
+        # Control row
         ctrl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.btn_stop = Gtk.Button(label="Stop")
         self.btn_stop.set_sensitive(False)
-        self.btn_stop.set_tooltip_text("Send SIGTERM to the running command (escalates to SIGKILL after 5s)")
+        self.btn_stop.set_tooltip_text("Send SIGTERM to running command (escalates to SIGKILL after 5s)")
         self.btn_stop.connect("clicked", self.stop_active)
         ctrl_row.pack_start(self.btn_stop, False, False, 0)
 
         btn_save = Gtk.Button(label="Save Log")
-        btn_save.set_tooltip_text("Save log to file (Ctrl+S)")
+        btn_save.set_tooltip_text("Save output log to file (Ctrl+S)")
         btn_save.connect("clicked", self.save_log)
         ctrl_row.pack_start(btn_save, False, False, 0)
 
         btn_clear = Gtk.Button(label="Clear")
-        btn_clear.set_tooltip_text("Clear the log (Ctrl+L)")
+        btn_clear.set_tooltip_text("Clear console output (Ctrl+L)")
         btn_clear.connect("clicked", self.clear_log)
         ctrl_row.pack_start(btn_clear, False, False, 0)
 
@@ -336,10 +350,10 @@ class ASLHubWindow(Gtk.Window):
         log_frame.add(log_box)
         main_box.pack_start(log_frame, False, False, 0)
 
-        self.log("ASL Hub GTK3 Control Center initialized.", "info")
-        self.log("Shortcuts: Ctrl+Q/Ctrl+W quit, Ctrl+F search, Ctrl+L clear, Ctrl+S save.", "info")
-        if not shutil.which("asl"):
-            self.log("WARNING: 'asl' not found in PATH. Buttons may fail.", "warn")
+        self.log(f"ASL Hub GTK3 Control Center v{APP_VERSION} initialized.", "info")
+        self.log("Shortcuts: Ctrl+Q quit, Ctrl+F search log, Ctrl+L clear, Ctrl+S save.", "info")
+        if not (shutil.which("asl-cli") or shutil.which("asl")):
+            self.log("WARNING: 'asl-cli' / 'asl' not found in PATH.", "warn")
 
         self.load_state()
         self.rebuild_history_combo()
@@ -350,9 +364,9 @@ class ASLHubWindow(Gtk.Window):
 
     def _is_dark_theme(self):
         settings = Gtk.Settings.get_default()
-        if settings.get_property("gtk-application-prefer-dark-theme"):
+        if settings and settings.get_property("gtk-application-prefer-dark-theme"):
             return True
-        theme = (settings.get_property("gtk-theme-name") or "").lower()
+        theme = (settings.get_property("gtk-theme-name") or "").lower() if settings else ""
         return "dark" in theme or "black" in theme
 
     def auto_refresh(self):
@@ -360,7 +374,7 @@ class ASLHubWindow(Gtk.Window):
         self.refresh_gamepads()
         return True
 
-    # ── State persistence (window size + history) ────────────────────────
+    # ── State persistence ───────────────────────────────────────────────
 
     def load_state(self):
         try:
@@ -398,7 +412,7 @@ class ASLHubWindow(Gtk.Window):
         self.save_state()
         return True
 
-    # ── Logging (themed) ─────────────────────────────────────────────────
+    # ── Logging ─────────────────────────────────────────────────────────
 
     def log(self, text, tag=None):
         buf = self.log_view.get_buffer()
@@ -442,7 +456,7 @@ class ASLHubWindow(Gtk.Window):
                 self.log(f"[FAIL] Could not save log: {e}", "fail")
         dialog.destroy()
 
-    # ── Log search (Ctrl+F) ──────────────────────────────────────────────
+    # ── Search (Ctrl+F) ──────────────────────────────────────────────────
 
     def toggle_search(self):
         if self.search_entry.get_visible():
@@ -463,8 +477,6 @@ class ASLHubWindow(Gtk.Window):
         needle = entry.get_text()
         if not needle:
             return
-        # Case-insensitive regex on the ORIGINAL text: .lower() can change
-        # string length (e.g. 'İ' -> 'i̇'), desyncing offsets from the buffer.
         full = buf.get_text(start, end, True)
         for m in re.finditer(re.escape(needle), full, re.IGNORECASE):
             self.search_matches.append((m.start(), m.end()))
@@ -479,7 +491,6 @@ class ASLHubWindow(Gtk.Window):
         return False
 
     def on_search_activate(self, entry):
-        """Enter = next match, Shift+Enter = previous match."""
         if not self.search_matches:
             return
         self.jump_to_match(self.search_idx + (1 if not self._shift_held else -1))
@@ -512,30 +523,31 @@ class ASLHubWindow(Gtk.Window):
             self.history_store.append([entry])
 
     def run_entry_command(self, widget):
-        """Run whatever is in the command entry (typed or from completion)."""
         text = self.history_entry.get_text().strip()
         if not text:
             self.log("[!] No command entered.", "warn")
             return
-        try:
-            args = shlex.split(text)
-        except ValueError as e:
-            self.log(f"[FAIL] Could not parse command: {e}", "fail")
-            return
-        if not args:
-            return
-        self.run_cmd(args)
+        # If user entered bare subcommand like 'status' or 'doctor', wrap in asl_cmd
+        if not text.startswith("/") and not text.startswith("asl"):
+            cmd_args = self.asl_cmd(text)
+        else:
+            try:
+                cmd_args = shlex.split(text)
+            except ValueError as e:
+                self.log(f"[FAIL] Could not parse command: {e}", "fail")
+                return
+        self.run_cmd(cmd_args)
 
-    # ── Process management (posix_spawn invariant) ───────────────────────
+    # ── Process execution (posix_spawn invariant) ────────────────────────
 
     def run_cmd(self, cmd_args):
-        """Spawn a command with output captured into the log."""
         if self.active_pid is not None:
             self.log(f"[!] Busy: '{self.active_cmd}' is still running. Stop it first.", "warn")
             return
 
         try:
-            self.log(f"$ {' '.join(cmd_args)}", "cmd")
+            display_cmd = cmd_args[2] if (len(cmd_args) == 3 and cmd_args[0] == "/bin/bash" and cmd_args[1] == "-c") else ' '.join(cmd_args)
+            self.log(f"$ {display_cmd}", "cmd")
             exec_path = shutil.which(cmd_args[0]) or cmd_args[0]
 
             r_fd, w_fd = os.pipe()
@@ -554,22 +566,41 @@ class ASLHubWindow(Gtk.Window):
             fcntl.fcntl(r_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
             self.active_pid = pid
-            self.active_cmd = cmd_args[0]
+            self.active_cmd = display_cmd.split()[0]
             self.add_to_history(cmd_args)
             self.set_busy(True)
 
             GLib.io_add_watch(r_fd, GLib.PRIORITY_DEFAULT,
                               GLib.IO_IN | GLib.IO_HUP, self.on_output)
-            GLib.child_watch_add(pid, self.on_cmd_done, cmd_args[0])
+            GLib.child_watch_add(pid, self.on_cmd_done, self.active_cmd)
         except Exception as e:
             self.log(f"Error launching process: {e}", "fail")
             self.set_busy(False)
 
+    def launch_gui_detached(self, exec_args):
+        """Launch an independent GUI application without stdout capture."""
+        try:
+            exec_path = shutil.which(exec_args[0]) or exec_args[0]
+            if not shutil.which(exec_args[0]):
+                self.log(f"[!] Application '{exec_args[0]}' is not installed.", "warn")
+                return
+            devnull = os.open(os.devnull, os.O_RDWR)
+            file_actions = [
+                (os.POSIX_SPAWN_DUP2, devnull, 0),
+                (os.POSIX_SPAWN_DUP2, devnull, 1),
+                (os.POSIX_SPAWN_DUP2, devnull, 2),
+                (os.POSIX_SPAWN_CLOSE, devnull),
+            ]
+            pid = os.posix_spawn(exec_path, [exec_path] + exec_args[1:],
+                                 ASL_ENV, file_actions=file_actions)
+            os.close(devnull)
+            self.log(f"[*] Launched {exec_args[0]} (PID {pid}).", "info")
+        except Exception as e:
+            self.log(f"[FAIL] Could not launch {exec_args[0]}: {e}", "fail")
+
     def _decode_chunk(self, fd, data):
-        """Decode bytes carrying over incomplete UTF-8 sequences between reads."""
         carry = self.fd_state.get(fd, b"")
         raw = carry + data
-        # Keep up to 3 trailing bytes that may be an incomplete UTF-8 char
         for trim in range(0, 4):
             try:
                 text = raw[:len(raw) - trim].decode('utf-8') if trim else raw.decode('utf-8')
@@ -581,7 +612,6 @@ class ASLHubWindow(Gtk.Window):
         return raw.decode('utf-8', errors='replace')
 
     def on_output(self, fd, condition):
-        """GLib IO watch callback — reads captured stdout/stderr."""
         try:
             if condition & GLib.IO_IN:
                 data = os.read(fd, 8192)
@@ -599,7 +629,6 @@ class ASLHubWindow(Gtk.Window):
                             self.log(f"  {line}")
                 except (BlockingIOError, OSError):
                     pass
-                # Flush any remaining carry-over bytes
                 leftover = self.fd_state.pop(fd, b"")
                 if leftover:
                     self.log(f"  {leftover.decode('utf-8', errors='replace')}")
@@ -617,7 +646,7 @@ class ASLHubWindow(Gtk.Window):
         except ValueError:
             exit_code = -1
         if exit_code == 0:
-            self.log(f"[OK] {cmd_name} finished successfully.", "ok")
+            self.log(f"[OK] {cmd_name} completed successfully.", "ok")
             self.notify("ASL Hub", f"{cmd_name} finished successfully.")
         else:
             hint = EXIT_CODE_HINTS.get(exit_code)
@@ -625,7 +654,7 @@ class ASLHubWindow(Gtk.Window):
                 hint = f"killed by signal {-exit_code}"
             suffix = f" ({hint})" if hint else ""
             self.log(f"[FAIL] {cmd_name} exited with code {exit_code}{suffix}.", "fail")
-            self.notify("ASL Hub", f"{cmd_name} FAILED (exit {exit_code}){suffix}.")
+            self.notify("ASL Hub", f"{cmd_name} failed (code {exit_code}).")
         self.active_pid = None
         self.active_cmd = None
         if self.kill_timer is not None:
@@ -635,9 +664,9 @@ class ASLHubWindow(Gtk.Window):
         self.refresh_status()
 
     def open_shell(self, widget):
-        """Open a terminal emulator running a shell in the ASL environment."""
         terminals = (
             ("xfce4-terminal", ["--command=/bin/bash"]),
+            ("x-terminal-emulator", ["-e", "/bin/bash"]),
             ("gnome-terminal", ["--", "/bin/bash"]),
             ("xterm", ["-e", "/bin/bash"]),
         )
@@ -650,13 +679,11 @@ class ASLHubWindow(Gtk.Window):
                 except OSError as e:
                     self.log(f"[FAIL] Could not launch {term}: {e}", "fail")
                 return
-        self.log("[!] No terminal emulator found (tried xfce4-terminal, "
-                 "gnome-terminal, xterm).", "warn")
+        self.log("[!] No terminal emulator found.", "warn")
 
     def notify(self, summary, body):
-        """Desktop notification via posix_spawn (fire-and-forget)."""
         if self.is_active():
-            return  # window is focused, log is visible
+            return
         notify_send = shutil.which("notify-send")
         if not notify_send:
             return
@@ -704,16 +731,31 @@ class ASLHubWindow(Gtk.Window):
         cli = shutil.which("asl-cli") or shutil.which("asl") or "/usr/local/bin/asl-cli"
         return ["/bin/bash", "-c", f"{cli} {subcmd}"]
 
-    def add_button(self, grid, col, row, width, label, cmd_args, confirm=None):
+    def add_button(self, grid, col, row, width, label, cmd_args, confirm=None, suggested=False, destructive=False):
         btn = Gtk.Button(label=label)
+        if suggested:
+            btn.get_style_context().add_class("suggested-action")
+        if destructive:
+            btn.get_style_context().add_class("destructive-action")
+
         if len(cmd_args) == 3 and cmd_args[0] == "/bin/bash" and cmd_args[1] == "-c":
             btn.set_tooltip_text(f"Runs: {cmd_args[2]}")
         else:
             btn.set_tooltip_text(f"Runs: {' '.join(cmd_args)}")
+
         if confirm:
             btn.connect("clicked", lambda w: self.confirm_and_run(cmd_args, confirm))
         else:
             btn.connect("clicked", lambda w: self.run_cmd(cmd_args))
+
+        grid.attach(btn, col, row, width, 1)
+        self.action_buttons.append(btn)
+        return btn
+
+    def add_gui_button(self, grid, col, row, width, label, exec_args, tooltip=None):
+        btn = Gtk.Button(label=label)
+        btn.set_tooltip_text(tooltip or f"Launches: {' '.join(exec_args)}")
+        btn.connect("clicked", lambda w: self.launch_gui_detached(exec_args))
         grid.attach(btn, col, row, width, 1)
         self.action_buttons.append(btn)
         return btn
@@ -731,25 +773,25 @@ class ASLHubWindow(Gtk.Window):
 
     def show_about(self, widget):
         about = Gtk.AboutDialog(transient_for=self, modal=True)
-        about.set_program_name("ASL Hub")
+        about.set_program_name("ASL Hub Control Center")
         about.set_version(APP_VERSION)
-        about.set_comments("Android Subsystem for Linux Control Center\n"
+        about.set_comments("Android Subsystem for Linux GUI Management Console\n"
                            "Debian 13 Trixie ARM64 System Dashboard")
         about.set_license_type(Gtk.License.MIT_X11)
         about.run()
         about.destroy()
 
-    # ── Live system status (pure Python reads, no spawn) ─────────────────
+    # ── Live system status (pure Python reads, zero fork) ────────────────
 
     def refresh_status(self):
-        self.status_labels["mounts"].set_text(f"Mounts: {self._check_mounts()}")
-        self.status_labels["gpu"].set_text(f"GPU: {self._check_gpu()}")
-        self.status_labels["audio"].set_text(f"Audio: {self._check_audio()}")
+        self.status_labels["mounts"].set_markup(f"<b>Mounts:</b> {self._check_mounts()}")
+        self.status_labels["gpu"].set_markup(f"<b>GPU:</b> {self._check_gpu()}")
+        self.status_labels["audio"].set_markup(f"<b>Audio:</b> {self._check_audio()}")
         display = os.environ.get("DISPLAY", "")
-        self.status_labels["display"].set_text(
-            f"Display: {display}" if display else "Display: not set")
-        self.status_labels["disk"].set_text(f"Disk: {self._check_disk()}")
-        self.status_labels["ram"].set_text(f"RAM: {self._check_ram()}")
+        self.status_labels["display"].set_markup(
+            f"<b>Display:</b> {display}" if display else "<b>Display:</b> None")
+        self.status_labels["disk"].set_markup(f"<b>Disk:</b> {self._check_disk()}")
+        self.status_labels["ram"].set_markup(f"<b>RAM:</b> {self._check_ram()}")
 
     def _check_mounts(self):
         try:
@@ -761,23 +803,28 @@ class ASLHubWindow(Gtk.Window):
                 if len(parts) >= 2 and parts[1] in needed:
                     needed[parts[1]] = True
             missing = [k for k, v in needed.items() if not v]
-            return "OK" if not missing else f"missing {', '.join(missing)}"
+            return "<span color='#81c784'>OK</span>" if not missing else f"<span color='#f7768e'>missing {', '.join(missing)}</span>"
         except OSError:
             return "unknown"
 
     def _check_gpu(self):
         try:
-            with open('/etc/profile.d/asl_env.sh') as f:
-                env = f.read()
-            if 'MESA_LOADER_DRIVER_OVERRIDE=tu' in env:
-                return "Turnip (Vulkan)"
-            if 'GALLIUM_DRIVER=zink' in env:
-                return "Zink (OpenGL-on-Vulkan)"
-            if 'LIBGL_ALWAYS_SOFTWARE=1' in env:
-                return "Software (llvmpipe)"
-            return "profile set"
+            if os.environ.get("GALLIUM_DRIVER") == "zink":
+                return "Turnip/Zink (Vulkan)"
+            if os.path.exists('/etc/profile.d/asl_env.sh'):
+                with open('/etc/profile.d/asl_env.sh') as f:
+                    env = f.read()
+                if 'MESA_LOADER_DRIVER_OVERRIDE=zink' in env or 'GALLIUM_DRIVER=zink' in env:
+                    return "Turnip/Zink (Vulkan)"
+                if 'GALLIUM_DRIVER=virpipe' in env:
+                    return "VirGL (Hardware)"
+                if 'LIBGL_ALWAYS_SOFTWARE=1' in env:
+                    return "Software (llvmpipe)"
+            if os.path.exists('/dev/kgsl-3d0') or os.path.exists('/dev/dri/renderD128'):
+                return "Adreno GPU"
+            return "Profile Set"
         except OSError:
-            return "no profile"
+            return "No Profile"
 
     def _check_audio(self):
         try:
@@ -785,10 +832,10 @@ class ASLHubWindow(Gtk.Window):
                 try:
                     with open(p, 'rb') as f:
                         if b'pulseaudio' in f.read():
-                            return "running"
+                            return "<span color='#81c784'>Running</span>"
                 except OSError:
                     continue
-            return "stopped"
+            return "<span color='#ffb74d'>Stopped</span>"
         except Exception:
             return "unknown"
 
@@ -800,7 +847,7 @@ class ASLHubWindow(Gtk.Window):
             if not total:
                 return "unknown"
             used_pct = int(100 * (1 - free / total))
-            return f"{used_pct}% used, {free // (1024**3)} GB free"
+            return f"{used_pct}% used ({free // (1024**3)} GB free)"
         except OSError:
             return "unknown"
 
@@ -814,12 +861,15 @@ class ASLHubWindow(Gtk.Window):
                     elif line.startswith('MemAvailable:'):
                         mem_avail = int(line.split()[1])
             if mem_total:
-                return f"{mem_avail // 1024} MB free / {mem_total // 1024} MB"
+                free_mb = mem_avail // 1024
+                tot_mb = mem_total // 1024
+                pct = int(100 * (1 - mem_avail / mem_total))
+                return f"{free_mb} MB free / {tot_mb} MB ({pct}%)"
             return "unknown"
         except (OSError, ValueError):
             return "unknown"
 
-    # ── Gamepad detection (pure Python reads, no spawn) ──────────────────
+    # ── Gamepad detection ────────────────────────────────────────────────
 
     def refresh_gamepads(self):
         devices = []
@@ -836,13 +886,12 @@ class ASLHubWindow(Gtk.Window):
         if devices:
             buf.set_text("\n".join(devices))
         else:
-            buf.set_text("No gamepads/joysticks detected in /dev/input/.")
+            buf.set_text("No gamepads/joysticks detected in /dev/input/.\nClick 'Sync Bluetooth & USB Gamepads' to probe Android devices.")
 
     def _is_gamepad(self, ev_name, dev_name):
         lower = dev_name.lower()
         if any(k in lower for k in GAMEPAD_KEYWORDS):
             return True
-        # Heuristic: ABS capabilities with X+Y axes plus hat or extra axes
         try:
             with open(f"/sys/class/input/{ev_name}/device/capabilities/abs") as f:
                 val = int(f.read().strip(), 16)
@@ -855,106 +904,109 @@ class ASLHubWindow(Gtk.Window):
             pass
         return False
 
-    # ── Tabs ─────────────────────────────────────────────────────────────
+    # ── Tab: System & GPU ────────────────────────────────────────────────
 
     def create_system_tab(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         grid = Gtk.Grid()
-        grid.set_column_spacing(15)
-        grid.set_row_spacing(10)
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(8)
 
         lbl = Gtk.Label()
-        lbl.set_markup("<b>Graphics &amp; Acceleration Management</b>")
+        lbl.set_markup("<b>GPU Acceleration &amp; Performance Profiles</b>")
+        lbl.set_halign(Gtk.Align.START)
         grid.attach(lbl, 0, 0, 2, 1)
 
-        self.add_button(grid, 0, 1, 1, "Enable MangoHud Overlay",
+        self.add_button(grid, 0, 1, 1, "Turbo GPU Profile (Performance Governor)",
+                        self.asl_cmd("mode gpu"), suggested=True)
+        self.add_button(grid, 1, 1, 1, "Balanced Profile (Default Schedutil)",
+                        self.asl_cmd("mode balanced"))
+
+        self.add_button(grid, 0, 2, 1, "Enable MangoHud Overlay",
                         self.asl_cmd("hud on"))
-        self.add_button(grid, 1, 1, 1, "Disable MangoHud Overlay",
+        self.add_button(grid, 1, 2, 1, "Disable MangoHud Overlay",
                         self.asl_cmd("hud off"))
-        self.add_button(grid, 0, 2, 2, "Auto-Install GPU Acceleration Drivers",
+
+        self.add_button(grid, 0, 3, 1, "Auto-Install GPU Drivers (Vulkan/Zink)",
                         self.asl_cmd("gpu-install"))
-        self.add_button(grid, 0, 3, 2, "Run ASL Doctor Diagnostics",
-                        self.asl_cmd("doctor"))
+        self.add_button(grid, 1, 3, 1, "Probe GPU & Driver Capabilities",
+                        self.asl_cmd("gpu"))
 
-        box.pack_start(grid, False, False, 10)
+        self.add_gui_button(grid, 0, 4, 1, "Launch FurMark 3D GPU Benchmark",
+                            ["furmark"], tooltip="Launch hardware GPU OpenGL/Vulkan stress test")
+        self.add_button(grid, 1, 4, 1, "CPU Thermal & Clock Diagnostics",
+                        self.asl_cmd("thermal"))
+
+        lbl_res = Gtk.Label()
+        lbl_res.set_markup("<b>Display Resolution &amp; Scaling Presets</b>")
+        lbl_res.set_halign(Gtk.Align.START)
+        grid.attach(lbl_res, 0, 5, 2, 1)
+
+        self.add_button(grid, 0, 6, 1, "Set 720p Display (1280x720)",
+                        self.asl_cmd("resolution 720p"))
+        self.add_button(grid, 1, 6, 1, "Set 1080p Display (1920x1080)",
+                        self.asl_cmd("resolution 1080p"))
+        self.add_button(grid, 0, 7, 2, "Reset to Native Device Display Resolution",
+                        self.asl_cmd("resolution native"))
+
+        box.pack_start(grid, False, False, 6)
         return box
 
-    def create_gamepad_tab(self):
+    # ── Tab: Audio & Media ───────────────────────────────────────────────
+
+    def create_audio_tab(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         grid = Gtk.Grid()
-        grid.set_column_spacing(15)
-        grid.set_row_spacing(10)
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(8)
 
-        self.add_button(grid, 0, 0, 2, "Sync Bluetooth & USB Gamepads (/dev/input)",
-                        self.asl_cmd("gamepad sync"))
-        self.add_button(grid, 0, 1, 2, "Test Gamepad Inputs (jstest/evtest)",
-                        self.asl_cmd("gamepad test"))
+        lbl = Gtk.Label()
+        lbl.set_markup("<b>PulseAudio Server &amp; Sound Management</b>")
+        lbl.set_halign(Gtk.Align.START)
+        grid.attach(lbl, 0, 0, 2, 1)
 
-        box.pack_start(grid, False, False, 10)
+        self.add_button(grid, 0, 1, 1, "Start PulseAudio Sound Server",
+                        self.asl_cmd("audio start"), suggested=True)
+        self.add_button(grid, 1, 1, 1, "Stop PulseAudio Sound Server",
+                        self.asl_cmd("audio stop"))
 
-        dev_frame = Gtk.Frame(label="Detected Gamepads / Joysticks")
-        dev_scroll = Gtk.ScrolledWindow()
-        dev_scroll.set_min_content_height(100)
-        self.gamepad_view = Gtk.TextView()
-        self.gamepad_view.set_editable(False)
-        self.gamepad_view.set_monospace(True)
-        dev_scroll.add(self.gamepad_view)
-        dev_frame.add(dev_scroll)
-        box.pack_start(dev_frame, True, True, 0)
+        self.add_button(grid, 0, 2, 1, "Play Audio Test Tone (Speaker Check)",
+                        self.asl_cmd("audio test"))
+        self.add_gui_button(grid, 1, 2, 1, "Open PulseAudio Volume Control GUI",
+                            ["pavucontrol"], tooltip="Open native GTK Volume Mixer (pavucontrol)")
 
-        btn_rescan = Gtk.Button(label="Rescan Devices")
-        btn_rescan.connect("clicked", lambda w: self.refresh_gamepads())
-        box.pack_start(btn_rescan, False, False, 0)
+        lbl_desk = Gtk.Label()
+        lbl_desk.set_markup("<b>Desktop &amp; Application Integration</b>")
+        lbl_desk.set_halign(Gtk.Align.START)
+        grid.attach(lbl_desk, 0, 3, 2, 1)
 
+        self.add_button(grid, 0, 4, 1, "Sync Android & Linux Desktop Apps",
+                        self.asl_cmd("desktop sync-apps"))
+        self.add_button(grid, 1, 4, 1, "Restart Desktop Environment Session",
+                        self.asl_cmd("desktop restart"),
+                        confirm="Restart XFCE Desktop session? Running GUI applications will close.")
+
+        box.pack_start(grid, False, False, 6)
         return box
 
-    def create_dev_tab(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        grid = Gtk.Grid()
-        grid.set_column_spacing(15)
-        grid.set_row_spacing(10)
-
-        self.add_button(grid, 0, 0, 1, "Install Python3 Suite",
-                        self.asl_cmd("dev-suite install python"))
-        self.add_button(grid, 1, 0, 1, "Install Node.js & Web Tooling",
-                        self.asl_cmd("dev-suite install webdev"))
-        self.add_button(grid, 0, 1, 1, "Install Neovim IDE",
-                        self.asl_cmd("dev-suite install neovim"))
-        self.add_button(grid, 1, 1, 1, "Install VS Code Server",
-                        self.asl_cmd("dev-suite install vscode"))
-
-        box.pack_start(grid, False, False, 10)
-        return box
-
-    def create_sec_tab(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        grid = Gtk.Grid()
-        grid.set_column_spacing(15)
-        grid.set_row_spacing(10)
-
-        self.add_button(grid, 0, 0, 2, "Install Network Audit Suite (Nmap, Netcat, Socat)",
-                        self.asl_cmd("security-suite install basic"))
-        self.add_button(grid, 0, 1, 2, "Install Full Defensive Security Suite",
-                        self.asl_cmd("security-suite install audit"))
-
-        box.pack_start(grid, False, False, 10)
-        return box
+    # ── Tab: Remote Tunnels ──────────────────────────────────────────────
 
     def create_remote_tab(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         grid = Gtk.Grid()
-        grid.set_column_spacing(15)
-        grid.set_row_spacing(10)
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(8)
 
         lbl = Gtk.Label()
-        lbl.set_markup("<b>All Remote Tunnels &amp; Auto-Connect</b>")
+        lbl.set_markup("<b>Remote Access &amp; Auto-Connect Tunnels</b>")
         lbl.set_halign(Gtk.Align.START)
         grid.attach(lbl, 0, 0, 2, 1)
 
         self.add_button(grid, 0, 1, 1, "Start All Tunnels (LAN + Oracle + Serveo)",
-                        self.asl_cmd("remote all"))
+                        self.asl_cmd("remote all"), suggested=True)
         self.add_button(grid, 1, 1, 1, "Start Auto-Connect Daemon",
                         self.asl_cmd("remote autoconnect start"))
+
         self.add_button(grid, 0, 2, 1, "LAN SSH Server Start",
                         self.asl_cmd("remote lan start"))
         self.add_button(grid, 1, 2, 1, "LAN SSH Server Stop",
@@ -977,38 +1029,198 @@ class ASLHubWindow(Gtk.Window):
                         self.asl_cmd("remote oracle push-pubkey"))
         self.add_button(grid, 1, 6, 1, "Remove Oracle VPS Config & Keys",
                         self.asl_cmd("remote oracle remove"),
-                        confirm="Completely remove Oracle VPS configuration and keys?")
+                        confirm="Completely remove Oracle VPS configuration and keys?", destructive=True)
 
         lbl3 = Gtk.Label()
-        lbl3.set_markup("<b>Serveo &amp; Ngrok Tunnels</b>")
+        lbl3.set_markup("<b>Serveo &amp; Ngrok Cloud Tunnels</b>")
         lbl3.set_halign(Gtk.Align.START)
         grid.attach(lbl3, 0, 7, 2, 1)
 
-        self.add_button(grid, 0, 8, 1, "Start Serveo Tunnel",
+        self.add_button(grid, 0, 8, 1, "Start Serveo SSH Tunnel",
                         self.asl_cmd("remote serveo start"))
-        self.add_button(grid, 1, 8, 1, "Stop Serveo Tunnel",
+        self.add_button(grid, 1, 8, 1, "Stop Serveo SSH Tunnel",
                         self.asl_cmd("remote serveo stop"))
         self.add_button(grid, 0, 9, 1, "Start Ngrok Tunnel",
                         self.asl_cmd("remote ngrok start"))
         self.add_button(grid, 1, 9, 1, "Rotate Ngrok Token",
                         self.asl_cmd("remote ngrok rotate"))
 
-        box.pack_start(grid, False, False, 10)
+        box.pack_start(grid, False, False, 6)
         return box
+
+    # ── Tab: Gamepad ─────────────────────────────────────────────────────
+
+    def create_gamepad_tab(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        grid = Gtk.Grid()
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(8)
+
+        self.add_button(grid, 0, 0, 1, "Sync Bluetooth & USB Gamepads (/dev/input)",
+                        self.asl_cmd("gamepad sync"), suggested=True)
+        self.add_button(grid, 1, 0, 1, "Test Gamepad Inputs (jstest/evtest)",
+                        self.asl_cmd("gamepad test"))
+
+        box.pack_start(grid, False, False, 6)
+
+        dev_frame = Gtk.Frame(label="Detected Controllers & Input Devices")
+        dev_scroll = Gtk.ScrolledWindow()
+        dev_scroll.set_min_content_height(120)
+        self.gamepad_view = Gtk.TextView()
+        self.gamepad_view.set_editable(False)
+        self.gamepad_view.set_monospace(True)
+        dev_scroll.add(self.gamepad_view)
+        dev_frame.add(dev_scroll)
+        box.pack_start(dev_frame, True, True, 0)
+
+        btn_rescan = Gtk.Button(label="Rescan Input Devices")
+        btn_rescan.connect("clicked", lambda w: self.refresh_gamepads())
+        box.pack_start(btn_rescan, False, False, 0)
+
+        return box
+
+    # ── Tab: Dev Suite ───────────────────────────────────────────────────
+
+    def create_dev_tab(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        grid = Gtk.Grid()
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(8)
+
+        lbl = Gtk.Label()
+        lbl.set_markup("<b>Developer Toolchains &amp; IDEs</b>")
+        lbl.set_halign(Gtk.Align.START)
+        grid.attach(lbl, 0, 0, 2, 1)
+
+        self.add_button(grid, 0, 1, 1, "Check Dev Suite Status",
+                        self.asl_cmd("dev-suite status"), suggested=True)
+        self.add_button(grid, 1, 1, 1, "Install Python3 Development Suite",
+                        self.asl_cmd("dev-suite install python"))
+
+        self.add_button(grid, 0, 2, 1, "Install Node.js & Web Tooling",
+                        self.asl_cmd("dev-suite install webdev"))
+        self.add_button(grid, 1, 2, 1, "Install Neovim IDE & Git Tools",
+                        self.asl_cmd("dev-suite install neovim"))
+
+        self.add_button(grid, 0, 3, 1, "Install Golang Toolchain",
+                        self.asl_cmd("dev-suite install go"))
+        self.add_button(grid, 1, 3, 1, "Install Rust & Cargo Toolchain",
+                        self.asl_cmd("dev-suite install rust"))
+
+        self.add_button(grid, 0, 4, 1, "Install VS Code Server",
+                        self.asl_cmd("dev-suite install vscode"))
+        self.add_button(grid, 1, 4, 1, "Install Complete Dev Suite (All)",
+                        self.asl_cmd("dev-suite install all"))
+
+        box.pack_start(grid, False, False, 6)
+        return box
+
+    # ── Tab: Security Audit ──────────────────────────────────────────────
+
+    def create_sec_tab(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        grid = Gtk.Grid()
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(8)
+
+        lbl = Gtk.Label()
+        lbl.set_markup("<b>Defensive Network &amp; Security Auditing</b>")
+        lbl.set_halign(Gtk.Align.START)
+        grid.attach(lbl, 0, 0, 2, 1)
+
+        self.add_button(grid, 0, 1, 1, "Run Network & Port Security Audit",
+                        self.asl_cmd("security-suite audit"), suggested=True)
+        self.add_button(grid, 1, 1, 1, "Check Security Toolset Status",
+                        self.asl_cmd("security-suite status"))
+
+        self.add_button(grid, 0, 2, 1, "Install Basic Network Tools (Nmap, Netcat, Socat)",
+                        self.asl_cmd("security-suite install basic"))
+        self.add_button(grid, 1, 2, 1, "Install Full Security Audit Suite (Wireshark/Tshark)",
+                        self.asl_cmd("security-suite install full"))
+
+        box.pack_start(grid, False, False, 6)
+        return box
+
+    # ── Tab: Maintenance & Snapshots ─────────────────────────────────────
 
     def create_maint_tab(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         grid = Gtk.Grid()
-        grid.set_column_spacing(15)
-        grid.set_row_spacing(10)
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(8)
 
-        self.add_button(grid, 0, 0, 2, "Purge Caches & Temp Storage (asl clean)",
+        lbl = Gtk.Label()
+        lbl.set_markup("<b>Storage Cleanup &amp; System Health</b>")
+        lbl.set_halign(Gtk.Align.START)
+        grid.attach(lbl, 0, 0, 2, 1)
+
+        self.add_button(grid, 0, 1, 1, "Purge Caches & Temp (asl clean)",
                         self.asl_cmd("clean all"),
-                        confirm="This will purge all ASL caches and temporary files. Continue?")
-        self.add_button(grid, 0, 1, 2, "Automated System & Mount Repair (asl repair)",
-                        self.asl_cmd("repair all"))
+                        confirm="Purge package and temp caches?")
+        self.add_button(grid, 1, 1, 1, "Deep System Clean (asl clean deep)",
+                        self.asl_cmd("clean deep"),
+                        confirm="Perform deep cleanup of apt caches and logs?", destructive=True)
 
-        box.pack_start(grid, False, False, 10)
+        self.add_button(grid, 0, 2, 1, "Automated System & Mount Repair",
+                        self.asl_cmd("repair all"), suggested=True)
+        self.add_button(grid, 1, 2, 1, "Fix Android Storage & Audio Permissions",
+                        self.asl_cmd("aid fix"))
+
+        self.add_button(grid, 0, 3, 1, "Kill Orphaned Subsystem Processes",
+                        self.asl_cmd("clean-orphans"))
+        self.add_button(grid, 1, 3, 1, "Optimize ZRAM & Memory Swappiness",
+                        self.asl_cmd("swap optimize"))
+
+        lbl_snap = Gtk.Label()
+        lbl_snap.set_markup("<b>Rootfs Snapshot &amp; Backup</b>")
+        lbl_snap.set_halign(Gtk.Align.START)
+        grid.attach(lbl_snap, 0, 4, 2, 1)
+
+        self.add_button(grid, 0, 5, 1, "List Existing Snapshots",
+                        self.asl_cmd("snapshot list"))
+        self.add_button(grid, 1, 5, 1, "Create New System Snapshot",
+                        self.asl_cmd("snapshot create quick_backup"))
+
+        box.pack_start(grid, False, False, 6)
+        return box
+
+    # ── Tab: AI & Background Services ────────────────────────────────────
+
+    def create_services_tab(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        grid = Gtk.Grid()
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(8)
+
+        lbl = Gtk.Label()
+        lbl.set_markup("<b>OmniRoute Local AI Model Proxy</b>")
+        lbl.set_halign(Gtk.Align.START)
+        grid.attach(lbl, 0, 0, 2, 1)
+
+        self.add_button(grid, 0, 1, 1, "Start OmniRoute AI Proxy",
+                        self.asl_cmd("omniroute start"), suggested=True)
+        self.add_button(grid, 1, 1, 1, "Stop OmniRoute AI Proxy",
+                        self.asl_cmd("omniroute stop"))
+        self.add_button(grid, 0, 2, 1, "Check OmniRoute Status",
+                        self.asl_cmd("omniroute status"))
+        self.add_button(grid, 1, 2, 1, "View OmniRoute Proxy Logs",
+                        self.asl_cmd("omniroute logs"))
+
+        lbl_svc = Gtk.Label()
+        lbl_svc.set_markup("<b>Subsystem Boot &amp; Daemon Services</b>")
+        lbl_svc.set_halign(Gtk.Align.START)
+        grid.attach(lbl_svc, 0, 3, 2, 1)
+
+        self.add_button(grid, 0, 4, 1, "Check Running Background Services",
+                        self.asl_cmd("service check"))
+        self.add_button(grid, 1, 4, 1, "Restart Background Services",
+                        self.asl_cmd("service restart"))
+        self.add_button(grid, 0, 5, 1, "Enable Boot Autostart Service",
+                        self.asl_cmd("service enable"))
+        self.add_button(grid, 1, 5, 1, "Disable Boot Autostart Service",
+                        self.asl_cmd("service disable"))
+
+        box.pack_start(grid, False, False, 6)
         return box
 
     def on_destroy(self, widget):

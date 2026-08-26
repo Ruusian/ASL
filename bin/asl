@@ -1628,10 +1628,16 @@ case "${1:-}" in
         fi
         echo " Location: $DEBIANPATH"
         echo " Mode:     ${ASL_EXEC_MODE:-root}"
-        SIZE=$(asl_exec "du -shx '$DEBIANPATH' 2>/dev/null | cut -f1" 2>/dev/null || du -shx "$DEBIANPATH" 2>/dev/null | cut -f1)
+        if [ "$DEBIANPATH" = "/" ] || [ "${ASL_EXEC_MODE:-}" = "direct" ]; then
+            SIZE=$(df -h / 2>/dev/null | awk 'NR==2 {print $3 " used (" $4 " free)"}')
+        elif is_mounted; then
+            SIZE=$(asl_exec "df -h '$DEBIANPATH' 2>/dev/null | awk 'NR==2 {print \$3 \" used\"}'" 2>/dev/null || df -h "$DEBIANPATH" 2>/dev/null | awk 'NR==2 {print $3 " used"}')
+        else
+            SIZE="Unmounted"
+        fi
         echo " Size:     ${SIZE:-Unknown}"
 
-        if is_mounted; then
+        if is_mounted && [ "$DEBIANPATH" != "/" ]; then
             echo ""
             echo "Active Sub-mounts:"
             asl_exec "grep '$DEBIANPATH' /proc/mounts | awk '{print \" - \" \$2 \" (\" \$3 \")\"}'" 2>/dev/null || true
@@ -1677,8 +1683,16 @@ case "${1:-}" in
         ensure_mounted
         run_in_chroot "$@"
         ;;
+    gpu-install|gpu-drivers)
+        asl_gpu_install_drivers
+        ;;
     gpu)
-        bash "$ASL_DIR/core/gpu-detect.sh"
+        shift
+        case "${1:-}" in
+            install|drivers) asl_gpu_install_drivers ;;
+            profile|apply) asl_gpu_apply; asl_gpu_report ;;
+            detect|status|*) bash "$ASL_DIR/core/gpu-detect.sh" "$@" ;;
+        esac
         ;;
     thermal|temp)
         bash "$ASL_DIR/core/thermal.sh"

@@ -9,11 +9,17 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
-DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-
-asl_require_default_debianpath
+if [ -f /etc/debian_version ] && [ ! -d "/data/local/tmp/chrootDebian" ]; then
+    DEBIANPATH=""
+else
+    DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
+    asl_require_default_debianpath
+fi
 
 ensure_chroot_mounted() {
+    if [ -z "$DEBIANPATH" ] || [ "$DEBIANPATH" = "/" ]; then
+        return 0
+    fi
     if ! is_mounted; then
         if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
             bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
