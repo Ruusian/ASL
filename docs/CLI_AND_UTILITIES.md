@@ -8,7 +8,8 @@ The `asl` binary in `$PREFIX/bin/asl` (and `$PREFIX/share/asl/bin/asl`) serves a
 | :--- | :--- | :--- |
 | **Interactive Dashboard** | `asl` or `asl dashboard` | Launches 74-column DEC 1049 alternate-screen buffer TUI console. |
 | **System Overview** | `asl overview` | Displays concise live system status and remote endpoint table. |
-| **Execution Mode** | `asl exec-mode [root\|shizuku\|proot\|status]` | Inspects or switches execution mode between Root (`su`), Shizuku (`rish`), and PRoot. |
+| **DNS Synchronization** | `asl dns [sync\|status]` | Synchronizes active Android nameservers into chroot `/etc/resolv.conf`. |
+| **Phantom Process Killer**| `asl ppk [off\|on\|status]` | Disables or inspects Android 12+ background process limits. |
 | **Setup Wizard** | `asl wizard` or `asl init` | Guided first-time setup wizard for Graphics, Dev, Security, or Full Workstation presets. |
 | **Interactive GUI Hub** | `asl hub` or `asl gui` | Launches the GTK3 Python Control Center dashboard ("ASL Hub") inside XFCE4. |
 | **GPU Acceleration** | `asl gpu [profile\|apply]` | Auto-detects and applies Turnip/Zink GPU acceleration profiles. |
@@ -30,7 +31,7 @@ The `asl` binary in `$PREFIX/bin/asl` (and `$PREFIX/share/asl/bin/asl`) serves a
 | **Path Translation** | `asl path [-u\|-a\|-c\|-m] <path>` | Translates paths between Android host and Linux container. |
 | **Declarative Config**| `asl config [show\|init\|get\|set]` | Manages system declarative configuration in `/etc/asl.conf`. |
 | **Android Host Bridge**| `asl wakelock\|open\|clip\|toast\|shortcut\|storage` | Android host integration bridges. |
-| **Interactive Shell** | `asl shell [user]` | Drops into target Linux subsystem rootfs bash login shell. |
+| **Interactive Shell** | `asl shell` | Drops into target Linux subsystem rootfs bash login shell. |
 
 ---
 
@@ -46,11 +47,8 @@ The automated installer supports non-interactive execution flags:
 - `--kali`: Installs official Kali Linux base.
 - `--distro=<name>` / `--type=<name>`: Specifies target distro edition explicitly.
 
-### Execution Mode Flags
-- `--root`: Enforces Root (`su`) kernel chroot mode.
-- `--shizuku`: Enforces Shizuku (`rish`) ADB-privileged mode.
-- `--proot`: Enforces PRoot user-space emulation mode.
-- `--mode=<mode>`: Sets target execution mode.
+### Execution Prerequisites
+- **Root (`su`)**: ASL requires Superuser root access (Magisk, KernelSU, or APatch) to mount the Linux chroot and interface directly with Android GPU nodes.
 
 ---
 

@@ -194,22 +194,7 @@ run_in_chroot() {
         return 1
     fi
 
-    case "${ASL_EXEC_MODE:-root}" in
-        shizuku)
-            if rish -c "id" >/dev/null 2>&1; then
-                rish -c "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export HOME=/root USER=root LOGNAME=root HERMES_HOME=/root/.hermes PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" 2>/dev/null || \
-                proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
-            else
-                proot-distro login asl-debian -- /bin/bash -c "printf '%s' '$command_b64' | base64 -d | /bin/bash"
-            fi
-            ;;
-        proot)
-            proot-distro login asl-debian -- /bin/bash -c "${timeout_cmd}printf '%s' '$command_b64' | base64 -d | /bin/bash"
-            ;;
-        root|*)
-            asl_exec "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export HOME=/root USER=root LOGNAME=root HERMES_HOME=/root/.hermes PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm LANG=C.UTF-8 LC_ALL=C.UTF-8; if [ -x /usr/bin/setpriv ]; then exec /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash --noprofile --norc -c \"${timeout_cmd}printf \\\"%s\\\" \\\"$command_b64\\\" | /usr/bin/base64 -d | /bin/bash\"; else ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash; fi'" || return $?
-            ;;
-    esac
+    asl_exec "chroot '$DEBIANPATH' /bin/bash --noprofile --norc -c 'export HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=xterm-256color LANG=C.UTF-8 LC_ALL=C.UTF-8; ${timeout_cmd}printf \"%s\" \"$command_b64\" | /usr/bin/base64 -d | /bin/bash'" || return $?
 }
 
 confirm_action() {
@@ -296,8 +281,10 @@ show_help() {
     echo "  stop             Stop & unmount Debian chroot"
     echo "  status           Show chroot status, size, and mounts"
     echo "  doctor           Check ASL prerequisites without changing state"
-    echo "  shell [user]     Enter interactive shell (default: root)"
+    echo "  shell            Enter interactive root shell"
     echo "  exec <cmd>       Execute a single command inside chroot"
+    echo "  dns [sync]       Synchronize Android network DNS into chroot"
+    echo "  ppk [off|status] Manage Android 12+ Phantom Process Killer"
     echo "  install <pkg..>  Install Debian packages via apt-get"
     echo "  search <query>   Search available Debian packages"
     echo "  snapshot [act]   Fast chroot snapshots (create|list|restore|delete)"
@@ -1563,29 +1550,7 @@ dashboard() {
 case "${1:-}" in
     exec-mode|execmode)
         shift
-        subaction="${1:-status}"
-        case "$subaction" in
-            root)
-                mkdir -p "$PREFIX/etc"
-                echo "root" > "$PREFIX/etc/asl_exec_mode"
-                echo "[✓] ASL execution mode set to: ROOT (su kernel chroot)"
-                ;;
-            shizuku)
-                mkdir -p "$PREFIX/etc"
-                echo "shizuku" > "$PREFIX/etc/asl_exec_mode"
-                echo "[✓] ASL execution mode set to: SHIZUKU (rish ADB privileged mode)"
-                ;;
-            proot)
-                mkdir -p "$PREFIX/etc"
-                echo "proot" > "$PREFIX/etc/asl_exec_mode"
-                echo "[✓] ASL execution mode set to: PROOT (user-space emulation)"
-                ;;
-            status|*)
-                active_mode=$(cat "$PREFIX/etc/asl_exec_mode" 2>/dev/null || echo "auto")
-                echo "ASL Execution Mode: ${active_mode:-auto} (Active runtime: ${ASL_EXEC_MODE:-proot})"
-                echo "Usage: asl exec-mode [root|shizuku|proot|status]"
-                ;;
-        esac
+        echo "ASL Execution Mode: ROOT (native Linux chroot with hardware acceleration)"
         ;;
     dashboard|dash|menu|ui)
         dashboard
@@ -1619,6 +1584,59 @@ case "${1:-}" in
     doctor)
         bash "$ASL_DIR/core/doctor.sh"
         ;;
+    dns)
+        shift
+        case "${1:-sync}" in
+            sync|refresh|update)
+                echo "[*] Synchronizing Android network DNS to Debian chroot..."
+                asl_with_lock bash -c '
+                    mkdir -p "'"$DEBIANPATH"'/etc"
+                    {
+                        for prop in net.dns1 net.dns2 net.dns3 net.dns4 net.wlan0.dns1 net.wlan0.dns2 net.rmnet_data0.dns1 net.rmnet_data0.dns2 net.rmnet_data1.dns1 net.rmnet_data1.dns2 net.eth0.dns1; do
+                            val=$(getprop "$prop" 2>/dev/null || true)
+                            if [ -n "$val" ] && [[ "$val" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$|^[0-9a-fA-F:]+$ ]]; then
+                                printf "nameserver %s\n" "$val"
+                            fi
+                        done
+                        if [ -f /data/data/com.termux/files/usr/etc/resolv.conf ]; then
+                            grep "^nameserver" /data/data/com.termux/files/usr/etc/resolv.conf 2>/dev/null || true
+                        fi
+                        printf "nameserver 8.8.8.8\nnameserver 1.1.1.1\n"
+                    } | awk "!seen[\$0]++" | head -n 4 > "'"$DEBIANPATH"'/etc/resolv.conf"
+                    chmod 644 "'"$DEBIANPATH"'/etc/resolv.conf" 2>/dev/null || true
+                '
+                echo "[✓] Dynamic DNS synchronized in /etc/resolv.conf:"
+                cat "$DEBIANPATH/etc/resolv.conf" 2>/dev/null || true
+                ;;
+            status|show|cat)
+                echo "=== Debian Chroot DNS Configuration (/etc/resolv.conf) ==="
+                cat "$DEBIANPATH/etc/resolv.conf" 2>/dev/null || echo "No resolv.conf found."
+                ;;
+            *)
+                echo "Usage: asl dns [sync|status]"
+                ;;
+        esac
+        ;;
+    ppk|phantom-killer)
+        shift
+        case "${1:-status}" in
+            off|disable)
+                echo "[*] Disabling Android 12+ Phantom Process Killer limits..."
+                su -c "device_config set_sync_disabled_for_tests persistent 2>/dev/null; device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; dumpsys activity set-phantom-process-killer-disabled true 2>/dev/null" || true
+                echo "[✓] Phantom Process Killer disabled (max_phantom_processes: 2147483647)."
+                ;;
+            on|enable)
+                echo "[*] Resetting Android Phantom Process Killer to system defaults..."
+                su -c "device_config set_sync_disabled_for_tests none 2>/dev/null; device_config delete activity_manager max_phantom_processes 2>/dev/null; dumpsys activity set-phantom-process-killer-disabled false 2>/dev/null" || true
+                echo "[✓] Phantom Process Killer reset to default."
+                ;;
+            status|*)
+                cur_ppk=$(su -c "device_config get activity_manager max_phantom_processes" 2>/dev/null || echo "default/unknown")
+                echo "Android Phantom Process Killer: $cur_ppk"
+                echo "Usage: asl ppk [off|on|status]"
+                ;;
+        esac
+        ;;
     status)
         echo "=== ASL Status ==="
         if is_mounted; then
@@ -1627,7 +1645,7 @@ case "${1:-}" in
             echo " Status:   INACTIVE (Unmounted)"
         fi
         echo " Location: $DEBIANPATH"
-        echo " Mode:     ${ASL_EXEC_MODE:-root}"
+        echo " Mode:     root (native chroot)"
         if [ "$DEBIANPATH" = "/" ] || [ "${ASL_EXEC_MODE:-}" = "direct" ]; then
             SIZE=$(df -h / 2>/dev/null | awk 'NR==2 {print $3 " used (" $4 " free)"}')
         elif is_mounted; then
@@ -1645,34 +1663,8 @@ case "${1:-}" in
         ;;
     shell|enter)
         shift
-        TARGET_USER="${1:-root}"
         ensure_mounted
-        case "${ASL_EXEC_MODE:-root}" in
-            shizuku)
-                if rish -c "id" >/dev/null 2>&1; then
-                    exec rish -c "chroot '$DEBIANPATH' /bin/bash --login"
-                else
-                    exec proot-distro login asl-debian -- /bin/bash --login
-                fi
-                ;;
-            proot)
-                exec proot-distro login asl-debian -- /bin/bash --login
-                ;;
-            root|*)
-                if [ "$TARGET_USER" = "root" ]; then
-                    exec su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash --login"
-                fi
-                if [[ ! "$TARGET_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
-                    echo "Error: Invalid Debian username."
-                    exit 1
-                fi
-                if ! su -c "chroot '$DEBIANPATH' id '$TARGET_USER'" >/dev/null 2>&1; then
-                    echo "Error: User '$TARGET_USER' does not exist in Debian chroot."
-                    exit 1
-                fi
-                exec su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/home/$TARGET_USER USER=$TARGET_USER LOGNAME=$TARGET_USER PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/su -l '$TARGET_USER'"
-                ;;
-        esac
+        exec su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash --login"
         ;;
     exec|run)
         shift

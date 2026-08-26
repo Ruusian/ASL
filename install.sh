@@ -68,9 +68,8 @@ YELLOW='\033[1;33m'
 RESET='\033[0m'
 
 DISTRO_TYPE="${TYPE:-auto}" # modded, standard, ubuntu, arch, alpine, fedora, kali, or auto
-EXEC_MODE_ARG="${MODE:-auto}" # root, shizuku, proot, or auto
 
-# Parse arguments (--modded, --standard, --ubuntu, --arch, --alpine, --fedora, --kali, --type=X, --distro=X, --root, --shizuku, --proot)
+# Parse arguments (--modded, --standard, --ubuntu, --arch, --alpine, --fedora, --kali, --type=X, --distro=X)
 while [ $# -gt 0 ]; do
     case "$1" in
         --modded)
@@ -102,19 +101,6 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --root)
-            EXEC_MODE_ARG="root"
-            shift
-            ;;
-        --shizuku)
-            EXEC_MODE_ARG="shizuku"
-            shift
-            ;;
-        --proot)
-            EXEC_MODE_ARG="proot"
-            shift
-            ;;
-        --mode=*)
-            EXEC_MODE_ARG="${1#*=}"
             shift
             ;;
         --type=*|--distro=*)
@@ -144,36 +130,18 @@ fi
 
 mkdir -p "$PREFIX/etc" "$PREFIX/tmp"
 
-echo -e "${GREEN}[*] Detecting execution mode (Root / Shizuku / PRoot)...${RESET}"
-DETECTED_MODE="$(asl_detect_mode 2>/dev/null || echo proot)"
-
-if [ "$EXEC_MODE_ARG" != "auto" ]; then
-    ACTIVE_MODE="$EXEC_MODE_ARG"
-else
-    ACTIVE_MODE="$DETECTED_MODE"
+echo -e "${GREEN}[*] Verifying Superuser root access (su)...${RESET}"
+if [ "$(su -c 'id -u' 2>/dev/null)" != "0" ]; then
+    echo -e "${RED}[!] Error: ASL requires Superuser root access (Magisk / KernelSU / APatch).${RESET}"
+    echo -e "${YELLOW}[!] Grant root access in your root manager and run 'asl install' again.${RESET}"
+    exit 1
 fi
 
-ASL_EXEC_MODE="$ACTIVE_MODE"
+ACTIVE_MODE="root"
+ASL_EXEC_MODE="root"
 export ASL_EXEC_MODE
-
-case "$ACTIVE_MODE" in
-    root)
-        echo -e "${GREEN}[✓] Execution Mode: ROOT (su) Kernel Chroot (Full Hardware Acceleration)${RESET}"
-        ;;
-    shizuku)
-        echo -e "${CYAN}[✓] Execution Mode: SHIZUKU (rish) ADB Privileged Mode (Non-Rooted with Shizuku)${RESET}"
-        ;;
-    proot|*)
-        ACTIVE_MODE="proot"
-        if [ "$DEBIANPATH" = "/data/local/tmp/chrootDebian" ]; then
-            DEBIANPATH="$HOME/.asl/chrootDebian"
-            export DEBIANPATH
-        fi
-        echo -e "${YELLOW}[✓] Execution Mode: PROOT User-space Emulation (Non-Rooted / No Shizuku)${RESET}"
-        ;;
-esac
-
-echo "$ACTIVE_MODE" > "$PREFIX/etc/asl_exec_mode"
+echo -e "${GREEN}[✓] Execution Mode: ROOT (su) Kernel Chroot (Full Hardware Acceleration)${RESET}"
+echo "root" > "$PREFIX/etc/asl_exec_mode"
 
 # 2. Package Installation
 echo -e "${GREEN}[*] Installing required Termux packages...${RESET}"
@@ -387,29 +355,12 @@ if [ "$DISTRO_TYPE" != "skip" ]; then
                 if [ "$IS_MODDED" = "true" ]; then
                     echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
                     ensure_chroot_unmounted_for_replace || exit 1
-                    tar_flags="--no-same-owner --no-same-permissions"
-                    if [ "${ASL_EXEC_MODE:-root}" = "root" ] || [ "${ASL_EXEC_MODE:-root}" = "shizuku" ]; then
-                        tar_flags="--numeric-owner"
-                    fi
-                    if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar $tar_flags -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
+                    if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar --numeric-owner -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
                         echo -e "${YELLOW}[!] Failed to extract modded rootfs. Falling back to Debian base...${RESET}"
                         rm -f "$TEMP_TAR"
                         IS_MODDED=false
                     else
                         rm -f "$TEMP_TAR"
-                        # Register proot-distro container definition & override for ASL
-                        mkdir -p "$PREFIX/etc/proot-distro"
-                        cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.sh"
-# ASL Subsystem proot-distro container definition
-DISTRO_NAME="ASL Debian Subsystem"
-TARBALL_URL="https://github.com/Ruusian/ASL"
-ROOTFS_DIR="$DEBIANPATH"
-EOF
-                        cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
-# ASL Subsystem proot-distro container override
-DISTRO_NAME="ASL Debian Subsystem"
-ROOTFS_DIR="$DEBIANPATH"
-EOF
                         # Configure DNS & hosts & APT performance
                         asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
                         asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
@@ -436,20 +387,6 @@ EOF
                     exit 1
                 fi
                 proot-distro remove asl-temp >/dev/null 2>&1 || true
-
-                # Register proot-distro container definition & override for ASL
-                mkdir -p "$PREFIX/etc/proot-distro"
-                cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.sh"
-# ASL Subsystem proot-distro container definition
-DISTRO_NAME="ASL Debian Subsystem"
-TARBALL_URL="https://github.com/Ruusian/ASL"
-ROOTFS_DIR="$DEBIANPATH"
-EOF
-                cat << EOF > "$PREFIX/etc/proot-distro/asl-debian.override.sh"
-# ASL Subsystem proot-distro container override
-DISTRO_NAME="ASL Debian Subsystem"
-ROOTFS_DIR="$DEBIANPATH"
-EOF
 
                 # Configure DNS & hosts & APT performance
                 asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true

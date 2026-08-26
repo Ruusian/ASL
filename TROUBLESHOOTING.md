@@ -17,7 +17,7 @@ This guide covers common issues, diagnostic steps, and solutions for ASL (Androi
    su -c "id"  # Test if root works
    ```
    - Grant Superuser permission to Termux in your root manager (Magisk, KernelSU, or APatch).
-   - Switch execution mode if device is non-rooted: `asl exec-mode shizuku` or `asl exec-mode proot`.
+   - Ensure `su` binary is accessible in your standard PATH.
 
 2. **SELinux restrictions**
    ```bash

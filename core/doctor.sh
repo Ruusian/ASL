@@ -22,25 +22,11 @@ case "${ASL_EXEC_MODE:-root}" in
     direct)
         check exec-mode required "native container environment (DIRECT mode)" PASS
         ;;
-    root)
+    root|*)
         if [ "$(su -c 'id -u' 2>/dev/null)" = 0 ]; then
-            check exec-mode required "su grants root access (ROOT mode)" PASS
+            check exec-mode required "su grants Superuser root access (ROOT mode)" PASS
         else
-            check exec-mode required "root access through su is unavailable" FAIL
-        fi
-        ;;
-    shizuku)
-        if command -v rish >/dev/null 2>&1 && rish -c "id" >/dev/null 2>&1; then
-            check exec-mode required "rish grants ADB privilege (SHIZUKU mode)" PASS
-        else
-            check exec-mode required "Shizuku (rish) is unavailable" FAIL
-        fi
-        ;;
-    proot|*)
-        if command -v proot-distro >/dev/null 2>&1 || [ -d "$PREFIX/var/lib/proot-distro" ]; then
-            check exec-mode required "proot-distro emulation ready (PROOT mode)" PASS
-        else
-            check exec-mode required "proot-distro package is missing" FAIL
+            check exec-mode required "root access through su is unavailable (Magisk/KernelSU/APatch required)" FAIL
         fi
         ;;
 esac
@@ -49,7 +35,7 @@ if command -v getenforce >/dev/null 2>&1; then
     se_mode=$(getenforce 2>/dev/null || echo "Unknown")
     check selinux optional "mode=$se_mode" PASS
 fi
-if [ -d "$DEBIANPATH" ] || asl_exec "test -d '$DEBIANPATH'" 2>/dev/null || [ -d "$PREFIX/var/lib/proot-distro/containers/asl-debian" ] || [ "${ASL_EXEC_MODE:-}" = "direct" ]; then check debian-root required "$DEBIANPATH exists" PASS; else check debian-root required "$DEBIANPATH is missing" FAIL; fi
+if [ -d "$DEBIANPATH" ] || asl_exec "test -d '$DEBIANPATH'" 2>/dev/null || [ "${ASL_EXEC_MODE:-}" = "direct" ]; then check debian-root required "$DEBIANPATH exists" PASS; else check debian-root required "$DEBIANPATH is missing (run 'asl install')" FAIL; fi
 if [ "${ASL_EXEC_MODE:-}" = "direct" ]; then
     mounted=1
     check chroot optional "active container environment" PASS
@@ -71,11 +57,28 @@ else
 fi
 if command -v pulseaudio >/dev/null || command -v pactl >/dev/null || [ -e /tmp/pulse-socket ]; then check pulseaudio required "PulseAudio sound system ready" PASS; else check pulseaudio required "install with: pkg install pulseaudio" FAIL; fi
 if [ -d /sdcard ] && [ -w /sdcard ]; then check storage optional "/sdcard is writable" PASS; else check storage optional "/sdcard is unavailable or not writable" WARN; fi
+
+# Phantom Process Killer (PPK) Check on Android 12+
+max_phantom=$(asl_exec "device_config get activity_manager max_phantom_processes 2>/dev/null" 2>/dev/null || true)
+if [ "$max_phantom" = "2147483647" ] || [ "$max_phantom" = "disabled" ]; then
+    check phantom-proc optional "Phantom Process Killer disabled ($max_phantom)" PASS
+else
+    check phantom-proc optional "PPK default limits active (disable with: asl ppk off)" WARN
+fi
+
+# Clipboard bridge tool check
+if command -v termux-clipboard-get >/dev/null 2>&1; then
+    check clipboard optional "Termux API clipboard bridge available" PASS
+else
+    check clipboard optional "termux-clipboard-get missing (pkg install termux-api)" WARN
+fi
+
 asl_gpu_detect
 if [ -e /dev/dri ] || [ -e /dev/kgsl-3d0 ]; then check gpu optional "profile=$ASL_GPU_PROFILE; host GPU node present" PASS; else check gpu optional "profile=$ASL_GPU_PROFILE; no known host GPU node" WARN; fi
 if [ "$mounted" = 1 ]; then
     (asl_chroot_exec "test -x /usr/bin/xfwm4 -o -x /usr/bin/xfce4-session" 2>/dev/null) && check xfce optional "XFCE session / window manager available" PASS || check xfce optional "install Debian xfwm4 or xfce4-session" WARN
     (asl_chroot_exec "test -x /usr/bin/dbus-launch -o -x /usr/bin/dbus-daemon" 2>/dev/null) && check dbus optional "D-Bus daemon & launcher ready" PASS || check dbus optional "install Debian dbus-x11 / dbus" WARN
+    (asl_chroot_exec "test -s /etc/machine-id" 2>/dev/null) && check machine-id optional "system machine-id initialized" PASS || check machine-id optional "/etc/machine-id uninitialized" WARN
     if asl_chroot_exec "find /usr/share/vulkan/icd.d -type f -name '*.json' -print -quit 2>/dev/null | grep -q ." 2>/dev/null; then check vulkan optional "ICD JSON found" PASS; else check vulkan optional "no Vulkan ICD JSON found" WARN; fi
 fi
 exit "$fail"

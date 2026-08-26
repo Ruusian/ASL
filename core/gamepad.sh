@@ -57,8 +57,7 @@ asl_gamepad_sync() {
     echo "[*] Mounting host /dev/input into Debian chroot..."
     ensure_chroot_mounted || return 1
 
-    if [ "${ASL_EXEC_MODE:-root}" != "proot" ]; then
-        asl_exec "
+    asl_exec "
             mkdir -p '$DEBIANPATH/dev/input'
             chmod 755 '$DEBIANPATH/dev/input'
             if ! grep -q -F ' $DEBIANPATH/dev/input ' /proc/mounts; then
@@ -73,7 +72,6 @@ asl_gamepad_sync() {
                 [ -e "\$cnode" ] && chmod 0660 "\$cnode" 2>/dev/null || true
             done
         " 2>/dev/null || true
-    fi
 
     echo "[✓] Gamepad evdev nodes synchronized into chroot."
 }

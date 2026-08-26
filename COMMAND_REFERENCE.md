@@ -31,17 +31,25 @@ asl menu            # Alias for dashboard
 
 ---
 
-## ⚡ Execution Modes & Setup Wizard
-
-### `asl exec-mode`
-Inspect or switch execution mode between Root, Shizuku, and PRoot.
-
+## ⚡ Network DNS & Phantom Process Killer
+ 
+### `asl dns`
+Synchronize active Android network DNS into Debian `/etc/resolv.conf`.
+ 
 ```bash
-asl exec-mode                          # Show current execution mode
-asl exec-mode root                     # Switch to Root (su) kernel chroot mode
-asl exec-mode shizuku                  # Switch to Shizuku (rish) ADB-privileged mode
-asl exec-mode proot                    # Switch to PRoot user-space mode
-asl exec-mode status                   # Detailed capability diagnostics
+asl dns                                 # Synchronize current Android nameservers into chroot
+asl dns status                          # View active nameserver configuration
+```
+ 
+---
+ 
+### `asl ppk`
+Inspect or disable Android 12+ Phantom Process Killer limits.
+ 
+```bash
+asl ppk off                             # Disable Phantom Process Killer (max 2147483647 processes)
+asl ppk status                          # Inspect current PPK status
+asl ppk on                              # Restore default PPK limits (32 processes)
 ```
 
 ---
@@ -330,8 +338,8 @@ asl doctor                          # Run full environment health check
 ```
 
 **Checks**:
-- Root access (`su`) / Shizuku (`rish`) / PRoot readiness
-- Debian rootfs existence
+- Superuser root access (`su`) verification
+- Debian rootfs existence and integrity
 - Subsystem mount status
 - Termux:X11 client installation
 - PulseAudio client installation

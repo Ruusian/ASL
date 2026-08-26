@@ -9,80 +9,10 @@ fi
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
-if [ "${ASL_EXEC_MODE:-root}" = "proot" ]; then
-    if [ -d "$DEBIANPATH" ] || [ -d "$PREFIX/var/lib/proot-distro/containers/asl-debian" ]; then
-        if [ -d "$DEBIANPATH" ]; then
-            mkdir -p "$DEBIANPATH/usr/local/bin" "$DEBIANPATH/usr/bin" "$DEBIANPATH/bin" 2>/dev/null || true
-            cat <<'EOFSHIM' > "$DEBIANPATH/usr/local/bin/pkg"
-#!/bin/bash
-# ASL Debian chroot compatibility shim for Termux 'pkg' commands
-
-translate_pkgs() {
-    local args=()
-    for arg in "$@"; do
-        case "$arg" in
-            python|python3) args+=("python3" "python3-pip" "python3-venv" "python-is-python3") ;;
-            python-pip) args+=("python3-pip") ;;
-            libffi) args+=("libffi-dev") ;;
-            openssl) args+=("libssl-dev" "openssl") ;;
-            clang|gcc) args+=("build-essential" "clang") ;;
-            rust) args+=("rustc" "cargo") ;;
-            pkg-config) args+=("pkg-config") ;;
-            ca-certificates) args+=("ca-certificates") ;;
-            *) args+=("$arg") ;;
-        esac
-    done
-    echo "${args[@]}"
-}
-
-if [ "$1" = "install" ] || [ "$1" = "in" ]; then
-    shift
-    pkgs=$(translate_pkgs "$@")
-    apt-get update && exec apt-get install -y $pkgs
-elif [ "$1" = "upgrade" ] || [ "$1" = "up" ]; then
-    shift
-    apt-get update && exec apt-get dist-upgrade -y "$@"
-elif [ "$1" = "show" ] || [ "$1" = "info" ]; then
-    shift
-    exec apt-cache show "$@"
-elif [ "$1" = "search" ]; then
-    shift
-    exec apt-cache search "$@"
-elif [ "$1" = "uninstall" ] || [ "$1" = "remove" ]; then
-    shift
-    exec apt-get remove -y "$@"
-elif [ "$1" = "list-installed" ]; then
-    shift
-    exec dpkg -l "$@"
-elif [ "$1" = "reinstall" ]; then
-    shift
-    pkgs=$(translate_pkgs "$@")
-    apt-get update && exec apt-get install --reinstall -y $pkgs
-elif [ "$1" = "clean" ]; then
-    exec apt-get clean
-else
-    exec apt-get "$@"
-fi
-EOFSHIM
-            chmod +x "$DEBIANPATH/usr/local/bin/pkg" 2>/dev/null || true
-            cp -f "$DEBIANPATH/usr/local/bin/pkg" "$DEBIANPATH/usr/bin/pkg" 2>/dev/null || true
-            chmod +x "$DEBIANPATH/usr/bin/pkg" 2>/dev/null || true
-            cp -f "$DEBIANPATH/usr/local/bin/pkg" "$DEBIANPATH/bin/pkg" 2>/dev/null || true
-            chmod +x "$DEBIANPATH/bin/pkg" 2>/dev/null || true
-        fi
-        echo "[✓] PRoot user-space subsystem active — environment ready at $DEBIANPATH."
-        exit 0
-    else
-        echo "[!] Error: Subsystem rootfs not found at $DEBIANPATH"
-        echo "    To install a Linux rootfs, run: asl install"
-        exit 1
-    fi
-fi
-
-if [ "${ASL_EXEC_MODE:-root}" = "root" ] && [ ! -d "$DEBIANPATH" ]; then
+if [ ! -d "$DEBIANPATH" ]; then
     echo "[!] Error: Debian chroot rootfs not found at $DEBIANPATH"
     echo "    To install a Debian rootfs, run: asl install"
-    echo "    Or check if proot-distro is installed: which proot-distro"
+    echo "    💡 Note: ASL runs as a native root chroot environment (Magisk / KernelSU / APatch required)."
     exit 1
 fi
 
@@ -182,19 +112,33 @@ asl_exec "
         domount_tmpfs \"$DEBIANPATH/var/lock\" rw,nosuid,nodev,mode=1777,noatime
     fi
 
-    if [ ! -s \"$DEBIANPATH/etc/resolv.conf\" ]; then
-        mkdir -p \"$DEBIANPATH/etc\"
-        dns1=\$(getprop net.dns1 2>/dev/null)
-        dns2=\$(getprop net.dns2 2>/dev/null)
-        if [ -n \"\$dns1\" ]; then
-            printf 'nameserver %s\n' \"\$dns1\" > \"$DEBIANPATH/etc/resolv.conf\"
-            [ -n \"\$dns2\" ] && printf 'nameserver %s\n' \"\$dns2\" >> \"$DEBIANPATH/etc/resolv.conf\"
-        elif [ -f /data/data/com.termux/files/usr/etc/resolv.conf ]; then
-            cp /data/data/com.termux/files/usr/etc/resolv.conf \"$DEBIANPATH/etc/resolv.conf\" 2>/dev/null || true
+    # Dynamic DNS synchronization: pull active network nameservers from Android properties & Termux
+    mkdir -p \"$DEBIANPATH/etc\"
+    {
+        for prop in net.dns1 net.dns2 net.dns3 net.dns4 net.wlan0.dns1 net.wlan0.dns2 net.rmnet_data0.dns1 net.rmnet_data0.dns2 net.rmnet_data1.dns1 net.rmnet_data1.dns2 net.eth0.dns1; do
+            val=\$(getprop \"\$prop\" 2>/dev/null || true)
+            if [ -n \"\$val\" ] && [[ \"\$val\" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$|^[0-9a-fA-F:]+$ ]]; then
+                printf 'nameserver %s\n' \"\$val\"
+            fi
+        done
+        if [ -f /data/data/com.termux/files/usr/etc/resolv.conf ]; then
+            grep '^nameserver' /data/data/com.termux/files/usr/etc/resolv.conf 2>/dev/null || true
         fi
-        if [ ! -s \"$DEBIANPATH/etc/resolv.conf\" ]; then
-            printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > \"$DEBIANPATH/etc/resolv.conf\"
+        printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n'
+    } | awk '!seen[\$0]++' | head -n 4 > \"$DEBIANPATH/etc/resolv.conf\"
+    chmod 644 \"$DEBIANPATH/etc/resolv.conf\" 2>/dev/null || true
+
+    # Ensure D-Bus and system machine-id are provisioned
+    mkdir -p \"$DEBIANPATH/var/lib/dbus\" \"$DEBIANPATH/etc\" 2>/dev/null || true
+    if [ ! -s \"$DEBIANPATH/etc/machine-id\" ]; then
+        if chroot \"$DEBIANPATH\" /usr/bin/test -x /usr/bin/dbus-uuidgen 2>/dev/null; then
+            chroot \"$DEBIANPATH\" /usr/bin/dbus-uuidgen --ensure=/etc/machine-id 2>/dev/null || true
+        else
+            od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' > \"$DEBIANPATH/etc/machine-id\" 2>/dev/null || true
         fi
+    fi
+    if [ -s \"$DEBIANPATH/etc/machine-id\" ] && [ ! -s \"$DEBIANPATH/var/lib/dbus/machine-id\" ]; then
+        cp -f \"$DEBIANPATH/etc/machine-id\" \"$DEBIANPATH/var/lib/dbus/machine-id\" 2>/dev/null || true
     fi
 
     # Ensure chroot profile/bashrc unsets host Termux environment variables

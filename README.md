@@ -5,13 +5,13 @@
 </p>
 
 <p align="center">
-  <b>The Enterprise-Grade Autonomous Linux Subsystem, Gaming Framework & Remote Workstation for Android ARM64</b>
+  <b>The Enterprise-Grade Autonomous Linux Subsystem, Workstation & Developer Environment for Android ARM64</b>
 </p>
 
 <p align="center">
   <a href="https://termux.dev"><img src="https://img.shields.io/badge/Platform-Android%20%7C%20Termux-brightgreen.svg?style=for-the-badge&logo=android" alt="Platform"/></a>
   <a href="#"><img src="https://img.shields.io/badge/Architecture-ARM64%20(aarch64)-blue.svg?style=for-the-badge&logo=arm" alt="Architecture"/></a>
-  <a href="#"><img src="https://img.shields.io/badge/Execution-Root%20%7C%20Shizuku%20%7C%20PRoot-purple.svg?style=for-the-badge" alt="Execution Modes"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/Execution-Root%20Kernel%20Chroot-purple.svg?style=for-the-badge" alt="Execution Modes"/></a>
   <a href="#"><img src="https://img.shields.io/badge/GPU-Mesa%20Turnip%20%7C%20Zink%20%7C%20VirGL-orange.svg?style=for-the-badge&logo=vulkan" alt="GPU Acceleration"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License"/></a>
   <a href="#"><img src="https://img.shields.io/badge/Release-v2.5.1%20Stable-success.svg?style=for-the-badge" alt="Release"/></a>
@@ -21,9 +21,9 @@
 
 ## ⚡ Overview
 
-**Android Subsystem for Linux (ASL)** is an autonomous, high-performance Linux container engine, gaming runtime, GTK3 desktop control center, and remote tunneling workstation designed for ARM64 Android devices.
+**Android Subsystem for Linux (ASL)** is an autonomous, high-performance Linux container engine, hardware-accelerated workstation, GTK3 desktop control center, and remote tunneling environment designed for ARM64 Android devices.
 
-Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or tablet into a native Linux workstation with zero SELinux panics or host OS crashes across **Root (`su`)**, **Shizuku (`rish`)**, and **PRoot (Zero-Root)** environments.
+Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or tablet into a native Linux workstation with zero SELinux panics or host OS crashes, running on a dedicated, high-performance root-accelerated Linux kernel chroot environment (Magisk / KernelSU / APatch).
 
 ---
 
@@ -126,14 +126,15 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --kali
 ```
 
-### ⚡ 3-Tier Execution Modes
-- **Root (`su`)**: Maximum performance direct kernel chroot with `/dev/kgsl-3d0` GPU node access (`--root`).
-- **Shizuku (`rish`)**: ADB-privileged execution mode for non-rooted devices (`--shizuku`).
-- **PRoot**: User-space syscall translation for non-rooted devices (`--proot`).
+### ⚡ Root-Accelerated Kernel Architecture
+- **Root (`su`)**: Maximum performance direct kernel chroot with `/dev/kgsl-3d0` and `/dev/dri` GPU direct hardware node access.
+- **Dynamic DNS Synchronization**: Seamless network DNS updates across Wi-Fi, LTE/5G, and VPN connections (`asl dns sync`).
+- **Phantom Process Killer (PPK) Management**: Prevents Android 12+ child process limits from terminating background tasks (`asl ppk off`).
+- **High-Performance Snapshots**: Fast atomic chroot snapshots with optional zstd/gzip compression (`asl snapshot create <name> --compress`).
 
-Inspect or change execution mode anytime:
+Inspect system diagnostics and environment health anytime:
 ```bash
-asl exec-mode [root|shizuku|proot|status]
+asl doctor
 ```
 
 Launch the interactive console anytime:
@@ -192,7 +193,9 @@ asl
 | **Command Execution** | `asl exec <command>` | Execute single command directly inside Linux subsystem |
 | **Package Installer** | `asl install <pkg>` | Install Debian APT packages inside subsystem |
 | **Package Search** | `asl search <query>` | Search available APT packages |
-| **Execution Mode** | `asl exec-mode [root\|shizuku\|proot]` | Inspect or switch execution mode |
+| **DNS Synchronization** | `asl dns [sync\|status]` | Synchronize active Android nameservers into chroot `/etc/resolv.conf` |
+| **Phantom Process Killer** | `asl ppk [off\|on\|status]` | Disable or inspect Android 12+ child process limits |
+| **Diagnostic Doctor** | `asl doctor` | Run non-mutating environment checks |
 | **Setup Wizard** | `asl wizard` / `asl init` | Guided first-time setup for Graphics, Dev, Security presets |
 | **GTK3 Control Center**| `asl hub` / `asl gui` | Launch ASL Hub GTK3 desktop control center |
 | **GPU Acceleration** | `asl gpu [profile\|apply]` | Configure Turnip/Zink GPU acceleration profiles |

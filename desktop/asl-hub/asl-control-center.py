@@ -4,7 +4,7 @@
 Deployed into the Debian rootfs by desktop/asl-hub-installer.sh.
 Invariant: all child processes MUST be launched via os.posix_spawn —
 never os.fork()/subprocess. GTK3 is multithreaded and fork() under
-PRoot/chroot on the 4.14 Myth kernel deadlocks in glibc atfork.
+chroot on the 4.14 Myth kernel deadlocks in glibc atfork.
 """
 import os
 import re

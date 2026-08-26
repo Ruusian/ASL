@@ -1,9 +1,9 @@
 # ASL Feature Roadmap & Tracking
 
 ## Completed Features
-- [x] **Universal 3-Tier Execution Engine** (Root `su`, Shizuku `rish`, PRoot `proot-distro`)
+- [x] **Root-Accelerated Subsystem Engine** (Native kernel chroot with direct GPU node access)
 - [x] **Multi-Distro Subsystem Provisioner** (Debian Modded, Debian Trixie Base, Ubuntu 24.04 LTS, Arch Linux, Alpine, Kali)
-- [x] **Execution Mode CLI Manager** (`asl exec-mode [root|shizuku|proot|status]`)
+- [x] **Dynamic Android Network DNS Sync & Phantom Process Killer Watchdog** (`asl dns` & `asl ppk`)
 - [x] **GPU Hardware Acceleration Engine & Profile Switcher** (`asl gpu [profile|apply]`)
 - [x] **Automated Chroot Mount Error Rollback Trap** (`core/mount-chroot.sh`)
 - [x] **Hardened Loopback Remote Access** (`desktop/remote.sh` 127.0.0.1 default binding)
@@ -24,7 +24,7 @@
 - [x] **Comprehensive `docs/` Directory Structure**
 - [x] **Host Kernel OS Stability Protection** (Zero host kernel `sysctl` overrides to prevent kernel panics on custom Android kernels)
 - [x] **Hang-Free Subshell Execution Routing** (Temporary script file routing in `core/common.sh` eliminating base64 subshell limits)
-- [x] **D-Bus Managed XFCE Session Lifecycle** (`dbus-run-session startxfce4` with setpriv fallbacks & robust `xfce4-session` / `xfwm4` process tracking)
+- [x] **D-Bus Managed XFCE Session Lifecycle** (`dbus-run-session startxfce4` with robust `xfce4-session` / `xfwm4` process tracking)
 - [x] **Terminal UI/UX DEC 1049 Alternate Screen Buffer Isolation** (Clean flicker-free TUI console rendering)
 - [x] **24/7 Background Service Manager & OmniRoute AI Gateway Integration** (`service-manager.sh` with detached subshells & netd DNS bypass)
 - [x] **Modular 24/7 Remote Mesh Architecture** (LAN SSH, Oracle VPS dedicated relay, Serveo jump-host, Ngrok pool)

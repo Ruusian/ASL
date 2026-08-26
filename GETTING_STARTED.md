@@ -8,7 +8,7 @@ This guide will help you get up and running with Android Subsystem for Linux (AS
 
 Before installing ASL, ensure you have:
 
-- ✅ **Android Device** with root access (Magisk, KernelSU, or APatch), Shizuku, or standard Termux
+- ✅ **Android Device** with Superuser root access (Magisk, KernelSU, or APatch)
 - ✅ **Termux** installed from F-Droid or GitHub Releases
 - ✅ **Storage Space** - At least 5GB free for Linux subsystem rootfs + applications
 
@@ -132,17 +132,17 @@ asl remote status
 asl desktop stop
 ```
 
-### Workflow 5: Run Windows Applications & Games
+### Workflow 5: Deploy Developer & Security Suites
 
 ```bash
 # Start subsystem
 asl start
 
-# Open interactive Gaming & Host Apps Hub
-asl game
+# Install Python developer toolchain
+asl dev-suite install python
 
-# Or run any .exe directly
-asl game /sdcard/Games/MyGame/game.exe
+# Or deploy network security auditing suite
+asl security-suite install basic
 ```
 
 ---
@@ -278,8 +278,8 @@ asl thermal watch
 # Check GPU detection
 asl doctor
 
-# Run GPU and Vulkan benchmark
-asl game benchmark
+# Inspect GPU profile and acceleration
+asl gpu profile
 ```
 
 ### Desktop Issues

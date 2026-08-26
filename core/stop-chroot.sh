@@ -8,21 +8,11 @@ fi
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
-if [ "${ASL_EXEC_MODE:-root}" = "proot" ]; then
-    pkill -TERM -f "proot.*(asl-debian|$DEBIANPATH)" 2>/dev/null || true
-    sleep 1
-    pkill -KILL -f "proot.*(asl-debian|$DEBIANPATH)" 2>/dev/null || true
-    echo "[✓] PRoot session processes terminated cleanly."
-    exit 0
-fi
-
 asl_require_default_debianpath
 
 # Remove legacy sysctl backup file if present
 SYSCTL_BACKUP="/data/local/tmp/asl_sysctl_orig"
-if [ "${ASL_EXEC_MODE:-root}" = "root" ]; then
-    asl_exec "rm -f '$SYSCTL_BACKUP' '${SYSCTL_BACKUP}.tmp'" 2>/dev/null || true
-fi
+asl_exec "rm -f '$SYSCTL_BACKUP' '${SYSCTL_BACKUP}.tmp'" 2>/dev/null || true
 
 if ! is_mounted "$DEBIANPATH"; then
     echo "[✓] Debian chroot is already unmounted."

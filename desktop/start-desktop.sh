@@ -289,18 +289,8 @@ start_desktop() {
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
     chroot_pkill 9 '(^|[^A-Za-z0-9_])(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|light-locker)([^A-Za-z0-9_]|$)'
     [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
-    local asl_target_user="${ASL_USER:-root}"
-    if [[ ! "$asl_target_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
-        echo "Error: Invalid ASL_USER value: $asl_target_user" >&2
-        return 1
-    fi
     local target_home="/root"
     local target_uid=0
-    if [ "$asl_target_user" != "root" ]; then
-        target_home="/home/$asl_target_user"
-        target_uid=$(asl_chroot_exec "id -u '$asl_target_user' 2>/dev/null" 2>/dev/null || echo 1000)
-        [ -n "$target_uid" ] || target_uid=1000
-    fi
     local gpu_exports
     gpu_exports=$(asl_gpu_env_exports 2>/dev/null || true)
     mkdir -p "$termux_tmp"
@@ -322,11 +312,12 @@ export TMPDIR=/tmp
 export PULSE_SERVER=127.0.0.1:4713
 export TERM=xterm-256color
 export LANG=C.UTF-8
-export HOME=$target_home
-export USER=$asl_target_user
+export HOME=/root
+export USER=root
+export LOGNAME=root
 export SHELL=/bin/bash
-export XDG_RUNTIME_DIR=/run/user/$target_uid
-export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
+export XDG_RUNTIME_DIR=/run/user/0
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus
 export XDG_MENU_PREFIX=xfce-
 export XDG_DATA_DIRS=/usr/local/share:/usr/share
 export XDG_CONFIG_DIRS=/etc/xdg
@@ -467,31 +458,8 @@ LAUNCHER_EOF
     asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp -f '$launcher_script' '$DEBIANPATH/tmp/asl-start-xfce.sh' && chmod 755 '$DEBIANPATH/tmp/asl-start-xfce.sh'" 2>/dev/null || cp -f "$launcher_script" "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
     rm -f "$launcher_script" 2>/dev/null || true
     LAUNCHER_PID=
-    case "${ASL_EXEC_MODE:-root}" in
-        proot|shizuku)
-            asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh >/tmp/asl-xfce-launch.log 2>&1" &
-            LAUNCHER_PID=$!
-            ;;
-        root|*)
-            if [ "$asl_target_user" = "root" ]; then
-                if asl_chroot_exec "test -x /usr/bin/setpriv" 2>/dev/null; then
-                    asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid=0 --regid=0 --init-groups /bin/bash /tmp/asl-start-xfce.sh >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1" &
-                    LAUNCHER_PID=$!
-                else
-                    asl_chroot_exec "/bin/bash /tmp/asl-start-xfce.sh >/tmp/asl-xfce-launch.log 2>&1" &
-                    LAUNCHER_PID=$!
-                fi
-            else
-                if asl_chroot_exec "test -x /usr/bin/setpriv" 2>/dev/null; then
-                    asl_exec "chroot '$DEBIANPATH' /usr/bin/setpriv --reuid='$asl_target_user' --regid='$asl_target_user' --init-groups /bin/bash /tmp/asl-start-xfce.sh >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1" &
-                    LAUNCHER_PID=$!
-                else
-                    asl_chroot_exec "su - '$asl_target_user' -s /bin/bash /tmp/asl-start-xfce.sh >/tmp/asl-xfce-launch.log 2>&1" &
-                    LAUNCHER_PID=$!
-                fi
-            fi
-            ;;
-    esac
+    asl_exec "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash /tmp/asl-start-xfce.sh >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1" &
+    LAUNCHER_PID=$!
     SESSION_PID=
     SESSION_START=
     for _i in 1 2 3 4 5 6 7 8 9 10; do

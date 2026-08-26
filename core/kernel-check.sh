@@ -32,7 +32,7 @@ asl_kernel_check() {
         # Essential features for ASL
         echo "Essential Features:"
         
-        # Namespaces (required for chroot/PRoot)
+        # Namespaces (required for containerization/chroot)
         check_config "CONFIG_NAMESPACES" "Namespaces (required for chroot)" "y"
         check_config "CONFIG_UTS_NS" "UTS namespace" "y"
         check_config "CONFIG_IPC_NS" "IPC namespace" "y"

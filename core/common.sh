@@ -13,25 +13,7 @@ asl_detect_mode() {
         echo "direct"
         return
     fi
-    if [ -f "$MODE_CONFIG" ]; then
-        local saved_mode=""
-        read -r saved_mode < "$MODE_CONFIG" 2>/dev/null || true
-        saved_mode="${saved_mode//[[:space:]]/}"
-        if [ -n "$saved_mode" ]; then
-            echo "$saved_mode"
-            return
-        fi
-    fi
-
-    if su -c "id -u" >/dev/null 2>&1; then
-        echo "root"
-    elif command -v rish >/dev/null 2>&1 && rish -c "id" >/dev/null 2>&1; then
-        echo "shizuku"
-    elif command -v shizuku-exec >/dev/null 2>&1; then
-        echo "shizuku"
-    else
-        echo "proot"
-    fi
+    echo "root"
 }
 
 ASL_EXEC_MODE=$(asl_detect_mode)
@@ -45,12 +27,10 @@ if [ "${ASL_CHROOT_SELF:-0}" = "1" ] || [ -f /etc/debian_version -a ! -d "/data/
 fi
 export ASL_EXEC_MODE DEBIANPATH
 
-# Default DEBIANPATH fallback based on execution mode
+# Default DEBIANPATH fallback
 if [ -z "${DEBIANPATH:-}" ] || [ "$DEBIANPATH" = "/data/local/tmp/chrootDebian" ]; then
     if [ "$ASL_EXEC_MODE" = "direct" ]; then
         DEBIANPATH="/"
-    elif [ "$ASL_EXEC_MODE" = "proot" ]; then
-        DEBIANPATH="$HOME/.asl/chrootDebian"
     else
         DEBIANPATH="/data/local/tmp/chrootDebian"
     fi
@@ -63,7 +43,7 @@ asl_exec() {
         direct)
             bash -c "$cmd"
             ;;
-        root)
+        root|*)
             if [[ "$cmd" == *$'\n'* ]]; then
                 local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
                 mkdir -p "$tmp_dir" 2>/dev/null || true
@@ -83,39 +63,6 @@ asl_exec() {
                 su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; echo $enc_cmd | base64 -d | bash"
             fi
             ;;
-        shizuku)
-            if [[ "$cmd" == *$'\n'* ]]; then
-                local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-                mkdir -p "$tmp_dir" 2>/dev/null || true
-                find "$tmp_dir" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
-                local tmpf
-                tmpf=$(mktemp "$tmp_dir/.asl_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$tmp_dir/.asl_cmd_$$_$RANDOM.sh"
-                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
-                printf '%s\n' "$cmd" > "$tmpf"
-                chmod 700 "$tmpf" 2>/dev/null || true
-                if command -v rish >/dev/null 2>&1; then
-                    rish -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
-                elif command -v shizuku-exec >/dev/null 2>&1; then
-                    shizuku-exec "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
-                else
-                    bash "$tmpf"
-                fi
-                local res=$?
-                rm -f "$tmpf" 2>/dev/null || true
-                return $res
-            else
-                if command -v rish >/dev/null 2>&1; then
-                    rish -c "$cmd"
-                elif command -v shizuku-exec >/dev/null 2>&1; then
-                    shizuku-exec "$cmd"
-                else
-                    bash -c "$cmd"
-                fi
-            fi
-            ;;
-        proot|*)
-            bash -c "$cmd"
-            ;;
     esac
 }
 
@@ -125,7 +72,7 @@ asl_chroot_exec() {
         direct)
             bash -c "$cmd"
             ;;
-        root)
+        root|*)
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
                 mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || asl_exec "mkdir -p '$DEBIANPATH/tmp'"
                 find "$DEBIANPATH/tmp" -maxdepth 1 -name '.asl_chroot_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
@@ -149,44 +96,6 @@ ASLEOF"
                 local enc_cmd
                 enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
                 su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c \"\$(echo $enc_cmd | base64 -d)\""
-            fi
-            ;;
-        shizuku)
-            if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || true
-                local tmpf tmpbase
-                tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
-                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
-                tmpbase=${tmpf##*/}
-                printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || true
-                chmod 700 "$tmpf" 2>/dev/null || true
-                rish -c "chroot '$DEBIANPATH' /usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash /tmp/$tmpbase" 2>/dev/null || \
-                proot-distro login asl-debian -- /bin/bash /tmp/$tmpbase
-                local res=$?
-                rm -f "$tmpf" 2>/dev/null || true
-                return $res
-            else
-                rish -c "chroot '$DEBIANPATH' /bin/bash -c '$cmd'" 2>/dev/null || \
-                proot-distro login asl-debian -- /bin/bash -c "$cmd"
-            fi
-            ;;
-        proot|*)
-            if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || true
-                local tmpf tmpbase
-                tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
-                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
-                tmpbase=${tmpf##*/}
-                printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null || true
-                chmod 700 "$tmpf" 2>/dev/null || true
-                proot-distro login asl-debian -- /bin/bash /tmp/$tmpbase 2>/dev/null || \
-                proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash /tmp/$tmpbase
-                local res=$?
-                rm -f "$tmpf" 2>/dev/null || true
-                return $res
-            else
-                proot-distro login asl-debian -- /bin/bash -c "$cmd" 2>/dev/null || \
-                proot --link2symlink -0 -r "$DEBIANPATH" -b /dev -b /proc -b /sys -b /data/data/com.termux/files/home /bin/bash -c "$cmd"
             fi
             ;;
     esac
@@ -262,26 +171,9 @@ is_mounted() {
     fi
     local target="${1:-$DEBIANPATH}"
     (awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null) && return 0
-    case "$ASL_EXEC_MODE" in
-        root)
-            local enc_target
-            enc_target=$(printf '%s' "$target" | base64 | tr -d '\n')
-            su -c "target=\$(echo $enc_target | base64 -d); awk -v target=\"\$target\" '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
-            ;;
-        shizuku)
-            # Read-only status check: never start the container as a side effect.
-            if rish -c "awk -v target='$target' '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null; then
-                return 0
-            fi
-            awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null
-            ;;
-        proot|*)
-            # Match a running PRoot whose command line references this rootfs
-            # (via -r) or the asl-debian proot-distro container.
-            pgrep -f "proot.*-r ['\"]?$target" >/dev/null 2>&1 || \
-                pgrep -f "proot-distro.*asl-debian" >/dev/null 2>&1
-            ;;
-    esac
+    local enc_target
+    enc_target=$(printf '%s' "$target" | base64 | tr -d '\n')
+    su -c "target=\$(echo $enc_target | base64 -d); awk -v target=\"\$target\" '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
 }
 
 status_label() {

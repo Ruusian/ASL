@@ -1,12 +1,12 @@
 # ASL (Android Subsystem for Linux) System Architecture
 
 ## Overview
-ASL is a universal, high-performance Linux container and subsystem management engine running on Android ARM64 devices across Root (`su`), Shizuku (`rish`), and PRoot execution modes.
+ASL is an enterprise-grade, high-performance Linux container and subsystem management engine running on Android ARM64 devices via a native root-accelerated Linux kernel chroot environment (Magisk / KernelSU / APatch).
 
 ```
 +-------------------------------------------------------------------+
 |                        Android OS Core                            |
-|        Kernel 4.14+ / Root (su) | Shizuku (rish) | PRoot          |
+|               Kernel 4.14+ / Superuser Root (su)                  |
 +-------------------------------------------------------------------+
                                   |
                                   v
@@ -26,22 +26,23 @@ ASL is a universal, high-performance Linux container and subsystem management en
 +-------------------------------------------------------------------+
 ```
 
-## Universal 3-Tier Execution Architecture (`core/common.sh`)
-ASL abstracts execution environment differences into a unified interface through `core/common.sh`:
-1. **Root Mode (`su`)**: Native Linux kernel chroot with direct GPU node access (`/dev/kgsl-3d0`, `/dev/dri/*`) delivering maximum performance.
-2. **Shizuku Mode (`rish`)**: ADB-privileged execution mode (UID 2000) for non-rooted devices running Shizuku, bypassing standard app process restrictions.
-3. **PRoot Mode**: Pure user-space syscall translation via `proot-distro` for non-rooted Android devices without Shizuku.
+## Root-Accelerated Kernel Architecture (`core/common.sh`)
+ASL operates on a native Linux kernel chroot execution model with Superuser privileges (Magisk / KernelSU / APatch):
+1. **Root Kernel Chroot (`su`)**: Direct kernel mounting with full `/dev/kgsl-3d0` and `/dev/dri/*` hardware GPU acceleration, direct memory management, and zero translation overhead.
+2. **Dynamic DNS Synchronization**: Dynamically extracts active Android nameservers (`net.dns*`, `net.wlan0.dns*`, `net.rmnet_data*.dns*`) and synchronizes into Debian `/etc/resolv.conf`.
+3. **Android 12+ PPK Watchdog**: Automatically overrides Android Phantom Process Killer restrictions via `device_config` to prevent OS process reaping.
+4. **Machine-ID & D-Bus Provisioning**: Automatically ensures `/etc/machine-id` and D-Bus sockets are initialized for GTK4/Wayland/X11 compatibility.
 
 Subsystem execution is transparently routed via helper functions:
-- `asl_detect_mode()`: Auto-detects available device capabilities or reads persistent config (`$PREFIX/etc/asl_exec_mode`).
-- `asl_exec()`: Runs commands in host environment with active execution privileges.
-- `asl_chroot_exec()`: Executes commands inside target Linux subsystem rootfs under active execution mode.
+- `asl_detect_mode()`: Validates native container (`direct`) or root Superuser (`root`) environment.
+- `asl_exec()`: Runs commands in host environment with root privileges.
+- `asl_chroot_exec()`: Executes commands inside target Linux subsystem rootfs.
 
 ## Critical System Invariants
 
 ### 1. Process Spawning Invariant (`os.posix_spawn`)
 - **Requirement:** Any Python / GTK3 desktop interface (`asl-gui` / `asl-hub`) running inside the rootfs **MUST** use `os.posix_spawn` (`safe_spawn`) to spawn subprocesses.
-- **Why:** GTK3 initializes background GMainLoop event threads. Under PRoot/chroot environments on Android Linux kernels, standard `os.fork()` / `subprocess.Popen` deadlocks in glibc `atfork` handlers and causes child processes to lock up at 100% CPU utilization.
+- **Why:** GTK3 initializes background GMainLoop event threads. Under containerized chroot environments on Android Linux kernels, standard `os.fork()` / `subprocess.Popen` deadlocks in glibc `atfork` handlers and causes child processes to lock up at 100% CPU utilization.
 - **Implementation:** Built-in `os.posix_spawn` process runner inside `desktop/asl-hub-installer.sh` (`asl-control-center`).
 
 ### 2. Mount Safety & Error Rollback Invariant
