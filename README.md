@@ -1,10 +1,6 @@
 # 🚀 Android Subsystem for Linux (ASL)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Ruusian/ASL/master/assets/asl_banner.png" alt="ASL Banner" width="100%" onerror="this.style.display='none'"/>
-</p>
-
-<p align="center">
   <b>The Enterprise-Grade Autonomous Linux Subsystem, Workstation & Developer Environment for Android ARM64</b>
 </p>
 
