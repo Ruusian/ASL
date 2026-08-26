@@ -28,7 +28,14 @@ if not os.environ.get("DISPLAY"):
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Pango
 
-ASL_ENV = dict(os.environ, PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+ASL_ENV = dict(
+    os.environ,
+    PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin",
+    DISPLAY=os.environ.get("DISPLAY", ":0"),
+    PULSE_SERVER=os.environ.get("PULSE_SERVER", "127.0.0.1"),
+    XDG_DATA_DIRS=os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share"),
+    TMPDIR="/tmp"
+)
 MAX_LOG_LINES = 600
 KILL_ESCALATION_MS = 5000
 STATUS_REFRESH_SEC = 15
@@ -580,8 +587,8 @@ class ASLHubWindow(Gtk.Window):
     def launch_gui_detached(self, exec_args):
         """Launch an independent GUI application without stdout capture."""
         try:
-            exec_path = shutil.which(exec_args[0]) or exec_args[0]
-            if not shutil.which(exec_args[0]):
+            exec_path = shutil.which(exec_args[0], path=ASL_ENV.get("PATH"))
+            if not exec_path:
                 self.log(f"[!] Application '{exec_args[0]}' is not installed.", "warn")
                 return
             devnull = os.open(os.devnull, os.O_RDWR)
@@ -932,8 +939,8 @@ class ASLHubWindow(Gtk.Window):
         self.add_button(grid, 1, 3, 1, "Probe GPU & Driver Capabilities",
                         self.asl_cmd("gpu"))
 
-        self.add_gui_button(grid, 0, 4, 1, "Launch FurMark 3D GPU Benchmark",
-                            ["furmark"], tooltip="Launch hardware GPU OpenGL/Vulkan stress test")
+        self.add_gui_button(grid, 0, 4, 1, "Launch 3D GPU Render Test (glxgears)",
+                            ["glxgears"], tooltip="Launch native hardware OpenGL 3D rendering stress test")
         self.add_button(grid, 1, 4, 1, "CPU Thermal & Clock Diagnostics",
                         self.asl_cmd("thermal"))
 

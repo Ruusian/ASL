@@ -106,8 +106,9 @@ write_state() {
 }
 
 start_audio() {
-                    PULSE_OWNED=0 PULSE_PID='' PULSE_START=''
-    if pgrep -x pulseaudio >/dev/null; then
+    PULSE_OWNED=0 PULSE_PID='' PULSE_START=''
+    export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
+    if pgrep -x pulseaudio >/dev/null 2>&1 || pactl info >/dev/null 2>&1; then
         echo "[*] Reusing existing PulseAudio server."
         return 0
     fi
@@ -116,15 +117,27 @@ start_audio() {
         return 1
     fi
     echo "[*] Initializing PulseAudio sound server..."
-    pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-native-protocol-unix socket=/tmp/pulse-socket auth-anonymous=1 tsched=0" --exit-idle-time=-1 2>/dev/null || true
+    if [ "$(id -u)" = "0" ] && [ -f /etc/debian_version ]; then
+        pulseaudio --system --disallow-exit --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-native-protocol-unix socket=/tmp/pulse-socket auth-anonymous=1 tsched=0" --daemonize 2>/dev/null || \
+        pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-native-protocol-unix socket=/tmp/pulse-socket auth-anonymous=1 tsched=0" --exit-idle-time=-1 2>/dev/null || true
+    else
+        pulseaudio --start --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-native-protocol-unix socket=/tmp/pulse-socket auth-anonymous=1 tsched=0" --exit-idle-time=-1 2>/dev/null || true
+    fi
     sleep 1
+    if pactl info >/dev/null 2>&1; then
+        echo "[✓] PulseAudio server active."
+        return 0
+    fi
     PULSE_PID=$(pgrep -xo pulseaudio || true)
-    [ -n "$PULSE_PID" ] || return 1
-    PULSE_START=$(pid_start_time "$PULSE_PID")
-    [ -n "$PULSE_START" ] || return 1
-    PULSE_OWNED=1
-    protect_pid_oom "$PULSE_PID"
-    echo "[✓] PulseAudio server active."
+    if [ -n "$PULSE_PID" ]; then
+        PULSE_START=$(pid_start_time "$PULSE_PID")
+        PULSE_OWNED=1
+        protect_pid_oom "$PULSE_PID"
+        echo "[✓] PulseAudio server active."
+        return 0
+    fi
+    echo "[!] Failed to connect to or start PulseAudio server."
+    return 1
 }
 
 start_gpu() {
@@ -646,37 +659,44 @@ audio_control() {
             fi
             ;;
         status|"")
-            if pgrep -x pulseaudio >/dev/null 2>&1; then
+            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
+            if pgrep -x pulseaudio >/dev/null 2>&1 || pactl info >/dev/null 2>&1; then
                 echo "PulseAudio Server: RUNNING"
             else
                 echo "PulseAudio Server: STOPPED"
             fi
             ;;
         test)
-            if ! pgrep -x pulseaudio >/dev/null; then start_audio || return 1; fi
+            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
+            if ! pgrep -x pulseaudio >/dev/null 2>&1 && ! pactl info >/dev/null 2>&1; then
+                start_audio || return 1
+            fi
             echo "[*] Playing audio test tone..."
             if command -v paplay >/dev/null; then
                 local sound_file=""
-                for s in "$PREFIX/share/sounds/freedesktop/stereo/bell.oga" "$DEBIANPATH/usr/share/sounds/freedesktop/stereo/bell.oga" /usr/share/sounds/freedesktop/stereo/bell.oga; do
+                for s in "$PREFIX/share/sounds/freedesktop/stereo/bell.oga" "$DEBIANPATH/usr/share/sounds/freedesktop/stereo/bell.oga" /usr/share/sounds/freedesktop/stereo/bell.oga /usr/share/sounds/freedesktop/stereo/complete.oga; do
                     if [ -f "$s" ]; then sound_file="$s"; break; fi
                 done
                 if [ -n "$sound_file" ]; then
-                    paplay "$sound_file" 2>/dev/null || echo "[*] Audio pipeline active."
+                    paplay "$sound_file" 2>/dev/null && echo "[✓] Audio playback successful." || echo "[*] Audio pipeline active."
                 elif command -v speaker-test >/dev/null 2>&1; then
-                    speaker-test -t sine -f 440 -l 1 >/dev/null 2>&1 || echo "[*] Audio pipeline active."
+                    speaker-test -t sine -f 440 -l 1 >/dev/null 2>&1 && echo "[✓] Audio playback successful." || echo "[*] Audio pipeline active."
                 else
                     echo "[*] Audio pipeline active (PulseAudio server running)."
                 fi
+            elif command -v speaker-test >/dev/null 2>&1; then
+                speaker-test -t sine -f 440 -l 1 >/dev/null 2>&1 && echo "[✓] Audio playback successful." || echo "[*] Audio pipeline active."
             else
-                echo "[!] paplay is not installed in Termux."
+                echo "[*] Audio pipeline active (PulseAudio server running)."
             fi
             ;;
         volume)
+            export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
             if [ -n "$level" ]; then
                 if command -v pactl >/dev/null; then
                     pactl set-sink-volume @DEFAULT_SINK@ "${level}%" 2>/dev/null && echo "[✓] Master volume set to ${level}%." || echo "[!] pactl failed to set volume."
                 else
-                    echo "[!] pactl is not installed in Termux."
+                    echo "[!] pactl is not installed."
                 fi
             else
                 echo "Usage: asl audio volume <0-100>"
