@@ -434,19 +434,19 @@ rm -f /tmp/xfce-keepalive 2>/dev/null
     xrandr --newmode "800x600" 40.00 800 840 920 1056 600 601 605 628 +hsync +vsync 2>/dev/null || true
     xrandr --addmode builtin "800x600" 2>/dev/null || true
 
-    xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/HintStyle -s hintslight 2>/dev/null || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/RGBA -s rgb 2>/dev/null || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/style -s 2 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/style -n -t int -s 2 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -s 48 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -n -t int -s 48 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -s true 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -s true 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/titleless_fullscreen >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/borderless_maximize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/box_move >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/box_resize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/Antialias >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/Hinting >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/HintStyle >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/RGBA >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/style >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/style -n -t int -s 2 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -n -t int -s 48 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -n -t bool -s true 2>/dev/null || true
 ) &
 
 rm -f /etc/xdg/autostart/light-locker.desktop "$HOME/.config/autostart/light-locker.desktop" 2>/dev/null || true
