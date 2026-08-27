@@ -9,6 +9,7 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
 fi
 
 asl_orphan_kill() {
+    local force_reboot="${1:-}"
     echo "[*] Running ASL Orphan Process Scan & Cleanup..."
     local rogue_pids=()
     local pid comm pcpu etime cmd
@@ -75,7 +76,7 @@ asl_orphan_kill() {
     if [ "$unkillable" -eq 1 ]; then
         echo "[!] WARNING: Unkillable kernel threads detected (processes in D-state)."
         echo "[!] Recommended action: Run 'asl restart' or restart the container."
-        if [ "$ASL_FORCE_REBOOT" = "1" ] || [ "$1" = "--force-reboot" ]; then
+        if [ "$ASL_FORCE_REBOOT" = "1" ] || [ "$force_reboot" = "--force-reboot" ]; then
             echo "[!] Fail-Safe System Triggered: Force-reboot flag detected. Rebooting in 3s..."
             sleep 3
             if command -v su &>/dev/null; then
@@ -96,7 +97,7 @@ asl_orphan_kill() {
 
 case "${1:-run}" in
     run|scan|kill|status|check|list)
-        asl_orphan_kill
+        asl_orphan_kill "${2:-}"
         ;;
     *)
         echo "Usage: $0 [run|scan|kill|status]"

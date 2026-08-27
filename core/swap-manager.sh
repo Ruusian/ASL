@@ -23,8 +23,10 @@ asl_swap_status() {
     echo "ZRAM Status:"
     if [ -d /sys/block/zram0 ]; then
         local zram_size zram_used zram_comp algo
-        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || su -c "cat /sys/block/zram0/disksize" 2>/dev/null | tr -d '[:space:]')
-        zram_used=$(cat /sys/block/zram0/mm_stat 2>/dev/null | awk '{print $3}' || su -c "cat /sys/block/zram0/mm_stat" 2>/dev/null | awk '{print $3}' | tr -d '[:space:]')
+        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || su -c "cat /sys/block/zram0/disksize" 2>/dev/null)
+        zram_size=$(printf '%s' "$zram_size" | tr -d '[:space:]')
+        zram_used=$( (cat /sys/block/zram0/mm_stat 2>/dev/null || su -c "cat /sys/block/zram0/mm_stat" 2>/dev/null) | awk '{print $3}')
+        zram_used=$(printf '%s' "$zram_used" | tr -d '[:space:]')
         algo=$(cat /sys/block/zram0/comp_algorithm 2>/dev/null || su -c "cat /sys/block/zram0/comp_algorithm" 2>/dev/null || echo "unknown")
         [[ "$zram_size" =~ ^[0-9]+$ ]] || zram_size=0
         [[ "$zram_used" =~ ^[0-9]+$ ]] || zram_used=0

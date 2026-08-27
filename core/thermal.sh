@@ -106,9 +106,10 @@ asl_thermal_report() {
     local throttle_max
     throttle_max=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null || true)
     
-    if [ -n "$throttle_status" ] && [ -n "$throttle_max" ]; then
+    if [ -n "$throttle_status" ] && [ -n "$throttle_max" ] && [ "$throttle_max" -gt 0 ] 2>/dev/null; then
         local freq_mhz=$((throttle_status / 1000))
         local max_mhz=$((throttle_max / 1000))
+        [ "$max_mhz" -eq 0 ] && max_mhz=1
         local usage_pct=$((freq_mhz * 100 / max_mhz))
         
         if [ "$usage_pct" -gt 90 ]; then

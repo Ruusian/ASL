@@ -68,14 +68,19 @@ get_config_value() {
         return 0
     fi
 
+    local esc_file esc_section esc_key
+    esc_file=$(printf '%s' "$file" | sed "s/'/\\\\'/g")
+    esc_section=$(printf '%s' "$section" | sed "s/'/\\\\'/g")
+    esc_key=$(printf '%s' "$key" | sed "s/'/\\\\'/g")
+
     local val
     val=$(python3 -c "
 import configparser, sys
 config = configparser.ConfigParser()
 try:
-    config.read('$file')
-    if '$section' in config and '$key' in config['$section']:
-        print(config['$section']['$key'])
+    config.read('$esc_file')
+    if '$esc_section' in config and '$esc_key' in config['$esc_section']:
+        print(config['$esc_section']['$esc_key'])
         sys.exit(0)
 except Exception:
     pass
@@ -103,15 +108,21 @@ set_config_value() {
 
     mkdir -p "$(dirname "$target_file")" 2>/dev/null || true
 
+    local esc_file esc_section esc_key esc_val
+    esc_file=$(printf '%s' "$target_file" | sed "s/'/\\\\'/g")
+    esc_section=$(printf '%s' "$section" | sed "s/'/\\\\'/g")
+    esc_key=$(printf '%s' "$key" | sed "s/'/\\\\'/g")
+    esc_val=$(printf '%s' "$val" | sed "s/'/\\\\'/g")
+
     if python3 -c "
 import configparser, os
-conf_file = '$target_file'
+conf_file = '$esc_file'
 config = configparser.ConfigParser()
 if os.path.exists(conf_file):
     config.read(conf_file)
-if '$section' not in config:
-    config['$section'] = {}
-config['$section']['$key'] = '$val'
+if '$esc_section' not in config:
+    config['$esc_section'] = {}
+config['$esc_section']['$esc_key'] = '$esc_val'
 with open(conf_file, 'w') as f:
     config.write(f)
 " 2>/dev/null; then
@@ -121,13 +132,13 @@ with open(conf_file, 'w') as f:
     local py_script
     py_script=$(cat << PYEOF
 import configparser, os
-conf_file = "$target_file"
+conf_file = "$esc_file"
 config = configparser.ConfigParser()
 if os.path.exists(conf_file):
     config.read(conf_file)
-if "$section" not in config:
-    config["$section"] = {}
-config["$section"]["$key"] = "$val"
+if "$esc_section" not in config:
+    config["$esc_section"] = {}
+config["$esc_section"]["$esc_key"] = "$esc_val"
 with open(conf_file, "w") as f:
     config.write(f)
 PYEOF

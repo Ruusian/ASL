@@ -60,7 +60,7 @@ set_password() {
         fi
     fi
 
-    echo "[✓] ASL All Remote Passwords successfully updated to: $new_pass"
+    echo "[✓] ASL All Remote Passwords successfully updated."
 }
 
 ensure_host_dns() {
