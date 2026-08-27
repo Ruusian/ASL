@@ -77,7 +77,7 @@ setup_android_aids() {
 }
 
 case "${1:-status}" in
-    setup|sync)
+    setup|sync|fix|map|repair)
         setup_android_aids
         ;;
     status)
@@ -90,7 +90,7 @@ case "${1:-status}" in
         fi
         ;;
     *)
-        echo "Usage: asl aid [setup|status]"
+        echo "Usage: asl aid [setup|sync|fix|status]"
         ;;
 esac
 

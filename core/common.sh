@@ -44,24 +44,9 @@ asl_exec() {
             bash -c "$cmd"
             ;;
         root|*)
-            if [[ "$cmd" == *$'\n'* ]]; then
-                local tmp_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-                mkdir -p "$tmp_dir" 2>/dev/null || true
-                find "$tmp_dir" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
-                local tmpf
-                tmpf=$(mktemp "$tmp_dir/.asl_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$tmp_dir/.asl_cmd_$$_$RANDOM.sh"
-                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
-                printf '%s\n' "$cmd" > "$tmpf"
-                chmod 700 "$tmpf" 2>/dev/null || true
-                su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; bash '$tmpf'"
-                local res=$?
-                rm -f "$tmpf" 2>/dev/null || true
-                return $res
-            else
-                local enc_cmd
-                enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-                su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; echo $enc_cmd | base64 -d | bash"
-            fi
+            local enc_cmd
+            enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
+            su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; printf '%s' '$enc_cmd' | base64 -d | bash"
             ;;
     esac
 }
@@ -73,29 +58,13 @@ asl_chroot_exec() {
             bash -c "$cmd"
             ;;
         root|*)
+            local enc_cmd
+            enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                mkdir -p "$DEBIANPATH/tmp" 2>/dev/null || asl_exec "mkdir -p '$DEBIANPATH/tmp'"
-                find "$DEBIANPATH/tmp" -maxdepth 1 -name '.asl_chroot_cmd_*.sh' -mmin +60 -delete 2>/dev/null || true
-                local tmpf tmpbase
-                tmpf=$(mktemp "$DEBIANPATH/tmp/.asl_chroot_cmd_XXXXXX.sh" 2>/dev/null) || tmpf="$DEBIANPATH/tmp/.asl_chroot_cmd_$$_$RANDOM.sh"
-                (umask 077 && touch "$tmpf" && chmod 700 "$tmpf") 2>/dev/null || true
-                tmpbase=${tmpf##*/}
-                if [ -w "$DEBIANPATH/tmp" ]; then
-                    printf '%s\n' "$cmd" > "$tmpf" 2>/dev/null
-                else
-                    asl_exec "cat << 'ASLEOF' > '$tmpf'
-$cmd
-ASLEOF"
-                fi
-                chmod 700 "$tmpf" 2>/dev/null || asl_exec "chmod 700 '$tmpf'"
-                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash /tmp/$tmpbase"
-                local res=$?
-                rm -f "$tmpf" 2>/dev/null || asl_exec "rm -f '$tmpf'"
-                return $res
+                local tmp_dir="$DEBIANPATH/tmp"
+                su -c "mkdir -p '$tmp_dir'; tmpf=\$(mktemp '$tmp_dir/.asl_chroot_cmd_XXXXXX.sh' 2>/dev/null) || tmpf='$tmp_dir/.asl_chroot_cmd_\$\$.sh'; printf '%s' '$enc_cmd' | base64 -d > \"\$tmpf\" && chmod 700 \"\$tmpf\" && chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash /tmp/\${tmpf##*/}; res=\$?; rm -f \"\$tmpf\" 2>/dev/null; exit \$res"
             else
-                local enc_cmd
-                enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c \"\$(echo $enc_cmd | base64 -d)\""
+                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c \"\$(printf '%s' '$enc_cmd' | base64 -d)\""
             fi
             ;;
     esac

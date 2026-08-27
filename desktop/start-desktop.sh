@@ -569,15 +569,16 @@ refresh_x11_state() {
 safe_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
 launch_app() {
-    local id="${1:-}" root
-    safe_id "$id" || { echo "[!] Invalid desktop application ID."; return 1; }
-    for root in /usr/share/applications /usr/local/share/applications /root/.local/share/applications; do
-        if asl_chroot_exec "test -f '$root/$id.desktop'" 2>/dev/null; then
-            asl_chroot_exec "export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; /usr/bin/gtk-launch \"$id.desktop\" 2>/dev/null || /usr/bin/gtk-launch \"$id\""
+    local raw_id="${1:-}" root id
+    id="${raw_id%.desktop}"
+    safe_id "$id" || { echo "[!] Invalid desktop application ID: $raw_id"; return 1; }
+    for root in /usr/share/applications /usr/local/share/applications /root/.local/share/applications /root/Desktop; do
+        if asl_chroot_exec "test -f '$root/$id.desktop' -o -f '$root/$raw_id'" 2>/dev/null; then
+            asl_chroot_exec "export DISPLAY=:0; export XDG_DATA_DIRS=/usr/local/share:/usr/share; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\$PATH; if command -v gio >/dev/null 2>&1 && [ -f '$root/$id.desktop' ]; then gio launch '$root/$id.desktop' 2>/dev/null || gtk-launch '$id' 2>/dev/null; elif command -v gtk-launch >/dev/null 2>&1; then gtk-launch '$id' 2>/dev/null || gtk-launch '$id.desktop' 2>/dev/null; else /usr/bin/gtk-launch '$id' 2>/dev/null || true; fi"
             return 0
         fi
     done
-    echo "[!] Debian desktop entry not found: $id"
+    echo "[!] Debian desktop entry not found: $raw_id"
     return 1
 }
 

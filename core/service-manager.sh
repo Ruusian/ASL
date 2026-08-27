@@ -57,10 +57,18 @@ asl_service_start() {
     fi
 
     # 4. Check & restore Omniroute / local AI proxy on port 20128 if installed
-    if [ -x "$HOME/omniroute-daemon.sh" ] || command -v omniroute >/dev/null 2>&1; then
+    local omni_bin=""
+    if [ -f "$HOME/omniroute-daemon.sh" ]; then
+        omni_bin="$HOME/omniroute-daemon.sh"
+    elif [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ]; then
+        omni_bin="/data/data/com.termux/files/home/omniroute-daemon.sh"
+    fi
+    if [ -n "$omni_bin" ] || command -v omniroute >/dev/null 2>&1; then
         if ! pgrep -f "omniroute" >/dev/null 2>&1 && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
             echo "[*] Starting Omniroute local AI proxy on port 20128..."
-            su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
+            if [ -n "$omni_bin" ]; then
+                su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_bin'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
+            fi
         fi
     fi
 
@@ -379,10 +387,18 @@ asl_service_check() {
     fi
 
     # 5. OmniRoute Local AI Proxy Check
-    if [ -x "$HOME/omniroute-daemon.sh" ] || command -v omniroute >/dev/null 2>&1; then
+    local omni_chk=""
+    if [ -f "$HOME/omniroute-daemon.sh" ]; then
+        omni_chk="$HOME/omniroute-daemon.sh"
+    elif [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ]; then
+        omni_chk="/data/data/com.termux/files/home/omniroute-daemon.sh"
+    fi
+    if [ -n "$omni_chk" ] || command -v omniroute >/dev/null 2>&1; then
         if ! pgrep -f "omniroute" >/dev/null 2>&1 && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
             echo "[!] OmniRoute AI proxy down — starting as root..."
-            su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
+            if [ -n "$omni_chk" ]; then
+                su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_chk'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
+            fi
             healed=$((healed + 1))
         fi
     fi
@@ -407,7 +423,7 @@ asl_service_check() {
         healed=$((healed + 1))
     fi
 
-    # 6. CPU Wake-Lock Protection (prevents Android sleep dropouts)
+    # 7. CPU Wake-Lock Protection (prevents Android sleep dropouts)
     if ! dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" && ! su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock"; then
         if command -v termux-wake-lock >/dev/null 2>&1; then
             termux-wake-lock 2>/dev/null || true

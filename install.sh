@@ -403,7 +403,7 @@ fi
 echo -e "${GREEN}[*] Installing ASL system runtime to ${PREFIX:-/data/data/com.termux/files/usr}/share/asl...${RESET}"
 INSTALL_DIR="${PREFIX:-/data/data/com.termux/files/usr}/share/asl"
 mkdir -p "$INSTALL_DIR"
-for d in bin core desktop gaming tools; do
+for d in bin core desktop tools docs; do
     if [ -d "$TARGET_DIR/$d" ]; then
         mkdir -p "$INSTALL_DIR/$d"
         cp -a "$TARGET_DIR/$d/." "$INSTALL_DIR/$d/"

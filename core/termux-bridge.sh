@@ -207,10 +207,10 @@ termux_clipboard_sync() {
                         if [ -n "$curr_clip" ] && [ "$curr_clip" != "$last_clip" ]; then
                             last_clip="$curr_clip"
                             enc_clip=$(printf '%s' "$curr_clip" | base64 | tr -d '\n')
-                            if command -v asl_chroot_exec >/dev/null 2>&1; then
-                                asl_chroot_exec "export DISPLAY=:0; echo -n '$enc_clip' | base64 -d | xclip -selection clipboard 2>/dev/null || echo -n '$enc_clip' | base64 -d | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
+                            if type asl_chroot_exec >/dev/null 2>&1; then
+                                asl_chroot_exec "export DISPLAY=:0; printf '%s' '$enc_clip' | base64 -d | xclip -selection clipboard 2>/dev/null || printf '%s' '$enc_clip' | base64 -d | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
                             elif command -v asl >/dev/null 2>&1; then
-                                asl exec "export DISPLAY=:0; echo -n '$enc_clip' | base64 -d | xclip -selection clipboard 2>/dev/null || echo -n '$enc_clip' | base64 -d | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
+                                asl exec "export DISPLAY=:0; printf '%s' '$enc_clip' | base64 -d | xclip -selection clipboard 2>/dev/null || printf '%s' '$enc_clip' | base64 -d | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
                             fi
                         fi
                     fi

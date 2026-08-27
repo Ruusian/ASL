@@ -86,6 +86,7 @@ CLI_EOF
 
     ln -sf /usr/local/bin/asl-control-center "$DEBIANPATH/usr/local/bin/asl-gui" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-gui'"
     ln -sf /usr/local/bin/asl-control-center "$DEBIANPATH/usr/local/bin/asl-hub" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-control-center '$DEBIANPATH/usr/local/bin/asl-hub'"
+    ln -sf /usr/local/bin/asl-cli "$DEBIANPATH/usr/local/bin/asl" 2>/dev/null || asl_exec "ln -sf /usr/local/bin/asl-cli '$DEBIANPATH/usr/local/bin/asl'"
 
     # Install GTK3 dependencies inside Debian chroot.
     # NOTE: keep this a single line with no quotes at all — multi-line or

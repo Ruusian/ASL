@@ -902,7 +902,69 @@ watch_dashboard() {
 }
 
 show_host_apps_menu() {
-    bash "$REAL_SCRIPT" game menu
+    ensure_mounted
+    echo "============================================================"
+    echo "       🚀 ASL Applications & Desktop Launcher Hub"
+    echo "============================================================"
+    echo ""
+    local app_names=()
+    local app_files=()
+
+    # Discover .desktop applications from chroot
+    local raw_list
+    raw_list=$(asl_chroot_exec "
+        for f in /usr/share/applications/*.desktop /usr/local/share/applications/*.desktop /root/Desktop/*.desktop; do
+            [ -f \"\$f\" ] || continue
+            grep -qE '^(NoDisplay=true|Hidden=true)' \"\$f\" 2>/dev/null && continue
+            name=\$(grep -E '^Name=' \"\$f\" 2>/dev/null | head -n1 | cut -d'=' -f2-)
+            [ -n \"\$name\" ] || name=\$(basename \"\$f\" .desktop)
+            fname=\$(basename \"\$f\")
+            printf '%s|%s\n' \"\$fname\" \"\$name\"
+        done | sort -u -t'|' -k2,2
+    " 2>/dev/null || true)
+
+    local count=0
+    while IFS='|' read -r df nm; do
+        [ -n "$df" ] || continue
+        count=$((count + 1))
+        app_files+=("$df")
+        app_names+=("$nm")
+        printf "  %s%2d%s) %-30s %s(%s)%s\n" "$C_CYAN" "$count" "$C_RESET" "$nm" "$C_DIM" "$df" "$C_RESET"
+    done <<< "$raw_list"
+
+    echo ""
+    echo "  Actions:"
+    echo "   [D] Start Full XFCE4 Desktop"
+    echo "   [H] Launch ASL Hub Control Center"
+    echo "   [S] Sync Desktop Launchers into Termux"
+    echo "   [Q] Return"
+    echo ""
+    read -r -p "Select application [1-$count, or D/H/S/Q]: " choice_app
+    case "$choice_app" in
+        [dD])
+            bash "$ASL_DIR/desktop/start-desktop.sh" start
+            ;;
+        [hH])
+            launch_desktop_app "asl-hub.desktop"
+            ;;
+        [sS])
+            bash "$ASL_DIR/desktop/start-desktop.sh" sync-apps
+            ;;
+        [qQ]|"")
+            return 0
+            ;;
+        *)
+            if [[ "$choice_app" =~ ^[0-9]+$ ]] && [ "$choice_app" -ge 1 ] && [ "$choice_app" -le "$count" ]; then
+                local idx=$((choice_app - 1))
+                local sel_app="${app_files[$idx]}"
+                local sel_nm="${app_names[$idx]}"
+                echo "[*] Launching $sel_nm ($sel_app)..."
+                launch_desktop_app "$sel_app"
+            else
+                echo "[!] Invalid selection."
+            fi
+            ;;
+    esac
 }
 
 dashboard() {
