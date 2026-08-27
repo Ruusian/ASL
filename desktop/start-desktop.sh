@@ -176,13 +176,9 @@ start_vnc() {
     if ! asl_chroot_exec "pgrep -f 'x11vnc.*:0'" >/dev/null 2>&1; then
         echo "[*] Initializing x11vnc server on DISPLAY :0..."
         asl_exec "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/x11vnc \
-            -display :0 -noshm -forever -shared -nopw -loop -rfbport 5900 \
-            -threads -nap -nowait_bog \
-            -wait 10 -defer 10 -deferupdate 20 \
-            -ncache 10 -ncache_cr \
-            -wireframe -scrollcopyrect always \
-            -speeds 250,100,50 \
-            -cursor arrow -noxdamage \
+            -display :0 -forever -shared -nopw -rfbport 5900 \
+            -threads -wait 20 -defer 20 \
+            -cursor arrow \
             >'$DEBIANPATH/tmp/x11vnc.log' 2>&1 &" || true
     fi
     if ! asl_chroot_exec "pgrep -f 'websockify.*6080'" >/dev/null 2>&1; then
@@ -330,7 +326,6 @@ export GIO_USE_VFS=local
 export WEBKIT_FORCE_SANDBOX=0
 export QT_QPA_PLATFORMTHEME=gtk2
 export QT_STYLE_OVERRIDE=gtk2
-export GSK_RENDERER=cairo
 $gpu_exports
 
 mkdir -p /etc/pulse "$target_home/.config/pulse" "$target_home/Desktop" "$target_home/.config/gtk-3.0" /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
@@ -436,7 +431,12 @@ rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/x
 
     xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/vblank_mode -s off 2>/dev/null || xfconf-query -c xfwm4 -p /general/vblank_mode -n -t string -s off 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/show_dock_shadow -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/show_dock_shadow -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/show_popup_shadow -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/show_popup_shadow -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/show_frame_shadow -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/show_frame_shadow -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/unredirect_overlays -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/unredirect_overlays -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
@@ -501,8 +501,10 @@ LAUNCHER_EOF
     fi
     write_state || { cleanup_started; return 1; }
     am start -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
-    start_vnc 2>/dev/null || true
-    echo "[✓] Desktop started on $DISPLAY_ID. Open the Termux:X11 Android app or noVNC web viewer."
+    if [ "${ASL_ENABLE_VNC:-0}" = "1" ]; then
+        start_vnc 2>/dev/null || true
+    fi
+    echo "[✓] Desktop started on $DISPLAY_ID. Open the Termux:X11 Android app."
 }
 
 stop_desktop() {
@@ -696,8 +698,9 @@ case "${1:-start}" in
     restart) force_stop_desktop && start_desktop ;;
     status) status_desktop ;;
     refresh-x11) refresh_x11_state ;;
+    vnc) start_vnc ;;
     audio) shift; audio_control "$@" ;;
     sync-apps) sync_apps ;;
     launch) shift; launch_app "$@" ;;
-    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|audio|sync-apps|launch}"; exit 1 ;;
+    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|vnc|audio|sync-apps|launch}"; exit 1 ;;
 esac
