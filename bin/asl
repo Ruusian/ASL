@@ -554,12 +554,12 @@ asl_remote_details() {
     host_ip=$(asl_host_ip)
 
     if asl_is_sshd_running; then
-        details+=("* LAN SSH (Host):  ssh -p 8022 ${user}@${host_ip}")
+        details+=("* LAN SSH:        ssh -p 8022 ${user}@${host_ip}")
     fi
     if [ -n "$o_host" ] && [ -f "$prefix/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then
-        details+=("* Oracle VPS:      ssh -J ${o_user}@${o_host} -p ${o_port} ${user}@127.0.0.1")
+        details+=("* Oracle VPS:     ssh -J ${o_user}@${o_host} -p ${o_port} ${user}@127.0.0.1")
     elif [ -n "$o_host" ] && [ -f "$o_key" ]; then
-        details+=("* Oracle VPS:      Standby (Host: ${o_host}:${o_port}, Run 'asl remote oracle start')")
+        details+=("* Oracle VPS:     Standby (Host: ${o_host}:${o_port}, Run 'asl remote oracle start')")
     fi
     if [ -f "$prefix/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then
         local s_alias="asl-${user}"
@@ -570,7 +570,7 @@ asl_remote_details() {
         elif [ -n "${ASL_SERVEO_ALIAS:-}" ]; then
             s_alias="$ASL_SERVEO_ALIAS"
         fi
-        details+=("* Serveo Tunnel:   ssh -J serveo.net ${user}@${s_alias}")
+        details+=("* Serveo Tunnel:  ssh -J serveo.net ${user}@${s_alias}")
     fi
     if [ -f "$prefix/tmp/asl-ngrok.state" ] && (pgrep -x ngrok >/dev/null 2>&1 || pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || su -c "pgrep -x ngrok" >/dev/null 2>&1); then
         local ng_url ng_host ng_port ng_json ng_status_json ng_lat ng_region ng_conns
@@ -596,16 +596,16 @@ asl_remote_details() {
         if [ -n "$ng_url" ]; then
             ng_host=$(echo "$ng_url" | sed -E 's|tcp://([^:]+):.*|\1|')
             ng_port=$(echo "$ng_url" | sed -E 's|tcp://([^:]+:([0-9]+))|\1|' | sed -E 's|.*:||')
-            details+=("* Ngrok Tunnel:    ssh -p ${ng_port} ${user}@${ng_host}")
+            details+=("* Ngrok Tunnel:   ssh -p ${ng_port} ${user}@${ng_host}")
         else
-            details+=("* Ngrok Tunnel:    Active (Fetching tunnel URL...)")
+            details+=("* Ngrok Tunnel:   Active (Fetching tunnel URL...)")
         fi
 
         ng_lat=$(echo "$ng_status_json" | grep -oE '"latency":"[^"]+"' | cut -d'"' -f4)
         ng_region=$(echo "$ng_status_json" | grep -oE '"region":"[^"]+"' | cut -d'"' -f4)
         ng_conns=$(echo "$ng_json" | grep -oE '"count":[0-9]+' | head -1 | cut -d':' -f2)
         if [ -n "$ng_lat" ] || [ -n "$ng_region" ]; then
-            details+=("  - Performance:   Region: ${ng_region:-global} | Latency: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
+            details+=("  - Performance:  Region: ${ng_region:-global} | Latency: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
         fi
     fi
 
@@ -618,7 +618,27 @@ asl_remote_details() {
             "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_GREEN$C_BOLD" "$pass" "$C_CYAN" "$C_SHADOW" "$dashes" "$C_RESET"
         local d
         for d in "${details[@]}"; do
-            printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$d" "$C_CYAN" "$C_RESET"
+            if [ ${#d} -le 68 ]; then
+                printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$d" "$C_CYAN" "$C_RESET"
+            else
+                if [[ "$d" == *": "* ]]; then
+                    local lbl="${d%%: *}":
+                    local cmd="${d#*: }"
+                    cmd=$(echo "$cmd" | sed -e "s/^[[:space:]]*//")
+                    printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$lbl" "$C_CYAN" "$C_RESET"
+                    while [ -n "$cmd" ]; do
+                        local chunk="${cmd:0:66}"
+                        cmd="${cmd:66}"
+                        printf "%s│%s    %s%-66.66s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$chunk" "$C_CYAN" "$C_RESET"
+                    done
+                else
+                    while [ -n "$d" ]; do
+                        local chunk="${d:0:68}"
+                        d="${d:68}"
+                        printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$chunk" "$C_CYAN" "$C_RESET"
+                    done
+                fi
+            fi
         done
     fi
 }
@@ -638,7 +658,7 @@ overview() {
     if timeout 1 dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" || timeout 1 su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         wlock_status="ON"
     fi
-    wlock_lbl="$(status_badge "$wlock_status" 5)"
+    wlock_lbl="$(status_badge "$wlock_status" 13)"
 
     x11_socket="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0"
     desktop_state=$(bash "$ASL_DIR/desktop/start-desktop.sh" status 2>/dev/null | tr '\n' ' ')
@@ -736,9 +756,9 @@ overview() {
     if pgrep -x pulseaudio >/dev/null 2>&1; then audio_status="RUNNING"; else audio_status="STOPPED"; fi
 
     local chroot_lbl desktop_lbl x11_lbl audio_lbl
-    if is_mounted; then chroot_lbl="$(status_badge ACTIVE 8)"; else chroot_lbl="$(status_badge INACTIVE 8)"; fi
+    if is_mounted; then chroot_lbl="$(status_badge ACTIVE 10)"; else chroot_lbl="$(status_badge INACTIVE 10)"; fi
     desktop_lbl="$(status_badge "${desktop_status:-STOPPED}" 9)"
-    if [ -S "$x11_socket" ]; then x11_lbl="$(status_badge READY 7)"; else x11_lbl="$(status_badge STOPPED 7)"; fi
+    if [ -S "$x11_socket" ]; then x11_lbl="$(status_badge READY 9)"; else x11_lbl="$(status_badge STOPPED 9)"; fi
     audio_lbl="$(status_badge "$audio_status" 9)"
 
     local boot_status="DISABLED" oom_status="OFF" wdog_status="INACTIVE" wan_ping=""
@@ -750,20 +770,20 @@ overview() {
     wan_ping=$(asl_wan_ping_cached)
 
     if asl_is_omniroute_running; then
-        omni_lbl="$(status_badge ACTIVE 8)"
+        omni_lbl="$(status_badge ACTIVE 17)"
     else
-        omni_lbl="$(status_badge INACTIVE 8)"
+        omni_lbl="$(status_badge INACTIVE 17)"
     fi
 
     local boot_lbl="$(status_badge "$boot_status" 10)"
-    local wdog_lbl="$(status_badge "$wdog_status" 9)"
+    local wdog_lbl="$(status_badge "$wdog_status" 15)"
 
     if [ "$mode" = "compact" ]; then
         printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sChroot:%s %s  %sDesktop:%s %s  %sGPU:%s %s%-25.25s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sDisplay:%s %s   %sAudio:%s %s  %sGov:%s %s%-26.26s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sBattery:%s %s%-12.12s %sCPU:%s %s%-5.5s %s  %sWake-Lock:%s %s%8s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl" "" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sHost IP:%s %s%-15.15s  %sWAN:%s %s%-7.7s  %sOmniRoute:%s %s%9s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$omni_lbl" "" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sChroot:%s %s  %sDesktop:%s %s  %sGPU:%s %s%-23.23s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sDisplay:%s %s   %sAudio:%s %s  %sGov:%s %s%-24.24s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sBattery:%s %s%-12.12s %sCPU:%s %s%-5.5s %s  %sWake-Lock:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sHost IP:%s %s%-15.15s  %sWAN:%s %s%-7.7s  %sOmniRoute:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$omni_lbl" "$C_CYAN" "$C_RESET"
         printf "%s│%s  %sRAM:%s  [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
         draw_bar "$mem_pct" 8
         printf "] %3d%%   %sSwap:%s [" "$mem_pct" "$C_BOLD" "$C_RESET"
@@ -775,12 +795,12 @@ overview() {
     fi
 
     printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sChroot:%s %s  %sDesktop:%s %s  %sGPU:%s %s%-25.25s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sDisplay:%s %s   %sAudio:%s %s  %sGov:%s %s%-26.26s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sBattery:%s %s%-12.12s %sCPU:%s %s%-5.5s %s  %sWake-Lock:%s %s%8s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl" "" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sHost IP:%s %s%-15.15s  %sWAN:%s %s%-7.7s  %sOmniRoute:%s %s%9s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$omni_lbl" "" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sAutostart:%s %s  %sOOM:%s %s%-13.13s  %sWatchdog:%s %s%6s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$boot_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_BOLD" "$C_RESET" "$wdog_lbl" "" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sStorage:%s %s%-22.22s   %sRemote:%s %s%-26.26s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sChroot:%s %s  %sDesktop:%s %s  %sGPU:%s %s%-23.23s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sDisplay:%s %s   %sAudio:%s %s  %sGov:%s %s%-24.24s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sBattery:%s %s%-12.12s %sCPU:%s %s%-5.5s %s  %sWake-Lock:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sHost IP:%s %s%-15.15s  %sWAN:%s %s%-7.7s  %sOmniRoute:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$omni_lbl" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sAutostart:%s %s  %sOOM:%s %s%-13.13s  %sWatchdog:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$boot_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_BOLD" "$C_RESET" "$wdog_lbl" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sStorage:%s %s%-24.24s   %sRemote:%s %s%-24.24s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_CYAN" "$C_RESET"
 
     asl_remote_details
 
@@ -793,7 +813,7 @@ overview() {
     up_field=$(printf "%s (Svc %s)" "$up_str" "$svc_up_str")
     printf "%s│%s  %sSwap:%s [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
     draw_bar "$swap_pct" 10
-    printf "] %3d%% (%4d/%4d MB)   %sUptime:%s %s%-20.20s %s│%s\n" "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_field" "$C_CYAN" "$C_RESET"
+    printf "] %3d%% (%4d/%4d MB)   %sUptime:%s %s%-19.19s  %s│%s\n" "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_field" "$C_CYAN" "$C_RESET"
     printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
 }
 
