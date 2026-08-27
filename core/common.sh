@@ -83,6 +83,13 @@ asl_require_default_debianpath() {
     fi
 }
 
+# Shared state directory
+ASL_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/asl"
+asl_ensure_state_dir() {
+    mkdir -p "$ASL_STATE_DIR" 2>/dev/null || return 1
+    chmod 700 "$ASL_STATE_DIR" 2>/dev/null || true
+}
+
 # Advisory lock to serialize chroot-mutating operations across processes.
 ASL_LOCK_DIR="${HOME:-/data/data/com.termux/files/home}/.asl"
 asl_acquire_lock() {
@@ -148,8 +155,8 @@ is_mounted() {
 status_label() {
     local state="$1"
     case "$state" in
-        ACTIVE|RUNNING|READY|ON) printf '%s[%s]%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
-        INACTIVE|STOPPED|OFF) printf '%s[%s]%s' "$C_DIM" "$state" "$C_RESET" ;;
+        ACTIVE|RUNNING|READY|ON|ENABLED) printf '%s[%s]%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
+        INACTIVE|STOPPED|OFF|DISABLED) printf '%s[%s]%s' "$C_DIM" "$state" "$C_RESET" ;;
         *) printf '%s[%s]%s' "$C_YELLOW$C_BOLD" "$state" "$C_RESET" ;;
     esac
 }
@@ -166,6 +173,14 @@ asl_get_perf_cpu_mask() {
     ncpu=$(nproc 2>/dev/null || echo 8)
     printf '0-%d' "$((ncpu - 1))"
 }
+
+asl_host_ip() {
+    local ip
+    ip=$(ip -o -4 addr show 2>/dev/null | awk '$2 != "lo" {sub(/\/.*/, "", $4); print $4; exit}')
+    [ -n "$ip" ] || ip=$(ifconfig 2>/dev/null | awk '/inet / && !/127.0.0.1/ {sub(/addr:/, ""); print $2; exit}')
+    printf '%s' "${ip:-127.0.0.1}"
+}
+lan_host_ip() { asl_host_ip "$@"; }
 
 asl_is_sshd_running() {
     pgrep -f "sshd" >/dev/null 2>&1 || su -c "pgrep -f sshd" >/dev/null 2>&1 || asl_exec "pgrep -f sshd" >/dev/null 2>&1
@@ -187,6 +202,7 @@ batt_temp_c() {
     done
     (timeout 1 dumpsys battery 2>/dev/null || timeout 1 asl_exec "dumpsys battery" 2>/dev/null) | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
 }
+asl_batt_temp_c() { batt_temp_c "$@"; }
 
 asl_cpu_temp_c() {
     local cache_f="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.asl_cpu_zones"
@@ -215,4 +231,49 @@ asl_cpu_temp_c() {
     fi
     printf '%s' "$temp_val"
 }
+
+asl_find_script() {
+    local s="$1"
+    local candidates=(
+        "${SCRIPT_DIR:-}/core/$s"
+        "${SCRIPT_DIR:-}/desktop/$s"
+        "${SCRIPT_DIR:-}/desktop/remote/$s"
+        "${SCRIPT_DIR:-}/tools/$s"
+        "${SCRIPT_DIR:-}/$s"
+        "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/$s"
+        "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/desktop/$s"
+        "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/desktop/remote/$s"
+        "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/tools/$s"
+        "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/$s"
+        "${HOME:-/data/data/com.termux/files/home}/ASL/core/$s"
+        "${HOME:-/data/data/com.termux/files/home}/ASL/desktop/$s"
+        "${HOME:-/data/data/com.termux/files/home}/ASL/desktop/remote/$s"
+        "${HOME:-/data/data/com.termux/files/home}/ASL/tools/$s"
+        "${HOME:-/data/data/com.termux/files/home}/ASL/$s"
+    )
+    for c in "${candidates[@]}"; do
+        if [ -f "$c" ]; then
+            echo "$c"
+            return 0
+        fi
+    done
+    echo "${SCRIPT_DIR:-}/core/$s"
+}
+
+asl_ensure_chroot_mounted() {
+    if is_mounted "${1:-$DEBIANPATH}"; then
+        return 0
+    fi
+    local mount_script
+    mount_script=$(asl_find_script "mount-chroot.sh")
+    if [ -f "$mount_script" ]; then
+        bash "$mount_script" || return 1
+    else
+        return 1
+    fi
+}
+ensure_chroot_mounted() {
+    asl_ensure_chroot_mounted "$@"
+}
+
 

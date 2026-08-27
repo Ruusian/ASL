@@ -39,21 +39,23 @@ asl_service_start() {
     # 2. Ensure chroot is mounted & 5GB Swap is active
     if ! is_mounted; then
         echo "[*] Mounting Debian chroot virtual filesystems..."
-        if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
-            bash "$SCRIPT_DIR/core/mount-chroot.sh" || echo "[!] Warning: Chroot mount returned notice."
-        fi
+        ensure_chroot_mounted || echo "[!] Warning: Chroot mount returned notice."
     else
         echo "[✓] Debian chroot already mounted."
     fi
 
-    if [ -f "$SCRIPT_DIR/core/swap-manager.sh" ]; then
-        bash "$SCRIPT_DIR/core/swap-manager.sh" setup >/dev/null 2>&1 || true
+    local swap_script
+    swap_script=$(asl_find_script "swap-manager.sh")
+    if [ -f "$swap_script" ]; then
+        bash "$swap_script" setup >/dev/null 2>&1 || true
     fi
 
     # 3. Start SSH, Serveo, Ngrok, and Auto-Connect daemon
     echo "[*] Starting SSH, Serveo, Ngrok, and Auto-Connect remote bridges..."
-    if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
-        bash "$SCRIPT_DIR/desktop/remote.sh" start-all || true
+    local remote_script
+    remote_script=$(asl_find_script "remote.sh")
+    if [ -f "$remote_script" ]; then
+        bash "$remote_script" start-all || true
     fi
 
     # 4. Check & restore Omniroute / local AI proxy on port 20128 if installed
@@ -89,12 +91,14 @@ asl_service_start() {
 
 asl_service_stop() {
     echo "[*] Stopping ASL 24/7 Background Services..."
-    if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
-        bash "$SCRIPT_DIR/desktop/remote.sh" autoconnect stop >/dev/null 2>&1 || true
-        bash "$SCRIPT_DIR/desktop/remote.sh" oracle stop >/dev/null 2>&1 || true
-        bash "$SCRIPT_DIR/desktop/remote.sh" serveo stop >/dev/null 2>&1 || true
-        bash "$SCRIPT_DIR/desktop/remote.sh" ngrok stop >/dev/null 2>&1 || true
-        bash "$SCRIPT_DIR/desktop/remote.sh" lan stop >/dev/null 2>&1 || true
+    local remote_script
+    remote_script=$(asl_find_script "remote.sh")
+    if [ -f "$remote_script" ]; then
+        bash "$remote_script" autoconnect stop >/dev/null 2>&1 || true
+        bash "$remote_script" oracle stop >/dev/null 2>&1 || true
+        bash "$remote_script" serveo stop >/dev/null 2>&1 || true
+        bash "$remote_script" ngrok stop >/dev/null 2>&1 || true
+        bash "$remote_script" lan stop >/dev/null 2>&1 || true
     fi
     pkill -f "asl-watchdog-loop" 2>/dev/null || true
     pkill -f "omniroute" 2>/dev/null || true
@@ -340,6 +344,9 @@ asl_service_check() {
     local healed=0
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
 
+    local remote_script
+    remote_script=$(asl_find_script "remote.sh")
+
     # 1. SSH Server Check (process & socket probe)
     local ssh_alive=0
     if asl_is_sshd_running; then
@@ -353,8 +360,8 @@ asl_service_check() {
     fi
     if [ "$ssh_alive" -eq 0 ]; then
         echo "[!] SSH server inactive or socket unresponsive — restarting LAN SSH..."
-        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
-            bash "$SCRIPT_DIR/desktop/remote.sh" lan start >/dev/null 2>&1 || true
+        if [ -f "$remote_script" ]; then
+            bash "$remote_script" lan start >/dev/null 2>&1 || true
             healed=$((healed + 1))
         fi
     fi
@@ -362,26 +369,26 @@ asl_service_check() {
     # 2. Auto-Connect Daemon Check (if enabled by user state)
     if [ -f "$prefix/tmp/asl-autoconnect.state" ] && ! pgrep -f "autoconnect" >/dev/null 2>&1; then
         echo "[!] Auto-Connect daemon state ACTIVE but process down — restoring remote Watchdog..."
-        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ]; then
-            bash "$SCRIPT_DIR/desktop/remote.sh" autoconnect start >/dev/null 2>&1 || true
+        if [ -f "$remote_script" ]; then
+            bash "$remote_script" autoconnect start >/dev/null 2>&1 || true
             healed=$((healed + 1))
         fi
     fi
 
     # 3. Oracle VPS Tunnel Check (if enabled by user state)
     if [ -f "$prefix/tmp/asl-oracle.state" ]; then
-        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ] && ! bash "$SCRIPT_DIR/desktop/remote.sh" oracle status 2>/dev/null | grep -q "RUNNING"; then
+        if [ -f "$remote_script" ] && ! bash "$remote_script" oracle status 2>/dev/null | grep -q "RUNNING"; then
             echo "[!] Oracle VPS tunnel state ACTIVE but process down or unresponsive — restoring tunnel..."
-            bash "$SCRIPT_DIR/desktop/remote.sh" oracle start >/dev/null 2>&1 || true
+            bash "$remote_script" oracle start >/dev/null 2>&1 || true
             healed=$((healed + 1))
         fi
     fi
 
     # 4. Serveo Tunnel Check (if enabled by user state)
     if [ -f "$prefix/tmp/asl-serveo.state" ]; then
-        if [ -f "$SCRIPT_DIR/desktop/remote.sh" ] && ! bash "$SCRIPT_DIR/desktop/remote.sh" serveo status 2>/dev/null | grep -q "RUNNING"; then
+        if [ -f "$remote_script" ] && ! bash "$remote_script" serveo status 2>/dev/null | grep -q "RUNNING"; then
             echo "[!] Serveo tunnel state ACTIVE but process down or unresponsive — restoring tunnel..."
-            bash "$SCRIPT_DIR/desktop/remote.sh" serveo start >/dev/null 2>&1 || true
+            bash "$remote_script" serveo start >/dev/null 2>&1 || true
             healed=$((healed + 1))
         fi
     fi
@@ -406,8 +413,7 @@ asl_service_check() {
     # 6. Chroot Mount & Swap Check
     if ! is_mounted; then
         echo "[!] Debian chroot unmounted — re-mounting Linux virtual filesystems..."
-        if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
-            bash "$SCRIPT_DIR/core/mount-chroot.sh" >/dev/null 2>&1 || true
+        if ensure_chroot_mounted; then
             healed=$((healed + 1))
         fi
     fi
@@ -417,9 +423,11 @@ asl_service_check() {
     elif command -v su >/dev/null 2>&1 && su -c "grep -qE 'asl_swap|loop|zram' /proc/swaps" 2>/dev/null; then
         has_swap=1
     fi
-    if [ -f "$SCRIPT_DIR/core/swap-manager.sh" ] && [ "$has_swap" -eq 0 ]; then
+    local swap_script
+    swap_script=$(asl_find_script "swap-manager.sh")
+    if [ -f "$swap_script" ] && [ "$has_swap" -eq 0 ]; then
         echo "[!] 5GB File Swap unattached — re-attaching memory optimization pool..."
-        bash "$SCRIPT_DIR/core/swap-manager.sh" setup >/dev/null 2>&1 || true
+        bash "$swap_script" setup >/dev/null 2>&1 || true
         healed=$((healed + 1))
     fi
 
@@ -480,9 +488,8 @@ asl_service_loop() {
     echo "[*] Starting ASL autonomous background watchdog daemon (180s interval)..."
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
     mkdir -p "$prefix/tmp" 2>/dev/null || true
-    local mgr_path="$SCRIPT_DIR/core/service-manager.sh"
-    [ -f "$mgr_path" ] || mgr_path="${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/service-manager.sh"
-    [ -f "$mgr_path" ] || mgr_path="$HOME/ASL/core/service-manager.sh"
+    local mgr_path
+    mgr_path=$(asl_find_script "service-manager.sh")
 
     nohup bash -c '
         exec -a "asl-watchdog-loop" bash -c "

@@ -16,17 +16,6 @@ else
     asl_require_default_debianpath
 fi
 
-ensure_chroot_mounted() {
-    if [ -z "$DEBIANPATH" ] || [ "$DEBIANPATH" = "/" ]; then
-        return 0
-    fi
-    if ! is_mounted; then
-        if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
-            bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
-        fi
-    fi
-}
-
 install_asl_hub_deb() {
     echo "[*] Deploying ASL Hub GTK3 Control Center into Linux rootfs..."
     ensure_chroot_mounted || return 1

@@ -4,13 +4,6 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$SCRIPT_DIR/desktop/remote/common.sh"
 
-lan_host_ip() {
-    local ip
-    ip=$(ip -o -4 addr show 2>/dev/null | awk '$2 != "lo" {sub(/\/.*/, "", $4); print $4; exit}')
-    [ -n "$ip" ] || ip=$(ifconfig 2>/dev/null | awk '/inet / && !/127.0.0.1/ {sub(/addr:/, ""); print $2; exit}')
-    printf '%s' "${ip:-127.0.0.1}"
-}
-
 lan_control() {
     local action="${1:-status}"
     local auth_desc="SSH key only"

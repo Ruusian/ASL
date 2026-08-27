@@ -1,6 +1,15 @@
 #!/bin/bash
 # Source-only GPU profile selection for ASL.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh" ]; then
+    source "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh"
+elif [ -f "$HOME/ASL/core/common.sh" ]; then
+    source "$HOME/ASL/core/common.sh"
+fi
+
 asl_gpu_detect() {
     ASL_GPU_PLATFORM=$(getprop ro.board.platform 2>/dev/null || true)
     ASL_GPU_PLATFORM=${ASL_GPU_PLATFORM,,}
@@ -146,11 +155,11 @@ asl_gpu_env_exports() {
     [ -n "${MESA_GL_VERSION_OVERRIDE:-}" ] && res="${res}export MESA_GL_VERSION_OVERRIDE=\"${MESA_GL_VERSION_OVERRIDE}\"\n"
     [ -n "${MESA_GLES_VERSION_OVERRIDE:-}" ] && res="${res}export MESA_GLES_VERSION_OVERRIDE=\"${MESA_GLES_VERSION_OVERRIDE}\"\n"
 
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$script_dir/hud.sh" ]; then
+    local hud_script
+    hud_script=$(asl_find_script "hud.sh")
+    if [ -f "$hud_script" ]; then
         local hud_exp
-        hud_exp=$("$script_dir/hud.sh" env 2>/dev/null || true)
+        hud_exp=$("$hud_script" env 2>/dev/null || true)
         [ -n "$hud_exp" ] && res="${res}${hud_exp}\n"
     fi
 
@@ -159,10 +168,10 @@ asl_gpu_env_exports() {
 
 asl_gpu_apply_exports() {
     asl_gpu_apply
-    local script_dir hud_exp
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$script_dir/hud.sh" ]; then
-        hud_exp=$("$script_dir/hud.sh" env 2>/dev/null || true)
+    local hud_script hud_exp
+    hud_script=$(asl_find_script "hud.sh")
+    if [ -f "$hud_script" ]; then
+        hud_exp=$("$hud_script" env 2>/dev/null || true)
         [ -n "$hud_exp" ] && eval "$hud_exp"
     fi
 }

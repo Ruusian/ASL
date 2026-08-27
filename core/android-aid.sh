@@ -15,11 +15,9 @@ fi
 
 setup_android_aids() {
     echo "[*] Setting up Android AID GID mappings inside Debian chroot..."
-    if ! is_mounted; then
-        if ! bash "$SCRIPT_DIR/core/mount-chroot.sh"; then
-            echo "[!] Unable to mount the Debian chroot for Android AID setup."
-            return 1
-        fi
+    if ! ensure_chroot_mounted; then
+        echo "[!] Unable to mount the Debian chroot for Android AID setup."
+        return 1
     fi
     if ! asl_chroot_exec '
         export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

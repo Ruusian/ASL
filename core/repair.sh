@@ -11,14 +11,6 @@ fi
 
 asl_require_default_debianpath
 
-ensure_chroot_mounted() {
-    if ! is_mounted; then
-        if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
-            bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
-        fi
-    fi
-}
-
 asl_repair_run() {
     local target="${1:-all}"
     [ "$target" = "run" ] && target="all"
@@ -35,12 +27,16 @@ asl_repair_run() {
     # Step 1: Repair mounts & stale unmounts
     if [ "$target" = "mounts" ] || [ "$target" = "all" ]; then
         echo "[1/4] Checking and unmounting stale chroot mount points..."
-        if [ -f "$SCRIPT_DIR/core/stop-chroot.sh" ]; then
-            bash "$SCRIPT_DIR/core/stop-chroot.sh" >/dev/null 2>&1 || true
+        local stop_script
+        stop_script=$(asl_find_script "stop-chroot.sh")
+        if [ -f "$stop_script" ]; then
+            bash "$stop_script" >/dev/null 2>&1 || true
         fi
         echo "[1/4] Remounting fresh virtual filesystems..."
-        if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
-            bash "$SCRIPT_DIR/core/mount-chroot.sh" || echo "[!] Mount check returned notice."
+        local mount_script
+        mount_script=$(asl_find_script "mount-chroot.sh")
+        if [ -f "$mount_script" ]; then
+            bash "$mount_script" || echo "[!] Mount check returned notice."
         fi
     fi
 
@@ -99,8 +95,10 @@ asl_repair_run() {
 
     if [ "$was_desktop_running" -eq 1 ]; then
         echo "[*] Auto-restoring XFCE4 desktop session post-repair..."
-        if [ -f "$SCRIPT_DIR/desktop/start-desktop.sh" ]; then
-            bash "$SCRIPT_DIR/desktop/start-desktop.sh" start >/dev/null 2>&1 || true
+        local desk_script
+        desk_script=$(asl_find_script "start-desktop.sh")
+        if [ -f "$desk_script" ]; then
+            bash "$desk_script" start >/dev/null 2>&1 || true
         fi
     fi
 

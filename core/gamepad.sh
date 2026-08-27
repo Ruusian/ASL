@@ -11,14 +11,6 @@ fi
 
 asl_require_default_debianpath
 
-ensure_chroot_mounted() {
-    if ! is_mounted; then
-        if [ -f "$SCRIPT_DIR/core/mount-chroot.sh" ]; then
-            bash "$SCRIPT_DIR/core/mount-chroot.sh" || return 1
-        fi
-    fi
-}
-
 asl_gamepad_status() {
     ensure_chroot_mounted 2>/dev/null || true
     echo "--- Bluetooth & USB Gamepad Passthrough ---"

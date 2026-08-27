@@ -39,7 +39,7 @@ asl_benchmark_run() {
     local temp_start_cpu temp_start_batt
     temp_start_cpu=$(asl_cpu_temp_c 2>/dev/null)
     [ -z "$temp_start_cpu" ] && temp_start_cpu="N/A"
-    temp_start_batt=$(batt_temp_c 2>/dev/null)
+    temp_start_batt=$(asl_batt_temp_c 2>/dev/null)
     [ -z "$temp_start_batt" ] && temp_start_batt="N/A"
 
     echo "Thermal Baseline:"
@@ -134,7 +134,7 @@ print(f"{t_cpu*1000:.2f}|{mops}|{t_mem*1000:.2f}|{bandwidth_mb_s}|{t_matrix*1000
     local temp_end_cpu temp_end_batt cur_freq max_freq
     temp_end_cpu=$(asl_cpu_temp_c 2>/dev/null)
     [ -z "$temp_end_cpu" ] && temp_end_cpu="N/A"
-    temp_end_batt=$(batt_temp_c 2>/dev/null)
+    temp_end_batt=$(asl_batt_temp_c 2>/dev/null)
     [ -z "$temp_end_batt" ] && temp_end_batt="N/A"
 
     cur_freq=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || true)

@@ -5,6 +5,10 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
+elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh" ]; then
+    source "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh"
+elif [ -f "$HOME/ASL/core/common.sh" ]; then
+    source "$HOME/ASL/core/common.sh"
 fi
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"

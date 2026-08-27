@@ -14,6 +14,17 @@ DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
 export ASL_DIR DEBIANPATH
 
+if [ -f "$ASL_DIR/core/common.sh" ]; then
+    source "$ASL_DIR/core/common.sh"
+elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh" ]; then
+    source "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh"
+elif [ -f "$HOME/ASL/core/common.sh" ]; then
+    source "$HOME/ASL/core/common.sh"
+fi
+if [ -f "$ASL_DIR/core/gpu-profile.sh" ]; then
+    source "$ASL_DIR/core/gpu-profile.sh"
+fi
+
 AUTO_CONFIRM=0
 FILTERED_ARGS=()
 for arg in "$@"; do
@@ -28,28 +39,6 @@ else
     set --
 fi
 export AUTO_CONFIRM
-
-if [ "${NO_COLOR:-}" = "" ]; then
-    C_RESET=$'\033[0m'
-    C_BOLD=$'\033[1m'
-    C_CYAN=$'\033[36m'
-    C_GREEN=$'\033[32m'
-    C_YELLOW=$'\033[33m'
-    C_RED=$'\033[31m'
-    C_DIM=$'\033[2m'
-    C_SHADOW=$'\033[90m'
-else
-    C_RESET=''; C_BOLD=''; C_CYAN=''; C_GREEN=''; C_YELLOW=''; C_RED=''; C_DIM=''; C_SHADOW=''
-fi
-
-status_label() {
-    local state="$1"
-    case "$state" in
-        ACTIVE|RUNNING|READY|ON|ENABLED) printf '%s[%s]%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
-        INACTIVE|STOPPED|OFF|DISABLED) printf '%s[%s]%s' "$C_DIM" "$state" "$C_RESET" ;;
-        *) printf '%s[%s]%s' "$C_YELLOW$C_BOLD" "$state" "$C_RESET" ;;
-    esac
-}
 
 status_badge() {
     local state="$1" width="${2:-9}"
@@ -74,21 +63,8 @@ menu_item() {
     fi
 }
 
-if [ -f "$ASL_DIR/core/common.sh" ]; then
-    source "$ASL_DIR/core/common.sh"
-elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh" ]; then
-    source "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh"
-elif [ -f "$HOME/ASL/core/common.sh" ]; then
-    source "$HOME/ASL/core/common.sh"
-fi
-if [ -f "$ASL_DIR/core/gpu-profile.sh" ]; then
-    source "$ASL_DIR/core/gpu-profile.sh"
-fi
-
 ensure_mounted() {
-    if ! is_mounted; then
-        bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
-    fi
+    ensure_chroot_mounted || exit 1
 }
 
 asl_with_lock() {
@@ -412,26 +388,6 @@ asl_cpu_freq() {
     fi
 }
 
-asl_host_ip() {
-    local ip
-    ip=$(ip -o -4 addr show 2>/dev/null | awk '$2 != "lo" {sub(/\/.*/, "", $4); print $4; exit}')
-    [ -n "$ip" ] || ip=$(ifconfig 2>/dev/null | awk '/inet / && !/127.0.0.1/ {sub(/addr:/, ""); print $2; exit}')
-    printf '%s' "${ip:-127.0.0.1}"
-}
-
-batt_temp_c() {
-    local raw p
-    for p in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp /sys/class/thermal/thermal_zone81/temp /sys/class/thermal/thermal_zone80/temp; do
-        raw=$(cat "$p" 2>/dev/null | tr -d '[:space:]')
-        if [[ "$raw" =~ ^[0-9]+$ ]] && [ "$raw" -gt 0 ]; then
-            if [ "$raw" -gt 1000 ]; then printf '%d' "$((raw / 1000))"; return
-            elif [ "$raw" -gt 100 ]; then printf '%d' "$((raw / 10))"; return
-            else printf '%d' "$raw"; return; fi
-        fi
-    done
-    (timeout 1 dumpsys battery 2>/dev/null || timeout 1 asl_exec "dumpsys battery" 2>/dev/null) | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
-}
-
 asl_gpu_cached() {
     local now cache_file cache_time cache_prof
     now=$(date +%s 2>/dev/null || echo 0)
@@ -472,14 +428,6 @@ asl_wan_ping_cached() {
     [ -n "$cache_ping" ] || cache_ping="online"
     printf '%s %s\n' "$now" "$cache_ping" > "$cache_file" 2>/dev/null || true
     printf '%s' "$cache_ping"
-}
-
-asl_is_sshd_running() {
-    pgrep -f "sshd" >/dev/null 2>&1 || su -c "pgrep -f sshd" >/dev/null 2>&1 || asl_exec "pgrep -f sshd" >/dev/null 2>&1
-}
-
-asl_is_omniroute_running() {
-    pgrep -f "omniroute" >/dev/null 2>&1 || su -c "pgrep -f omniroute" >/dev/null 2>&1 || (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null
 }
 
 asl_oracle_info() {

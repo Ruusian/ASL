@@ -1,14 +1,22 @@
 #!/bin/bash
 # ASL: MangoHud & DXVK Performance Overlay Manager
 
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/asl"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh" ]; then
+    source "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh"
+elif [ -f "$HOME/ASL/core/common.sh" ]; then
+    source "$HOME/ASL/core/common.sh"
+fi
+
+STATE_DIR="${ASL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/asl}"
 HUD_STATE_FILE="$STATE_DIR/hud_state"
 DEFAULT_DXVK_HUD="fps,gpuname,frametime"
 DEFAULT_MANGOHUD_CONFIG="fps,cpu_temp,gpu_temp,ram,vram,font_size=16,position=top-left"
 
 ensure_state_dir() {
-    mkdir -p "$STATE_DIR" 2>/dev/null || true
-    chmod 700 "$STATE_DIR" 2>/dev/null || true
+    asl_ensure_state_dir
 }
 
 sanitize_hud_value() {
