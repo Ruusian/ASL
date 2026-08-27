@@ -511,13 +511,13 @@ asl_oracle_info() {
     [ -n "${ASL_ORACLE_HOST:-}" ] && o_host="$ASL_ORACLE_HOST"
     [ -n "${ASL_ORACLE_USER:-}" ] && o_user="$ASL_ORACLE_USER"
     [ -n "${ASL_ORACLE_PORT:-}" ] && o_port="$ASL_ORACLE_PORT"
-    printf '%s %s %s %s' "$o_host" "$o_user" "$o_port" "$o_key"
+    printf '%s|%s|%s|%s' "$o_host" "$o_user" "$o_port" "$o_key"
 }
 
 asl_remote_summary() {
     local active=()
     local o_host o_user o_port o_key
-    read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
+    IFS='|' read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
     if asl_is_sshd_running; then active+=("LAN:8022"); fi
     if [ -n "$o_host" ] && [ -f "$PREFIX/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then active+=("VPS"); fi
     if [ -f "$PREFIX/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then active+=("Serveo"); fi
@@ -533,7 +533,7 @@ asl_remote_details() {
     local details=()
     local user pass host_ip o_host o_user o_port o_key
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
-    read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
+    IFS='|' read -r o_host o_user o_port o_key <<< "$(asl_oracle_info)"
     user=$(whoami 2>/dev/null || echo "user")
     if [ -f "$HOME/.asl/remote_password" ]; then
         pass="configured"

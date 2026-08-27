@@ -8,6 +8,11 @@ fi
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
+if [ "$DEBIANPATH" = "/" ] || [ "${ASL_EXEC_MODE:-}" = "direct" ]; then
+    echo "[!] Cannot stop/unmount container from within the container itself. Run 'asl stop' from host Termux shell."
+    exit 1
+fi
+
 asl_require_default_debianpath
 
 # Remove legacy sysctl backup file if present

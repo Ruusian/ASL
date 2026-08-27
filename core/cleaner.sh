@@ -10,9 +10,9 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
 fi
 
 asl_require_default_debianpath
-# Refuse to operate when the target is the host root, which would wipe host /tmp.
-if [ "$DEBIANPATH" = "/" ]; then
-    echo "Error: refusing to clean DEBIANPATH '/'. Run inside a real chroot only." >&2
+# Refuse to operate when the target is the Android host root, which would wipe host /tmp.
+if [ "$DEBIANPATH" = "/" ] && [ ! -f /etc/debian_version ]; then
+    echo "Error: refusing to clean host root. Run inside a real chroot only." >&2
     exit 2
 fi
 

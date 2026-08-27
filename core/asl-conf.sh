@@ -68,24 +68,20 @@ get_config_value() {
         return 0
     fi
 
-    local esc_file esc_section esc_key
-    esc_file=$(printf '%s' "$file" | sed "s/'/\\\\'/g")
-    esc_section=$(printf '%s' "$section" | sed "s/'/\\\\'/g")
-    esc_key=$(printf '%s' "$key" | sed "s/'/\\\\'/g")
-
     local val
     val=$(python3 -c "
 import configparser, sys
+conf_file, sec, k = sys.argv[1], sys.argv[2], sys.argv[3]
 config = configparser.ConfigParser()
 try:
-    config.read('$esc_file')
-    if '$esc_section' in config and '$esc_key' in config['$esc_section']:
-        print(config['$esc_section']['$esc_key'])
+    config.read(conf_file)
+    if sec in config and k in config[sec]:
+        print(config[sec][k])
         sys.exit(0)
 except Exception:
     pass
 sys.exit(1)
-" 2>/dev/null)
+" "$file" "$section" "$key" 2>/dev/null)
 
     if [ $? -eq 0 ] && [ -n "$val" ]; then
         echo "$val"
@@ -94,13 +90,14 @@ sys.exit(1)
 
     # Fallback to asl_exec / root context if file is unreadable by unprivileged user
     local py_script
-    py_script=$(cat << PYEOF
+    py_script=$(cat << 'PYEOF'
 import configparser, sys
+conf_file, sec, k = sys.argv[1], sys.argv[2], sys.argv[3]
 config = configparser.ConfigParser()
 try:
-    config.read("$esc_file")
-    if "$esc_section" in config and "$esc_key" in config["$esc_section"]:
-        print(config["$esc_section"]["$esc_key"])
+    config.read(conf_file)
+    if sec in config and k in config[sec]:
+        print(config[sec][k])
         sys.exit(0)
 except Exception:
     pass
@@ -109,7 +106,7 @@ PYEOF
 )
     local py_b64
     py_b64=$(printf '%s' "$py_script" | base64 | tr -d '\n')
-    val=$(asl_exec "python3 -c \"\$(printf '%s' '$py_b64' | base64 -d)\"" 2>/dev/null || true)
+    val=$(asl_exec "python3 -c \"\$(printf '%s' '$py_b64' | base64 -d)\" '$file' '$section' '$key'" 2>/dev/null || true)
     if [ -n "$val" ]; then
         echo "$val"
     else
@@ -131,44 +128,38 @@ set_config_value() {
 
     mkdir -p "$(dirname "$target_file")" 2>/dev/null || true
 
-    local esc_file esc_section esc_key esc_val
-    esc_file=$(printf '%s' "$target_file" | sed "s/'/\\\\'/g")
-    esc_section=$(printf '%s' "$section" | sed "s/'/\\\\'/g")
-    esc_key=$(printf '%s' "$key" | sed "s/'/\\\\'/g")
-    esc_val=$(printf '%s' "$val" | sed "s/'/\\\\'/g")
-
     if python3 -c "
-import configparser, os
-conf_file = '$esc_file'
+import configparser, os, sys
+conf_file, sec, k, v = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 config = configparser.ConfigParser()
 if os.path.exists(conf_file):
     config.read(conf_file)
-if '$esc_section' not in config:
-    config['$esc_section'] = {}
-config['$esc_section']['$esc_key'] = '$esc_val'
+if sec not in config:
+    config[sec] = {}
+config[sec][k] = v
 with open(conf_file, 'w') as f:
     config.write(f)
-" 2>/dev/null; then
+" "$target_file" "$section" "$key" "$val" 2>/dev/null; then
         return 0
     fi
 
     local py_script
-    py_script=$(cat << PYEOF
-import configparser, os
-conf_file = "$esc_file"
+    py_script=$(cat << 'PYEOF'
+import configparser, os, sys
+conf_file, sec, k, v = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 config = configparser.ConfigParser()
 if os.path.exists(conf_file):
     config.read(conf_file)
-if "$esc_section" not in config:
-    config["$esc_section"] = {}
-config["$esc_section"]["$esc_key"] = "$esc_val"
-with open(conf_file, "w") as f:
+if sec not in config:
+    config[sec] = {}
+config[sec][k] = v
+with open(conf_file, 'w') as f:
     config.write(f)
 PYEOF
 )
     local py_b64
     py_b64=$(printf '%s' "$py_script" | base64 | tr -d '\n')
-    asl_exec "python3 -c \"\$(printf '%s' '$py_b64' | base64 -d)\"" 2>/dev/null || true
+    asl_exec "python3 -c \"\$(printf '%s' '$py_b64' | base64 -d)\" '$target_file' '$section' '$key' '$val'" 2>/dev/null || true
 }
 
 show_config() {

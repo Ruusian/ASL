@@ -9,6 +9,11 @@ fi
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
+if [ "$DEBIANPATH" = "/" ] || [ "${ASL_EXEC_MODE:-}" = "direct" ]; then
+    echo "[✓] Already running inside container environment."
+    exit 0
+fi
+
 if [ ! -d "$DEBIANPATH" ]; then
     echo "[!] Error: Debian chroot rootfs not found at $DEBIANPATH"
     echo "    To install a Debian rootfs, run: asl install"
