@@ -195,19 +195,24 @@ asl_cpu_temp_c() {
             ASL_CPU_ZONES=$(cat "$cache_f" 2>/dev/null)
         fi
         if [ -z "${ASL_CPU_ZONES:-}" ]; then
-            ASL_CPU_ZONES=$(grep -l -i "cpu" /sys/class/thermal/thermal_zone*/type 2>/dev/null | sed "s/type$/temp/" | tr "\n" " ")
+            ASL_CPU_ZONES=$(grep -l -i -E "cpu|soc|tsens|ap-thermal|mtk|exynos|qcom" /sys/class/thermal/thermal_zone*/type 2>/dev/null | sed "s/type$/temp/" | tr "\n" " ")
             [ -n "$ASL_CPU_ZONES" ] && printf "%s" "$ASL_CPU_ZONES" > "$cache_f" 2>/dev/null || true
         fi
     fi
+    local temp_val=""
     if [ -n "$ASL_CPU_ZONES" ]; then
-        cat $ASL_CPU_ZONES 2>/dev/null | awk '
+        temp_val=$(cat $ASL_CPU_ZONES 2>/dev/null | awk '
             {
                 t = $1 + 0;
                 if (t > 1000) t = int(t / 1000);
                 if (t >= 1 && t <= 115 && t > max) max = t;
             }
             END { if (max > 0) print max }
-        '
+        ')
     fi
+    if [ -z "$temp_val" ]; then
+        temp_val=$( (timeout 1 dumpsys hardware_properties 2>/dev/null || timeout 1 asl_exec "dumpsys hardware_properties" 2>/dev/null) | awk '/CPU temperatures:/ {match($0, /[0-9]+\.?[0-9]*/); if (RSTART) print int(substr($0, RSTART, RLENGTH))}' )
+    fi
+    printf '%s' "$temp_val"
 }
 

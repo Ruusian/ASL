@@ -432,29 +432,6 @@ batt_temp_c() {
     (timeout 1 dumpsys battery 2>/dev/null || timeout 1 asl_exec "dumpsys battery" 2>/dev/null) | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
 }
 
-asl_cpu_temp_c() {
-    local cache_f="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.asl_cpu_zones"
-    if [ -z "${ASL_CPU_ZONES:-}" ]; then
-        if [ -f "$cache_f" ]; then
-            ASL_CPU_ZONES=$(cat "$cache_f" 2>/dev/null)
-        fi
-        if [ -z "${ASL_CPU_ZONES:-}" ]; then
-            ASL_CPU_ZONES=$(grep -l -i "cpu" /sys/class/thermal/thermal_zone*/type 2>/dev/null | sed "s/type$/temp/" | tr "\n" " ")
-            [ -n "$ASL_CPU_ZONES" ] && printf "%s" "$ASL_CPU_ZONES" > "$cache_f" 2>/dev/null || true
-        fi
-    fi
-    if [ -n "$ASL_CPU_ZONES" ]; then
-        cat $ASL_CPU_ZONES 2>/dev/null | awk '
-            {
-                t = $1 + 0;
-                if (t > 1000) t = int(t / 1000);
-                if (t >= 1 && t <= 115 && t > max) max = t;
-            }
-            END { if (max > 0) print max }
-        '
-    fi
-}
-
 asl_gpu_cached() {
     local now cache_file cache_time cache_prof
     now=$(date +%s 2>/dev/null || echo 0)
@@ -611,7 +588,7 @@ asl_remote_details() {
 
     if [ ${#details[@]} -gt 0 ]; then
         local d_title="Remote Access Endpoints (Password: ${pass})"
-        local dash_cnt=$(( 74 - 7 - ${#d_title} ))
+        local dash_cnt=$(( 67 - ${#d_title} ))
         local dashes=""
         for ((i=0; i<dash_cnt; i++)); do dashes="${dashes}─"; done
         printf "%s├── %sRemote Access Endpoints%s (Password: %s%s%s) %s%s─┤%s\n" \
@@ -658,7 +635,7 @@ overview() {
     if timeout 1 dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" || timeout 1 su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         wlock_status="ON"
     fi
-    wlock_lbl="$(status_badge "$wlock_status" 13)"
+    wlock_lbl="$(status_badge "$wlock_status" 9)"
 
     x11_socket="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0"
     desktop_state=$(bash "$ASL_DIR/desktop/start-desktop.sh" status 2>/dev/null | tr '\n' ' ')
@@ -746,44 +723,47 @@ overview() {
     [ -n "$batt_temp" ] && [[ "$batt_temp" =~ ^[0-9]+$ ]] && [ "$batt_temp" -gt "$max_temp" ] && max_temp=$batt_temp
 
     if [ "$max_temp" -ge 75 ]; then
-        thermal_badge="${C_RED}${C_BOLD}[THROTTLED]${C_RESET}"
+        thermal_badge="${C_RED}${C_BOLD}[THROT]${C_RESET}"
     elif [ "$max_temp" -ge 60 ]; then
-        thermal_badge="${C_YELLOW}${C_BOLD}[WARM]${C_RESET}     "
+        thermal_badge="${C_YELLOW}${C_BOLD}[WARM]${C_RESET} "
+    elif [ "$max_temp" -ge 1 ]; then
+        thermal_badge="${C_GREEN}${C_BOLD}[COOL]${C_RESET} "
     else
-        thermal_badge="${C_GREEN}${C_BOLD}[COOL]${C_RESET}     "
+        thermal_badge="${C_DIM}[N/A]${C_RESET}  "
     fi
 
     if pgrep -x pulseaudio >/dev/null 2>&1; then audio_status="RUNNING"; else audio_status="STOPPED"; fi
 
     local chroot_lbl desktop_lbl x11_lbl audio_lbl
     if is_mounted; then chroot_lbl="$(status_badge ACTIVE 10)"; else chroot_lbl="$(status_badge INACTIVE 10)"; fi
-    desktop_lbl="$(status_badge "${desktop_status:-STOPPED}" 9)"
-    if [ -S "$x11_socket" ]; then x11_lbl="$(status_badge READY 9)"; else x11_lbl="$(status_badge STOPPED 9)"; fi
-    audio_lbl="$(status_badge "$audio_status" 9)"
+    desktop_lbl="$(status_badge "${desktop_status:-STOPPED}" 10)"
+    if [ -S "$x11_socket" ]; then x11_lbl="$(status_badge READY 11)"; else x11_lbl="$(status_badge STOPPED 11)"; fi
+    audio_lbl="$(status_badge "$audio_status" 11)"
 
     local boot_status="DISABLED" oom_status="OFF" wdog_status="INACTIVE" wan_ping=""
     [ -f "$HOME/.termux/boot/00-asl-autostart.sh" ] && boot_status="ENABLED"
     if pgrep -f "autoconnect" >/dev/null 2>&1 || asl_is_sshd_running || pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
-        oom_status="ACTIVE(-1000)"
+        oom_status="ACTIVE-1000"
         wdog_status="RUNNING"
     fi
     wan_ping=$(asl_wan_ping_cached)
 
+    local omni_status="INACTIVE" omni_compact="INACT"
     if asl_is_omniroute_running; then
-        omni_lbl="$(status_badge ACTIVE 17)"
-    else
-        omni_lbl="$(status_badge INACTIVE 17)"
+        omni_status="ACTIVE"
+        omni_compact="ACTIVE"
     fi
+    local omni_lbl="$(status_badge "$omni_status" 11)"
+    local omni_compact_lbl="$(status_badge "$omni_compact" 8)"
 
     local boot_lbl="$(status_badge "$boot_status" 10)"
-    local wdog_lbl="$(status_badge "$wdog_status" 15)"
+    local wdog_lbl="$(status_badge "$wdog_status" 10)"
 
     if [ "$mode" = "compact" ]; then
         printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sChroot:%s %s  %sDesktop:%s %s  %sGPU:%s %s%-23.23s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sDisplay:%s %s   %sAudio:%s %s  %sGov:%s %s%-24.24s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sBattery:%s %s%-12.12s %sCPU:%s %s%-5.5s %s  %sWake-Lock:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sHost IP:%s %s%-15.15s  %sWAN:%s %s%-7.7s  %sOmniRoute:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$omni_lbl" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sChroot:    %s%s  %sDesktop:   %s%s  %sDisplay:   %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sCPU Temp:  %s%s%-4s%s %s %sGov:       %s%s%-9.9s%s  %sGPU:       %s%s%-11.11s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sBattery:   %s%s%-11s%s  %sHost IP:   %s%s%-13.13s%s  %sOmni:     %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_RESET" "$C_BOLD" "$C_RESET" "$omni_compact_lbl" "$C_CYAN" "$C_RESET"
         printf "%s│%s  %sRAM:%s  [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
         draw_bar "$mem_pct" 8
         printf "] %3d%%   %sSwap:%s [" "$mem_pct" "$C_BOLD" "$C_RESET"
@@ -795,25 +775,25 @@ overview() {
     fi
 
     printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sChroot:%s %s  %sDesktop:%s %s  %sGPU:%s %s%-23.23s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sDisplay:%s %s   %sAudio:%s %s  %sGov:%s %s%-24.24s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sBattery:%s %s%-12.12s %sCPU:%s %s%-5.5s %s  %sWake-Lock:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$thermal_badge" "$C_BOLD" "$C_RESET" "$wlock_lbl" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sHost IP:%s %s%-15.15s  %sWAN:%s %s%-7.7s  %sOmniRoute:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_BOLD" "$C_RESET" "$omni_lbl" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sAutostart:%s %s  %sOOM:%s %s%-13.13s  %sWatchdog:%s %s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$boot_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_BOLD" "$C_RESET" "$wdog_lbl" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sStorage:%s %s%-24.24s   %sRemote:%s %s%-24.24s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sChroot:    %s%s  %sDesktop:   %s%s  %sDisplay:   %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sCPU Temp:  %s%s%-4s%s %s %sGov:       %s%s%-9.9s%s  %sGPU:       %s%s%-11.11s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_RESET" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sBattery:   %s%s%-11s%s  %sWake-Lock: %s%s  %sAudio:     %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$wlock_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sHost IP:   %s%s%-15.15s%s  %sWAN:       %s%s%-5.5s%s  %sOmniRoute: %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_RESET" "$C_BOLD" "$C_RESET" "$omni_lbl" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sAutostart: %s%s  %sOOM:       %s%s%-11.11s%s  %sWatchdog:  %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$boot_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_RESET" "$C_BOLD" "$C_RESET" "$wdog_lbl" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sStorage:   %s%s%-21.21s%s    %sRemote:    %s%s%-21.21s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_RESET" "$C_CYAN" "$C_RESET"
 
     asl_remote_details
 
     printf "%s├── %sSystem Resource Metrics%s %s─────────────────────────────────────────────%s┤%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
     printf "%s│%s  %sRAM:%s  [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
     draw_bar "$mem_pct" 10
-    printf "] %3d%% (%4d/%4d MB)   %sLoad:%s %s%-21.21s  %s│%s\n" "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg" "$C_CYAN" "$C_RESET"
+    printf "] %3d%% (%4d/%4d MB)   %sLoad:  %s%s%-20.20s%s  %s│%s\n" "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg" "$C_RESET" "$C_CYAN" "$C_RESET"
 
     local up_field
     up_field=$(printf "%s (Svc %s)" "$up_str" "$svc_up_str")
     printf "%s│%s  %sSwap:%s [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
     draw_bar "$swap_pct" 10
-    printf "] %3d%% (%4d/%4d MB)   %sUptime:%s %s%-19.19s  %s│%s\n" "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_field" "$C_CYAN" "$C_RESET"
+    printf "] %3d%% (%4d/%4d MB)   %sUptime:%s %s%-19.19s%s  %s│%s\n" "$swap_pct" "$swap_used" "$swap_total" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_field" "$C_RESET" "$C_CYAN" "$C_RESET"
     printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
 }
 
@@ -1019,9 +999,6 @@ dashboard() {
     # Trap Ctrl+C (SIGINT) to cleanly exit to Termux prompt
     trap 'cleanup_tui; printf "\n\033[1;32m[✓]\033[0m Exited ASL Dashboard.\n"; trap - INT; return 0 2>/dev/null || exit 0' INT
 
-    # Switch to DEC 1049 Alternate Screen Buffer (prevents scrollback history repetition)
-    printf "\033[?1049h\033[?25l" 2>/dev/null || true
-
     # Switch terminal to isolated alternate screen buffer & hide cursor
     printf "\033[?1049h\033[2J\033[3J\033[H\033[?25l" 2>/dev/null || true
 
@@ -1118,7 +1095,7 @@ dashboard() {
 
             case "$key" in
                 IDLE_TICK)
-                    overview_cache=$(overview 2>/dev/null || true)
+                    overview_cache=$(overview compact 2>/dev/null || true)
                     continue
                     ;;
                 UP)
