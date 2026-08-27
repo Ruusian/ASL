@@ -271,20 +271,23 @@ show_help() {
     echo "Dashboard:"
     echo "  dashboard, menu  Open the interactive terminal dashboard"
     echo "  overview         Show concise chroot, desktop, audio, X11, and GPU state"
+    echo "  watch, monitor   Live real-time resource & thermal dashboard"
     echo "  wizard, init     Launch Guided First-Time Setup Wizard"
-    echo "  mode [performance|balanced]    Configure performance profile"
-    echo "  hud [on|off|toggle|status] Toggle MangoHud performance overlay"
+    echo "  mode [perf|bal]  Configure performance profile (gpu|performance|balanced)"
+    echo "  benchmark        Run hardware, GPU 3D rendering, CPU compute & RAM benchmark"
+    echo "  hud [on|off|tog] Toggle MangoHud performance overlay"
     echo "  thermal          Display battery and CPU/GPU thermal temperatures"
     echo ""
     echo "Core Chroot Commands:"
     echo "  start            Start & mount Debian chroot safely"
     echo "  stop             Stop & unmount Debian chroot"
+    echo "  restart          Restart ASL container environment and mounts"
     echo "  status           Show chroot status, size, and mounts"
     echo "  doctor           Check ASL prerequisites without changing state"
     echo "  shell            Enter interactive root shell"
     echo "  exec <cmd>       Execute a single command inside chroot"
-    echo "  dns [sync]       Synchronize Android network DNS into chroot"
-    echo "  ppk [off|status] Manage Android 12+ Phantom Process Killer"
+    echo "  dns [sync|show]  Synchronize Android network DNS into chroot"
+    echo "  ppk [off|on]     Manage Android 12+ Phantom Process Killer"
     echo "  install <pkg..>  Install Debian packages via apt-get"
     echo "  search <query>   Search available Debian packages"
     echo "  snapshot [act]   Fast chroot snapshots (create|list|restore|delete)"
@@ -308,7 +311,7 @@ show_help() {
     echo "  clean [safe|deep] Purge package archives, caches, and temporary files"
     echo "  orphan-killer    Detect & kill rogue processes; trigger fail-safe reboot if unkillable"
     echo "  repair [all]     Automated integrity repair for mounts, locks, and permissions"
-    echo "  swap [setup|optimize] 5GB virtual swap pool & memory optimization"
+    echo "  swap [setup|opt] 5GB virtual swap pool & memory optimization"
     echo "  kernel-check     Audit kernel 4.14+ subsystems, namespaces, and drivers"
     echo "  config [show]    Manage declarative system configuration (/etc/asl.conf)"
     echo "  path [opts]      Convert file paths between Android host and Linux container"
@@ -319,13 +322,15 @@ show_help() {
     echo "  desktop status   Show desktop lifecycle status"
     echo "  desktop sync-apps Create ASL-owned Termux launchers"
     echo "  theme [preset]   Set XFCE look & feel (dark|light|nord|dracula)"
-    echo "  resolution [preset] Set Termux:X11 display resolution (720p|1080p|native)"
+    echo "  resolution [res] Set Termux:X11 display resolution & scale (720p|1080p|native [scale])"
     echo "  remote [all|password|lan|serveo|ngrok|gui|autoconnect]  Manage SSH, Serveo, Ngrok (multi-token), VNC Desktop & Auto-Connect"
     echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
     echo ""
     echo "Termux & Android Bridge Commands:"
     echo "  open <target>    Open file or URL in default Android host application"
     echo "  clip [copy|paste] Set or read Android system clipboard content"
+    echo "  clip-sync [start|stop|status] Bi-directional clipboard sync daemon"
+    echo "  shortcut <app>   Create Android home screen / Termux widget shortcut"
     echo "  wakelock [on|off] Acquire or release Termux CPU wake lock"
     echo "  toast <message>  Display quick Android system toast message"
     echo "  notify <t> <m>   Display Android notification banner"
@@ -333,6 +338,7 @@ show_help() {
     echo "  aid [setup]      Map Android system GIDs (aid_graphics, aid_audio, aid_sdcard_rw)"
     echo ""
     echo "Utility Commands:"
+    echo "  exec-mode        Display ASL container execution mode"
     echo "  help             Show this help message"
     echo ""
 }
@@ -1259,7 +1265,14 @@ dashboard() {
                     2)
                         echo "Presets: 720p, 1080p, native"
                         read -r -p "Resolution preset: " r_preset
-                        [ -n "$r_preset" ] && bash "$REAL_SCRIPT" resolution "$r_preset"
+                        if [ -n "$r_preset" ]; then
+                            read -r -p "Scale factor (optional, e.g. 1.0, 1.25, 1.5, Enter to skip): " s_factor
+                            if [ -n "$s_factor" ]; then
+                                bash "$REAL_SCRIPT" resolution "$r_preset" "$s_factor"
+                            else
+                                bash "$REAL_SCRIPT" resolution "$r_preset"
+                            fi
+                        fi
                         ;;
                     3)
                         bash "$REAL_SCRIPT" theme list
@@ -1665,6 +1678,16 @@ case "${1:-}" in
             || echo "[!] Desktop shutdown reported an error; continuing to unmount chroot."
         asl_with_lock bash "$ASL_DIR/core/stop-chroot.sh"
         ;;
+    restart|reboot)
+        echo "[*] Restarting ASL container environment..."
+        if is_mounted; then
+            bash "$ASL_DIR/desktop/start-desktop.sh" stop 2>/dev/null || true
+            bash "$ASL_DIR/core/stop-chroot.sh" 2>/dev/null || true
+            sleep 0.5
+        fi
+        asl_with_lock bash "$ASL_DIR/core/mount-chroot.sh" || exit 1
+        echo "[✓] ASL environment restarted successfully."
+        ;;
     doctor)
         bash "$ASL_DIR/core/doctor.sh"
         ;;
@@ -1772,6 +1795,10 @@ case "${1:-}" in
         ;;
     thermal|temp)
         bash "$ASL_DIR/core/thermal.sh"
+        ;;
+    benchmark|bench)
+        shift
+        bash "$ASL_DIR/core/benchmark.sh" "$@"
         ;;
     theme)
         shift
@@ -2034,7 +2061,7 @@ case "${1:-}" in
         shift
         bash "$ASL_DIR/desktop/asl-hub-installer.sh" "$@"
         ;;
-    host|apps|custom)
+    host|apps|custom|game|games)
         shift
         SUB_CMD="${1:-menu}"
         shift || true

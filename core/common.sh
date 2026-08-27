@@ -171,3 +171,43 @@ asl_is_sshd_running() {
     pgrep -f "sshd" >/dev/null 2>&1 || su -c "pgrep -f sshd" >/dev/null 2>&1 || asl_exec "pgrep -f sshd" >/dev/null 2>&1
 }
 
+asl_is_omniroute_running() {
+    pgrep -f "omniroute" >/dev/null 2>&1 || su -c "pgrep -f omniroute" >/dev/null 2>&1 || (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null
+}
+
+batt_temp_c() {
+    local raw p
+    for p in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp /sys/class/thermal/thermal_zone81/temp /sys/class/thermal/thermal_zone80/temp; do
+        raw=$(cat "$p" 2>/dev/null | tr -d '[:space:]')
+        if [[ "$raw" =~ ^[0-9]+$ ]] && [ "$raw" -gt 0 ]; then
+            if [ "$raw" -gt 1000 ]; then printf '%d' "$((raw / 1000))"; return
+            elif [ "$raw" -gt 100 ]; then printf '%d' "$((raw / 10))"; return
+            else printf '%d' "$raw"; return; fi
+        fi
+    done
+    (timeout 1 dumpsys battery 2>/dev/null || timeout 1 asl_exec "dumpsys battery" 2>/dev/null) | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
+}
+
+asl_cpu_temp_c() {
+    local cache_f="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.asl_cpu_zones"
+    if [ -z "${ASL_CPU_ZONES:-}" ]; then
+        if [ -f "$cache_f" ]; then
+            ASL_CPU_ZONES=$(cat "$cache_f" 2>/dev/null)
+        fi
+        if [ -z "${ASL_CPU_ZONES:-}" ]; then
+            ASL_CPU_ZONES=$(grep -l -i "cpu" /sys/class/thermal/thermal_zone*/type 2>/dev/null | sed "s/type$/temp/" | tr "\n" " ")
+            [ -n "$ASL_CPU_ZONES" ] && printf "%s" "$ASL_CPU_ZONES" > "$cache_f" 2>/dev/null || true
+        fi
+    fi
+    if [ -n "$ASL_CPU_ZONES" ]; then
+        cat $ASL_CPU_ZONES 2>/dev/null | awk '
+            {
+                t = $1 + 0;
+                if (t > 1000) t = int(t / 1000);
+                if (t >= 1 && t <= 115 && t > max) max = t;
+            }
+            END { if (max > 0) print max }
+        '
+    fi
+}
+
