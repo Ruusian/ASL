@@ -33,8 +33,8 @@ if [ -z "$phone_ip" ]; then
     exit 1
 fi
 
-echo "[+] Connecting to ASL at $phone_ip..."
-vncviewer "$phone_ip"::5901 \
+echo "[+] Connecting to ASL at $phone_ip:${ASL_VNC_PORT:-5900}..."
+vncviewer "$phone_ip"::"${ASL_VNC_PORT:-5900}" \
     -FullScreen \
     -QualityLevel 4 \
     -CompressLevel 9 \

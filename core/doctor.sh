@@ -59,11 +59,17 @@ if command -v pulseaudio >/dev/null || command -v pactl >/dev/null || [ -e /tmp/
 if [ -d /sdcard ] && [ -w /sdcard ]; then check storage optional "/sdcard is writable" PASS; else check storage optional "/sdcard is unavailable or not writable" WARN; fi
 
 # Phantom Process Killer (PPK) Check on Android 12+
-max_phantom=$(asl_exec "device_config get activity_manager max_phantom_processes 2>/dev/null" 2>/dev/null || true)
-if [ "$max_phantom" = "2147483647" ] || [ "$max_phantom" = "disabled" ]; then
-    check phantom-proc optional "Phantom Process Killer disabled ($max_phantom)" PASS
+sdk_ver=$(getprop ro.build.version.sdk 2>/dev/null || echo 0)
+[[ "$sdk_ver" =~ ^[0-9]+$ ]] || sdk_ver=0
+if [ "$sdk_ver" -gt 0 ] && [ "$sdk_ver" -lt 31 ]; then
+    check phantom-proc optional "Phantom Process Killer not present (Android < 12, SDK $sdk_ver)" PASS
 else
-    check phantom-proc optional "PPK default limits active (disable with: asl ppk off)" WARN
+    max_phantom=$(asl_exec "device_config get activity_manager max_phantom_processes 2>/dev/null" 2>/dev/null || true)
+    if [ "$max_phantom" = "2147483647" ] || [ "$max_phantom" = "disabled" ]; then
+        check phantom-proc optional "Phantom Process Killer disabled ($max_phantom)" PASS
+    else
+        check phantom-proc optional "PPK default limits active (disable with: asl ppk off)" WARN
+    fi
 fi
 
 # Clipboard bridge tool check

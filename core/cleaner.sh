@@ -98,6 +98,7 @@ asl_clean_run() {
     "
 
     # Also safely clean host side Mesa shader cache and old execution wrappers (>30m)
+    clean_tmp_files
     find "${PREFIX:-/data/data/com.termux/files/usr}/tmp" -maxdepth 1 -name '.asl_cmd_*.sh' -mmin +30 -delete 2>/dev/null || true
     asl_exec "rm -rf /dev/shm/mesa_shader_cache/* /tmp/.mesa_cache/* '${PREFIX:-/data/data/com.termux/files/usr}/tmp/.mesa_cache'/* 2>/dev/null" || true
     rm -rf "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.mesa_cache"/* 2>/dev/null || true

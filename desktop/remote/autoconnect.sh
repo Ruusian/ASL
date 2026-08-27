@@ -60,9 +60,9 @@ autoconnect_daemon() {
             fi
 
             # OmniRoute must run as root (netd blocks getaddrinfo for UID 10566)
-            if ! pgrep -f omniroute >/dev/null 2>&1; then
+            if ([ -f "$HOME/omniroute-daemon.sh" ] || [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ] || command -v omniroute >/dev/null 2>&1) && ! pgrep -f omniroute >/dev/null 2>&1; then
                 echo "[Autoconnect $(date +%H:%M:%S)] OmniRoute offline. Starting as root..." >> "$AUTOCONNECT_LOG"
-                su -c "/data/data/com.termux/files/usr/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> "$AUTOCONNECT_LOG" 2>&1 || true
+                su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi
 
             if [ -f "$PREFIX/tmp/asl-ngrok.state" ] && ! pgrep -f "ngrok.*tcp" >/dev/null 2>&1; then

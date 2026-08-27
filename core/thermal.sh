@@ -29,18 +29,16 @@ asl_thermal_report() {
     batt_temp=$(asl_exec "dumpsys battery | awk '/temperature:/ {print int(\$2/10)}'" 2>/dev/null || true)
     if [ -z "$batt_temp" ] || [[ ! "$batt_temp" =~ ^-?[0-9]+$ ]] || [ "$batt_temp" -le 0 ]; then
         for p in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp; do
-            if [ -r "$p" ]; then
-                raw_temp=$(cat "$p" 2>/dev/null || true)
-                if [ -n "$raw_temp" ] && [[ "$raw_temp" =~ ^[0-9]+$ ]] && [ "$raw_temp" -gt 0 ]; then
-                    if [ "$raw_temp" -gt 1000 ]; then
-                        batt_temp=$((raw_temp / 1000))
-                    elif [ "$raw_temp" -gt 100 ]; then
-                        batt_temp=$(((raw_temp + 5) / 10))
-                    else
-                        batt_temp="$raw_temp"
-                    fi
-                    break
+            raw_temp=$(cat "$p" 2>/dev/null || asl_exec "cat '$p' 2>/dev/null" 2>/dev/null || true)
+            if [ -n "$raw_temp" ] && [[ "$raw_temp" =~ ^[0-9]+$ ]] && [ "$raw_temp" -gt 0 ]; then
+                if [ "$raw_temp" -gt 1000 ]; then
+                    batt_temp=$((raw_temp / 1000))
+                elif [ "$raw_temp" -gt 100 ]; then
+                    batt_temp=$(((raw_temp + 5) / 10))
+                else
+                    batt_temp="$raw_temp"
                 fi
+                break
             fi
         done
     fi
@@ -71,8 +69,8 @@ asl_thermal_report() {
     local count=0
     for tz_path in /sys/class/thermal/thermal_zone*; do
         [ -d "$tz_path" ] || continue
-        type=$(cat "$tz_path/type" 2>/dev/null || true)
-        raw_temp=$(cat "$tz_path/temp" 2>/dev/null || true)
+        type=$(cat "$tz_path/type" 2>/dev/null || asl_exec "cat '$tz_path/type' 2>/dev/null" 2>/dev/null || true)
+        raw_temp=$(cat "$tz_path/temp" 2>/dev/null || asl_exec "cat '$tz_path/temp' 2>/dev/null" 2>/dev/null || true)
         [ -n "$type" ] && [[ "$raw_temp" =~ ^[0-9]+$ ]] && [ "$raw_temp" -gt 0 ] || continue
 
         if [ "$raw_temp" -gt 1000 ]; then

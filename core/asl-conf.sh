@@ -89,6 +89,29 @@ sys.exit(1)
 
     if [ $? -eq 0 ] && [ -n "$val" ]; then
         echo "$val"
+        return 0
+    fi
+
+    # Fallback to asl_exec / root context if file is unreadable by unprivileged user
+    local py_script
+    py_script=$(cat << PYEOF
+import configparser, sys
+config = configparser.ConfigParser()
+try:
+    config.read("$esc_file")
+    if "$esc_section" in config and "$esc_key" in config["$esc_section"]:
+        print(config["$esc_section"]["$esc_key"])
+        sys.exit(0)
+except Exception:
+    pass
+sys.exit(1)
+PYEOF
+)
+    local py_b64
+    py_b64=$(printf '%s' "$py_script" | base64 | tr -d '\n')
+    val=$(asl_exec "python3 -c \"\$(printf '%s' '$py_b64' | base64 -d)\"" 2>/dev/null || true)
+    if [ -n "$val" ]; then
+        echo "$val"
     else
         echo "$default_val"
     fi
