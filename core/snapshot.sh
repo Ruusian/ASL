@@ -2,11 +2,13 @@
 # ASL: Chroot Snapshot Manager
 
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/common.sh" ]; then
-    source "$SCRIPT_DIR/common.sh"
-elif [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
+elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh" ]; then
+    source "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh"
+elif [ -f "$HOME/ASL/core/common.sh" ]; then
+    source "$HOME/ASL/core/common.sh"
 fi
 SNAPSHOT_DIR="${ASL_SNAPSHOT_DIR:-/data/local/tmp/.asl-snapshots}"
 
@@ -16,12 +18,16 @@ safe_name() { [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]; }
 
 find_script() {
     local s="$1"
-    if [ -f "$SCRIPT_DIR/$s" ]; then
-        echo "$SCRIPT_DIR/$s"
-    elif [ -f "$SCRIPT_DIR/core/$s" ]; then
+    if [ -f "$SCRIPT_DIR/core/$s" ]; then
         echo "$SCRIPT_DIR/core/$s"
-    else
+    elif [ -f "$SCRIPT_DIR/$s" ]; then
         echo "$SCRIPT_DIR/$s"
+    elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/$s" ]; then
+        echo "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/$s"
+    elif [ -f "$HOME/ASL/core/$s" ]; then
+        echo "$HOME/ASL/core/$s"
+    else
+        echo "$SCRIPT_DIR/core/$s"
     fi
 }
 

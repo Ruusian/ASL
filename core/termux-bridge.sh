@@ -2,6 +2,15 @@
 # ASL: Termux & Android Host Bridge
 # Provides deep integration between ASL chroot/CLI and Android host features.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
+    source "$SCRIPT_DIR/core/common.sh"
+elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh" ]; then
+    source "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/common.sh"
+elif [ -f "$HOME/ASL/core/common.sh" ]; then
+    source "$HOME/ASL/core/common.sh"
+fi
+
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 
 termux_wakelock() {
@@ -198,7 +207,11 @@ termux_clipboard_sync() {
                         if [ -n "$curr_clip" ] && [ "$curr_clip" != "$last_clip" ]; then
                             last_clip="$curr_clip"
                             enc_clip=$(printf '%s' "$curr_clip" | base64 | tr -d '\n')
-                            asl exec "export DISPLAY=:0; echo -n '$enc_clip' | base64 -d | xclip -selection clipboard 2>/dev/null || echo -n '$enc_clip' | base64 -d | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
+                            if command -v asl_chroot_exec >/dev/null 2>&1; then
+                                asl_chroot_exec "export DISPLAY=:0; echo -n '$enc_clip' | base64 -d | xclip -selection clipboard 2>/dev/null || echo -n '$enc_clip' | base64 -d | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
+                            elif command -v asl >/dev/null 2>&1; then
+                                asl exec "export DISPLAY=:0; echo -n '$enc_clip' | base64 -d | xclip -selection clipboard 2>/dev/null || echo -n '$enc_clip' | base64 -d | xsel -b 2>/dev/null || true" >/dev/null 2>&1 || true
+                            fi
                         fi
                     fi
                     sleep 3

@@ -67,9 +67,10 @@ asl_path_convert() {
                 echo "${input_path/#\/data\/data\/com.termux\/files\/home//termux-home}"
             elif [[ "$input_path" == "/data/data/com.termux/files/usr/tmp"* ]]; then
                 echo "${input_path/#\/data\/data\/com.termux\/files\/usr\/tmp//tmp}"
-            elif [[ "$input_path" == "$DEBIANPATH"* ]]; then
+            elif [ "$DEBIANPATH" != "/" ] && [[ "$input_path" == "$DEBIANPATH"* ]]; then
                 local rel="${input_path#$DEBIANPATH}"
                 [ -z "$rel" ] && rel="/"
+                [ "${rel:0:1}" != "/" ] && rel="/$rel"
                 echo "$rel"
             else
                 echo "$input_path"
@@ -92,14 +93,20 @@ asl_path_convert() {
             elif [[ "$input_path" == "/tmp"* ]]; then
                 echo "${input_path/#\/tmp//data/data/com.termux/files/usr/tmp}"
             elif [[ "$input_path" == "/"* ]]; then
-                echo "$DEBIANPATH$input_path"
+                if [ "$DEBIANPATH" = "/" ]; then
+                    echo "$input_path"
+                else
+                    echo "$DEBIANPATH$input_path"
+                fi
             else
                 echo "/storage/emulated/0/$input_path"
             fi
             ;;
         chroot)
             # Container path -> Host chroot path
-            if [[ "$input_path" == "$DEBIANPATH"* ]]; then
+            if [ "$DEBIANPATH" = "/" ]; then
+                [ "${input_path:0:1}" = "/" ] && echo "$input_path" || echo "/$input_path"
+            elif [[ "$input_path" == "$DEBIANPATH"* ]]; then
                 echo "$input_path"
             else
                 local clean_p="${input_path#/}"

@@ -417,7 +417,7 @@ mkdir -p "$PREFIX/bin"
 ln -sf "$INSTALL_DIR/bin/asl" "$PREFIX/bin/asl"
 
 echo -e "${GREEN}[*] Applying Android GID mappings...${RESET}"
-if ! "$INSTALL_DIR/core/android-aid.sh" setup; then
+if ! bash "$INSTALL_DIR/core/android-aid.sh" setup; then
     echo -e "${RED}[!] Android GID mapping failed. Installation cannot continue safely.${RESET}"
     exit 1
 fi

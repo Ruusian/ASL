@@ -33,18 +33,19 @@ asl_kernel_check() {
         echo "Essential Features:"
         
         # Namespaces (required for containerization/chroot)
-        check_config "CONFIG_NAMESPACES" "Namespaces (required for chroot)" "y"
-        check_config "CONFIG_UTS_NS" "UTS namespace" "y"
-        check_config "CONFIG_IPC_NS" "IPC namespace" "y"
+        check_config "CONFIG_NAMESPACES" "Namespaces general support" "y"
+        check_config "CONFIG_UTS_NS" "UTS namespace (hostname)" "y"
+        check_config "CONFIG_IPC_NS" "IPC namespace (sysvipc)" "y"
         check_config "CONFIG_PID_NS" "PID namespace" "y"
         check_config "CONFIG_NET_NS" "Network namespace" "y"
         check_config "CONFIG_USER_NS" "User namespace" "y"
-        
+
         echo ""
-        echo "Chroot Support:"
-        check_config "CONFIG_CHROOT" "Chroot support" "y"
-        check_config "CONFIG_NAMESPACES" "Namespace support" "y"
-        
+        echo "Filesystem & Container Support:"
+        check_config "CONFIG_OVERLAY_FS" "OverlayFS support" "y"
+        check_config "CONFIG_TMPFS" "TmpFS support" "y"
+        check_config "CONFIG_DEVTMPFS" "DevTmpFS support" "y"
+
         echo ""
         echo "GPU/Graphics:"
         check_config "CONFIG_DRM" "Direct Rendering Manager" "y"
@@ -52,13 +53,15 @@ asl_kernel_check() {
         check_config "CONFIG_MSM_KGSL" "Qualcomm KGSL driver" "y"
 
         echo ""
-        echo "Networking:"
+        echo "Networking & Virtual Interfaces:"
         check_config "CONFIG_NET" "Networking support" "y"
         check_config "CONFIG_INET" "IPv4 networking" "y"
         check_config "CONFIG_IPV6" "IPv6 networking" "y"
+        check_config "CONFIG_TUN" "TUN/TAP network tunnel" "y"
+        check_config "CONFIG_VETH" "Virtual Ethernet (veth)" "y"
 
         echo ""
-        echo "Security:"
+        echo "Security & Sandboxing:"
         check_config "CONFIG_SECCOMP" "Seccomp filtering" "y"
         check_config "CONFIG_SECURITY" "Security framework" "y"
 
@@ -141,19 +144,28 @@ asl_kernel_check() {
 }
 
 check_config() {
-    local config="$1" description="$2" expected="$3"
-    local value
-    
-    if [ -r "/proc/config.gz" ]; then
-        value=$(zcat /proc/config.gz 2>/dev/null | grep "^${config}=" | cut -d= -f2 || true)
-    elif [ -r "/boot/config-$(uname -r)" ]; then
-        value=$(grep "^${config}=" "/boot/config-$(uname -r)" 2>/dev/null | cut -d= -f2 || true)
+    local config="$1" description="$2" expected="${3:-y}"
+    local raw_line="" value=""
+
+    if [ -r "/proc/config.gz" ] || su -c "test -r /proc/config.gz" 2>/dev/null; then
+        raw_line=$( (gzip -dc /proc/config.gz 2>/dev/null || su -c "gzip -dc /proc/config.gz" 2>/dev/null || zcat /proc/config.gz 2>/dev/null) | grep -E "^(#[[:space:]]*)?${config}[= ]" | head -n 1)
+    elif [ -r "/boot/config-$(uname -r)" ] || su -c "test -r '/boot/config-$(uname -r)'" 2>/dev/null; then
+        raw_line=$( (cat "/boot/config-$(uname -r)" 2>/dev/null || su -c "cat '/boot/config-$(uname -r)'" 2>/dev/null) | grep -E "^(#[[:space:]]*)?${config}[= ]" | head -n 1)
     fi
-    
+
+    if [[ "$raw_line" =~ is\ not\ set ]]; then
+        value="disabled"
+    elif [[ "$raw_line" =~ = ]]; then
+        value="${raw_line#*=}"
+        value=$(echo "$value" | tr -d '[:space:]')
+    fi
+
     if [ -z "$value" ]; then
-        echo "    $description: Not found"
+        echo "    [ ] $description: Not present in config"
     elif [ "$value" = "$expected" ] || [ "$value" = "y" ] || [ "$value" = "m" ]; then
         echo "    [✓] $description: $value"
+    elif [ "$value" = "disabled" ]; then
+        echo "    [✗] $description: Disabled (not set)"
     else
         echo "    [✗] $description: $value (expected $expected)"
     fi
