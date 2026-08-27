@@ -18,8 +18,10 @@ get_dbus_env() {
         bus=$(asl_exec "tr '\0' '\n' < /proc/$pid/environ 2>/dev/null | grep '^DBUS_SESSION_BUS_ADDRESS='" 2>/dev/null)
         if [ -n "$bus" ]; then
             echo "export $bus;"
+            return 0
         fi
     fi
+    echo "export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus;"
 }
 
 update_xml_property() {

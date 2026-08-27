@@ -348,11 +348,11 @@ done
 if [ ! -f "$target_home/.config/gtk-3.0/settings.ini" ]; then
 cat << 'GTK3_EOF' > "$target_home/.config/gtk-3.0/settings.ini"
 [Settings]
-gtk-theme-name=Blacklight
-gtk-icon-theme-name=bes-icon-black
-gtk-cursor-theme-name=Blacklight
-gtk-cursor-theme-size=28
-gtk-font-name=Sans 10.5
+gtk-theme-name=Tokyonight-Dark-BL
+gtk-icon-theme-name=Papirus-Dark
+gtk-cursor-theme-name=Adwaita
+gtk-cursor-theme-size=24
+gtk-font-name=Sans 10
 gtk-xft-antialias=1
 gtk-xft-hinting=1
 gtk-xft-hintstyle=hintslight
@@ -362,11 +362,11 @@ GTK3_EOF
 fi
 if [ ! -f "$target_home/.gtkrc-2.0" ]; then
 cat << 'GTK2_EOF' > "$target_home/.gtkrc-2.0"
-gtk-theme-name = "Blacklight"
-gtk-icon-theme-name = "bes-icon-black"
-gtk-font-name = "Sans 10.5"
-gtk-cursor-theme-name = "Blacklight"
-gtk-cursor-theme-size = 28
+gtk-theme-name = "Tokyonight-Dark-BL"
+gtk-icon-theme-name = "Papirus-Dark"
+gtk-font-name = "Sans 10"
+gtk-cursor-theme-name = "Adwaita"
+gtk-cursor-theme-size = 24
 gtk-xft-antialias = 1
 gtk-xft-hinting = 1
 gtk-xft-hintstyle = "hintslight"
@@ -400,16 +400,17 @@ mkdir -p /tmp/.cache 2>/dev/null
 mkdir -p /run/dbus /run/user/$target_uid 2>/dev/null
 chmod 700 /run/user/$target_uid 2>/dev/null
 if ! pgrep -f "dbus-daemon --system" >/dev/null 2>&1; then
-    rm -f /run/dbus/system_bus_socket 2>/dev/null
-    /usr/bin/dbus-daemon --system >/tmp/dbus-system.log 2>&1 &
+    rm -f /run/dbus/system_bus_socket /run/dbus/pid 2>/dev/null
+    /usr/bin/dbus-daemon --system --fork 2>/dev/null || /usr/bin/dbus-daemon --system >/tmp/dbus-system.log 2>&1 &
 fi
 
-rm -f /run/user/$target_uid/bus 2>/dev/null
-/usr/bin/dbus-daemon --session --address=unix:path=/run/user/$target_uid/bus >/tmp/dbus-session.log 2>&1 &
-sleep 0.5
+if ! pgrep -f "dbus-daemon --session.*run/user/$target_uid/bus" >/dev/null 2>&1; then
+    rm -f /run/user/$target_uid/bus /run/user/$target_uid/bus.pid 2>/dev/null
+    /usr/bin/dbus-daemon --session --address=unix:path=/run/user/$target_uid/bus --fork 2>/dev/null || /usr/bin/dbus-daemon --session --address=unix:path=/run/user/$target_uid/bus >/tmp/dbus-session.log 2>&1 &
+fi
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
 
-rm -f /tmp/xfce-keepalive 2>/dev/null
+rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/xfce-keepalive 2>/dev/null || true
 (
     sleep 2
     export DISPLAY=:0
@@ -426,27 +427,32 @@ rm -f /tmp/xfce-keepalive 2>/dev/null
     xrandr --newmode "800x600" 40.00 800 840 920 1056 600 601 605 628 +hsync +vsync 2>/dev/null || true
     xrandr --addmode builtin "800x600" 2>/dev/null || true
 
-    xfconf-query -c xfwm4 -p /general/titleless_fullscreen >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/borderless_maximize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/use_compositing >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/box_move >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/box_resize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/Antialias >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/Hinting >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/HintStyle >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/RGBA >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/style >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/style -n -t int -s 2 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -n -t int -s 48 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -n -t bool -s true 2>/dev/null || true
+    for _t in 1 2 3 4 5; do
+        if xfconf-query -c xfwm4 -p /general/use_compositing >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+
+    xfconf-query -c xfwm4 -p /general/titleless_fullscreen -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/borderless_maximize -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/box_move -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/box_resize -s false 2>/dev/null || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/Antialias -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/Hinting -s 1 2>/dev/null || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/HintStyle -s hintslight 2>/dev/null || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
+    xfconf-query -c xsettings -p /Xft/RGBA -s rgb 2>/dev/null || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/style -s 2 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/style -n -t int -s 2 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -s 48 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -n -t int -s 48 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -s true 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -s true 2>/dev/null || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -n -t bool -s true 2>/dev/null || true
 ) &
 
 rm -f /etc/xdg/autostart/light-locker.desktop "$HOME/.config/autostart/light-locker.desktop" 2>/dev/null || true
 
 if command -v xfce4-session >/dev/null 2>&1; then
-    exec dbus-run-session xfce4-session
+    exec xfce4-session
 elif command -v startxfce4 >/dev/null 2>&1; then
-    exec dbus-run-session startxfce4
+    exec startxfce4
 elif [ -x /usr/bin/startxfce4 ]; then
     exec /usr/bin/startxfce4
 elif [ -x /usr/bin/xfce4-session ]; then
