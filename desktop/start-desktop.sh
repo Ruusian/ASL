@@ -411,8 +411,8 @@ rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/x
 
     xfconf-query -c xfwm4 -p /general/titleless_fullscreen >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/borderless_maximize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/use_compositing >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/vblank_mode >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/vblank_mode -n -t string -s off 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/vblank_mode -s off 2>/dev/null || xfconf-query -c xfwm4 -p /general/vblank_mode -n -t string -s off 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/show_dock_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_dock_shadow -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/show_popup_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_popup_shadow -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/show_frame_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_frame_shadow -n -t bool -s false 2>/dev/null || true
