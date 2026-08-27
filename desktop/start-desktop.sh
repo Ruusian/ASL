@@ -1,6 +1,8 @@
 #!/bin/bash
 # ASL: managed Termux:X11, PulseAudio, and XFCE lifecycle.
 
+export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:/system/bin:/system/xbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
@@ -469,14 +471,16 @@ LAUNCHER_EOF
     LAUNCHER_PID=$!
     SESSION_PID=
     SESSION_START=
-    for _i in 1 2 3 4 5 6 7 8 9 10; do
-        for pid in $(asl_chroot_exec "pgrep -f 'xfwm4|xfce4-session|startxfce4|asl-start-xfce'" 2>/dev/null); do
-            st=$(pid_start_time "$pid")
-            if [ -n "$st" ] && (process_matches "$pid" "xfwm4" "$st" || process_matches "$pid" "xfce4-session" "$st" || process_matches "$pid" "startxfce4" "$st" || process_matches "$pid" "asl-start-xfce" "$st"); then
-                SESSION_PID="$pid"
-                SESSION_START="$st"
-                break 2
-            fi
+    for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        for name in xfce4-session xfwm4 startxfce4; do
+            for pid in $(asl_chroot_exec "pgrep -x $name" 2>/dev/null); do
+                st=$(pid_start_time "$pid")
+                if [ -n "$st" ] && process_matches "$pid" "$name" "$st"; then
+                    SESSION_PID="$pid"
+                    SESSION_START="$st"
+                    break 3
+                fi
+            done
         done
         sleep 1
     done
@@ -490,7 +494,7 @@ LAUNCHER_EOF
         cleanup_started
         return 1
     fi
-    if ! (process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START" || process_matches "$SESSION_PID" "startxfce4" "$SESSION_START" || process_matches "$SESSION_PID" "asl-start-xfce" "$SESSION_START"); then
+    if ! (process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START" || process_matches "$SESSION_PID" "startxfce4" "$SESSION_START"); then
         echo "[!] XFCE desktop process exited during startup."
         cleanup_started
         return 1
