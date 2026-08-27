@@ -1613,7 +1613,7 @@ case "${1:-}" in
             echo "[*] Cancelled."
             exit 0
         fi
-        asl_with_lock bash "$ASL_DIR/desktop/start-desktop.sh" stop \
+        asl_with_lock bash "$ASL_DIR/desktop/start-desktop.sh" force-stop \
             || echo "[!] Desktop shutdown reported an error; continuing to unmount chroot."
         asl_with_lock bash "$ASL_DIR/core/stop-chroot.sh"
         ;;
