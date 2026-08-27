@@ -423,7 +423,7 @@ batt_temp_c() {
             else printf '%d' "$raw"; return; fi
         fi
     done
-    asl_exec "dumpsys battery" 2>/dev/null | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
+    timeout 1 asl_exec "dumpsys battery" 2>/dev/null | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
 }
 
 asl_cpu_temp_c() {
@@ -627,7 +627,7 @@ overview() {
 
     wlock_status="OFF"
     local wlock_lbl=""
-    if dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" || su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
+    if timeout 1 dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" || timeout 1 su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         wlock_status="ON"
     fi
     wlock_lbl="$(status_badge "$wlock_status" 5)"
@@ -695,7 +695,7 @@ overview() {
     batt_level=$(printf '%s' "$batt_level" | tr -d '[:space:]')
     if ! [[ "$batt_level" =~ ^[0-9]+$ ]]; then
         local dump_out
-        dump_out=$(asl_exec "dumpsys battery" 2>/dev/null || dumpsys battery 2>/dev/null || true)
+        dump_out=$(timeout 1 asl_exec "dumpsys battery" 2>/dev/null || timeout 1 dumpsys battery 2>/dev/null || true)
         batt_level=$(printf '%s' "$dump_out" | awk '/level:/ {print $2}' | tr -d '[:space:]')
     fi
     batt_temp=$(batt_temp_c)
@@ -1704,12 +1704,12 @@ case "${1:-}" in
         case "${1:-status}" in
             off|disable)
                 echo "[*] Disabling Android 12+ Phantom Process Killer limits..."
-                su -c "device_config set_sync_disabled_for_tests persistent 2>/dev/null; device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; dumpsys activity set-phantom-process-killer-disabled true 2>/dev/null" || true
+                timeout 2 su -c "device_config set_sync_disabled_for_tests persistent 2>/dev/null; device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; dumpsys activity set-phantom-process-killer-disabled true 2>/dev/null" || true
                 echo "[✓] Phantom Process Killer disabled (max_phantom_processes: 2147483647)."
                 ;;
             on|enable)
                 echo "[*] Resetting Android Phantom Process Killer to system defaults..."
-                su -c "device_config set_sync_disabled_for_tests none 2>/dev/null; device_config delete activity_manager max_phantom_processes 2>/dev/null; dumpsys activity set-phantom-process-killer-disabled false 2>/dev/null" || true
+                timeout 2 su -c "device_config set_sync_disabled_for_tests none 2>/dev/null; device_config delete activity_manager max_phantom_processes 2>/dev/null; dumpsys activity set-phantom-process-killer-disabled false 2>/dev/null" || true
                 echo "[✓] Phantom Process Killer reset to default."
                 ;;
             status|*)

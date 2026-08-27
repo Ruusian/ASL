@@ -146,10 +146,10 @@ asl_exec "
         cp -f \"$DEBIANPATH/etc/machine-id\" \"$DEBIANPATH/var/lib/dbus/machine-id\" 2>/dev/null || true
     fi
 
-    # Ensure chroot profile/bashrc unsets host Termux environment variables
+    # Ensure chroot profile/bashrc unsets host Termux environment variables and caps FD limits
     for rc in \"$DEBIANPATH/etc/bash.bashrc\" \"$DEBIANPATH/etc/profile\"; do
         if [ -f \"\$rc\" ] && ! grep -q \"ASL Environment Isolation\" \"\$rc\" 2>/dev/null; then
-            printf '\n# ASL Environment Isolation\nunset PREFIX TERMUX_VERSION TERMUX_APP_PID TERMUX_MAIN_PACKAGE_NAME TERMUX__PREFIX TERMUX__HOME TERMUX__ROOTFS_DIR TMPDIR\n' >> \"\$rc\" 2>/dev/null || true
+            printf '\n# ASL Environment Isolation\nunset PREFIX TERMUX_VERSION TERMUX_APP_PID TERMUX_MAIN_PACKAGE_NAME TERMUX__PREFIX TERMUX__HOME TERMUX__ROOTFS_DIR TMPDIR\nulimit -n 2048 2>/dev/null || true\n' >> \"\$rc\" 2>/dev/null || true
         fi
     done
 
@@ -175,20 +175,23 @@ typedef long (*syscall_fn_t)(long number, ...);
 static syscall_fn_t real_syscall = NULL;
 
 int close_range(unsigned int first, unsigned int last, int flags) {
-    errno = ENOSYS;
-    return -1;
+    if (last > 2048) last = 2048;
+    if (!real_syscall) {
+        real_syscall = (syscall_fn_t)dlsym(RTLD_NEXT, "syscall");
+    }
+    if (real_syscall) {
+        return (int)real_syscall(__NR_close_range, (long)first, (long)last, (long)flags);
+    }
+    return 0;
 }
 
 void closefrom(int lowfd) {
+    close_range(lowfd, 2048, 0);
 }
 
 long syscall(long number, ...) {
-    if (number == __NR_close_range) {
-        errno = ENOSYS;
-        return -1;
-    }
     if (!real_syscall) {
-        real_syscall = (syscall_fn_t)dlsym(RTLD_NEXT, \"syscall\");
+        real_syscall = (syscall_fn_t)dlsym(RTLD_NEXT, "syscall");
     }
     va_list args;
     va_start(args, number);
@@ -200,11 +203,14 @@ long syscall(long number, ...) {
     long a5 = va_arg(args, long);
     va_end(args);
 
+    if (number == __NR_close_range) {
+        if ((unsigned long)a1 > 2048) a1 = 2048;
+    }
+
     if (real_syscall) {
         return real_syscall(number, a0, a1, a2, a3, a4, a5);
     }
-    errno = ENOSYS;
-    return -1;
+    return 0;
 }
 EOFCR
             chroot \"$DEBIANPATH\" \"\$cc_cmd\" -shared -fPIC -O2 /tmp/libdisable_close_range.c -o /usr/local/lib/libdisable_close_range.so -ldl 2>/dev/null || true
@@ -216,6 +222,42 @@ EOFCR
             echo \"/usr/local/lib/libdisable_close_range.so\" >> \"$DEBIANPATH/etc/ld.so.preload\" 2>/dev/null || true
         fi
     fi
+
+    # Provision Python 3 sitecustomize & .pth optimizer to prevent close_range / POSIX_SPAWN_CLOSEFROM spinlocks on Kernel 4.14
+    mkdir -p \"$DEBIANPATH/usr/lib/python3/dist-packages\" 2>/dev/null || true
+    cat <<'EOFPY' > \"$DEBIANPATH/usr/lib/python3/dist-packages/asl_optimizer.py\"
+# ASL Platform Optimizer for Linux Kernel 4.14
+import os, sys
+
+try:
+    import subprocess
+    subprocess._HAVE_POSIX_SPAWN_CLOSEFROM = False
+    subprocess._USE_POSIX_SPAWN = False
+except Exception:
+    pass
+
+try:
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft > 2048:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (2048, hard))
+except Exception:
+    pass
+EOFPY
+    echo 'import asl_optimizer' > \"$DEBIANPATH/usr/lib/python3/dist-packages/asl_optimizer.pth\" 2>/dev/null || true
+    chmod 644 \"$DEBIANPATH/usr/lib/python3/dist-packages/asl_optimizer.py\" \"$DEBIANPATH/usr/lib/python3/dist-packages/asl_optimizer.pth\" 2>/dev/null || true
+    for pydir in \"$DEBIANPATH\"/usr/local/lib/python3*/dist-packages \"$DEBIANPATH\"/usr/lib/python3*/dist-packages; do
+        if [ -d \"\$pydir\" ]; then
+            cp -f \"$DEBIANPATH/usr/lib/python3/dist-packages/asl_optimizer.py\" \"\$pydir/asl_optimizer.py\" 2>/dev/null || true
+            cp -f \"$DEBIANPATH/usr/lib/python3/dist-packages/asl_optimizer.pth\" \"\$pydir/asl_optimizer.pth\" 2>/dev/null || true
+            chmod 644 \"\$pydir/asl_optimizer.py\" \"\$pydir/asl_optimizer.pth\" 2>/dev/null || true
+        fi
+    done
+    for sc in \"$DEBIANPATH\"/usr/lib/python3*/sitecustomize.py; do
+        if [ -f \"\$sc\" ] && ! grep -q \"asl_optimizer\" \"\$sc\" 2>/dev/null; then
+            printf '\ntry:\n    import asl_optimizer\nexcept Exception:\n    pass\n' >> \"\$sc\" 2>/dev/null || true
+        fi
+    done
 
     # Create pkg -> apt compatibility shim inside Debian chroot for third-party scripts
     mkdir -p \"$DEBIANPATH/usr/local/bin\" \"$DEBIANPATH/usr/bin\" \"$DEBIANPATH/bin\" 2>/dev/null || true

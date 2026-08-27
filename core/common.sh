@@ -62,9 +62,9 @@ asl_chroot_exec() {
             enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
             if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
                 local tmp_dir="$DEBIANPATH/tmp"
-                su -c "mkdir -p '$tmp_dir'; tmpf=\$(mktemp '$tmp_dir/.asl_chroot_cmd_XXXXXX.sh' 2>/dev/null) || tmpf='$tmp_dir/.asl_chroot_cmd_\$\$.sh'; printf '%s' '$enc_cmd' | base64 -d > \"\$tmpf\" && chmod 700 \"\$tmpf\" && chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash /tmp/\${tmpf##*/}; res=\$?; rm -f \"\$tmpf\" 2>/dev/null; exit \$res"
+                su -c "mkdir -p '$tmp_dir'; tmpf=\$(mktemp '$tmp_dir/.asl_chroot_cmd_XXXXXX.sh' 2>/dev/null) || tmpf='$tmp_dir/.asl_chroot_cmd_\$\$.sh'; printf '%s' '$enc_cmd' | base64 -d > \"\$tmpf\" && chmod 700 \"\$tmpf\" && chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c 'ulimit -n 2048 2>/dev/null || true; exec /bin/bash /tmp/\${tmpf##*/}'; res=\$?; rm -f \"\$tmpf\" 2>/dev/null; exit \$res"
             else
-                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c \"\$(printf '%s' '$enc_cmd' | base64 -d)\""
+                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c \"ulimit -n 2048 2>/dev/null || true; \$(printf '%s' '$enc_cmd' | base64 -d)\""
             fi
             ;;
     esac

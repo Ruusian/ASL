@@ -19,7 +19,7 @@ asl_service_start() {
 
     # 0. Disable Android Phantom Process Killer, set OOM score adjustment, CPU affinity & tune TCP sysctl if root available
     if su -c "id -u" >/dev/null 2>&1; then
-        su -c "device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; settings put global settings_enable_monitor_phantom_procs false 2>/dev/null; setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false 2>/dev/null; dumpsys deviceidle whitelist +com.termux 2>/dev/null; am set-standby-bucket com.termux active 2>/dev/null; cmd appops set com.termux RUN_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS allow 2>/dev/null" 2>/dev/null || true
+        timeout 3 su -c "device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; settings put global settings_enable_monitor_phantom_procs false 2>/dev/null; setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false 2>/dev/null; dumpsys deviceidle whitelist +com.termux 2>/dev/null; am set-standby-bucket com.termux active 2>/dev/null; cmd appops set com.termux RUN_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS allow 2>/dev/null" 2>/dev/null || true
         for pid in $(pgrep -f "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop" 2>/dev/null); do
             su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || true
             if command -v taskset >/dev/null 2>&1; then
@@ -323,7 +323,7 @@ asl_service_status() {
         echo " Chroot Mounts:  INACTIVE"
     fi
 
-    if dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" || su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
+    if (timeout 1 dumpsys power 2>/dev/null || timeout 1 su -c "dumpsys power" 2>/dev/null) | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         echo " Wake-Lock:      ENGAGED (Android Sleep Prevented)"
     else
         echo " Wake-Lock:      DISABLED"
@@ -424,7 +424,7 @@ asl_service_check() {
     fi
 
     # 7. CPU Wake-Lock Protection (prevents Android sleep dropouts)
-    if ! dumpsys power 2>/dev/null | grep -q "termux:service-wakelock" && ! su -c "dumpsys power" 2>/dev/null | grep -q "termux:service-wakelock"; then
+    if ! (timeout 1 dumpsys power 2>/dev/null || timeout 1 su -c "dumpsys power" 2>/dev/null) | grep -q "termux:service-wakelock" && ! pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         if command -v termux-wake-lock >/dev/null 2>&1; then
             termux-wake-lock 2>/dev/null || true
             echo "[*] Re-engaged CPU Wake-Lock to prevent Android sleep..."

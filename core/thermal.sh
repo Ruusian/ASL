@@ -26,7 +26,7 @@ asl_thermal_report() {
 
     # Battery Temperature via dumpsys or sysfs
     local batt_temp=""
-    batt_temp=$(asl_exec "dumpsys battery | awk '/temperature:/ {print int(\$2/10)}'" 2>/dev/null || true)
+    batt_temp=$(timeout 1 asl_exec "dumpsys battery | awk '/temperature:/ {print int(\$2/10)}'" 2>/dev/null || true)
     if [ -z "$batt_temp" ] || [[ ! "$batt_temp" =~ ^-?[0-9]+$ ]] || [ "$batt_temp" -le 0 ]; then
         for p in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp; do
             raw_temp=$(cat "$p" 2>/dev/null || asl_exec "cat '$p' 2>/dev/null" 2>/dev/null || true)
@@ -53,7 +53,7 @@ asl_thermal_report() {
 
     # Thermal headroom (Android 15+ API)
     local thermal_headroom=""
-    thermal_headroom=$(asl_exec "dumpsys hardware_properties | awk -F= '/ThermalHeadroom/ {print \$2}'" 2>/dev/null || true)
+    thermal_headroom=$(timeout 1 asl_exec "dumpsys hardware_properties | awk -F= '/ThermalHeadroom/ {print \$2}'" 2>/dev/null || true)
     if [ -n "$thermal_headroom" ] && [[ "$thermal_headroom" =~ ^[0-9]+\.?[0-9]*$ ]]; then
         printf ' Thermal Headroom: %s%s%s' "$c_cyan" "$thermal_headroom" "$c_reset"
         if [ "$(echo "$thermal_headroom < 0.5" | bc 2>/dev/null || echo "1")" = "1" ]; then
