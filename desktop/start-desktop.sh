@@ -168,25 +168,6 @@ start_gpu() {
     fi
 }
 
-start_vnc() {
-    local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    if [ ! -S "$termux_tmp/.X11-unix/X0" ] && command -v socat >/dev/null 2>&1; then
-        socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=700 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
-    fi
-    if ! asl_chroot_exec "pgrep -f 'x11vnc.*:0'" >/dev/null 2>&1; then
-        echo "[*] Initializing x11vnc server on DISPLAY :0..."
-        asl_exec "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/x11vnc \
-            -display :0 -forever -shared -nopw -rfbport 5900 \
-            -threads -wait 20 -defer 20 \
-            -cursor arrow \
-            >'$DEBIANPATH/tmp/x11vnc.log' 2>&1 &" || true
-    fi
-    if ! asl_chroot_exec "pgrep -f 'websockify.*6080'" >/dev/null 2>&1; then
-        echo "[*] Initializing noVNC websockify bridge on port 6080..."
-        asl_exec "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/python3 /usr/bin/websockify --web /usr/share/novnc 6080 localhost:5900 >'$DEBIANPATH/tmp/websockify.log' 2>&1 &" || true
-    fi
-}
-
 cleanup_started() {
     if [ -n "${SESSION_PID:-}" ] && (process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"); then asl_exec "kill -TERM $SESSION_PID" 2>/dev/null || true; fi
     if [ -n "${SOCAT_PID:-}" ] && process_matches "$SOCAT_PID" "socat" "$SOCAT_START"; then kill -TERM "$SOCAT_PID" 2>/dev/null || true; fi
@@ -202,7 +183,6 @@ start_desktop() {
     if read_state; then
         if process_matches "$SESSION_PID" "xfwm4" "$SESSION_START" || process_matches "$SESSION_PID" "xfce4-session" "$SESSION_START"; then
             echo "[*] Desktop is already running on $DISPLAY_ID."
-            start_vnc 2>/dev/null || true
             return 0
         fi
         rm -f "$STATE_FILE"
@@ -501,9 +481,6 @@ LAUNCHER_EOF
     fi
     write_state || { cleanup_started; return 1; }
     am start -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
-    if [ "${ASL_ENABLE_VNC:-0}" = "1" ]; then
-        start_vnc 2>/dev/null || true
-    fi
     echo "[✓] Desktop started on $DISPLAY_ID. Open the Termux:X11 Android app."
 }
 
@@ -698,9 +675,8 @@ case "${1:-start}" in
     restart) force_stop_desktop && start_desktop ;;
     status) status_desktop ;;
     refresh-x11) refresh_x11_state ;;
-    vnc) start_vnc ;;
     audio) shift; audio_control "$@" ;;
     sync-apps) sync_apps ;;
     launch) shift; launch_app "$@" ;;
-    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|vnc|audio|sync-apps|launch}"; exit 1 ;;
+    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|audio|sync-apps|launch}"; exit 1 ;;
 esac
