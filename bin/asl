@@ -423,27 +423,29 @@ batt_temp_c() {
             else printf '%d' "$raw"; return; fi
         fi
     done
-    timeout 1 asl_exec "dumpsys battery" 2>/dev/null | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
+    (timeout 1 dumpsys battery 2>/dev/null || timeout 1 asl_exec "dumpsys battery" 2>/dev/null) | awk '/temperature:/ {printf "%d", int($2 / 10); exit}'
 }
 
 asl_cpu_temp_c() {
-    local zone type raw temp max_cpu=0
-    for zone in /sys/class/thermal/thermal_zone*; do
-        [ -d "$zone" ] || continue
-        type=$(cat "$zone/type" 2>/dev/null | tr '[:upper:]' '[:lower:]')
-        case "$type" in
-            *cpu*|*cpuss*) ;;
-            *) continue ;;
-        esac
-        raw=$(cat "$zone/temp" 2>/dev/null | tr -d '[:space:]')
-        [[ "$raw" =~ ^[0-9]+$ ]] || continue
-        if [ "$raw" -gt 1000 ]; then temp=$((raw / 1000)); else temp=$raw; fi
-        if [ "$temp" -ge 1 ] && [ "$temp" -le 115 ]; then
-            [ "$temp" -gt "$max_cpu" ] && max_cpu=$temp
+    local cache_f="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.asl_cpu_zones"
+    if [ -z "${ASL_CPU_ZONES:-}" ]; then
+        if [ -f "$cache_f" ]; then
+            ASL_CPU_ZONES=$(cat "$cache_f" 2>/dev/null)
         fi
-    done
-    if [ "$max_cpu" -gt 0 ]; then
-        printf '%d' "$max_cpu"
+        if [ -z "${ASL_CPU_ZONES:-}" ]; then
+            ASL_CPU_ZONES=$(grep -l -i "cpu" /sys/class/thermal/thermal_zone*/type 2>/dev/null | sed "s/type$/temp/" | tr "\n" " ")
+            [ -n "$ASL_CPU_ZONES" ] && printf "%s" "$ASL_CPU_ZONES" > "$cache_f" 2>/dev/null || true
+        fi
+    fi
+    if [ -n "$ASL_CPU_ZONES" ]; then
+        cat $ASL_CPU_ZONES 2>/dev/null | awk '
+            {
+                t = $1 + 0;
+                if (t > 1000) t = int(t / 1000);
+                if (t >= 1 && t <= 115 && t > max) max = t;
+            }
+            END { if (max > 0) print max }
+        '
     fi
 }
 
@@ -895,7 +897,7 @@ watch_dashboard() {
         overview compact
         echo ""
         printf '%sTop Processes by CPU Usage%s\n' "$C_CYAN$C_BOLD" "$C_RESET"
-        printf '%s%-7s %-8s %7s %6s  %s%s\n' "$C_DIM" "PID" "USER" "%CPU" "%MEM" "COMMAND" "$C_RESET"
+        printf '%s%5s %-8s %5s %5s  %s%s\n' "$C_DIM" "PID" "USER" "%CPU" "%MEM" "COMMAND" "$C_RESET"
         asl_exec "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 9 | tail -n +2" 2>/dev/null || ps aux | head -n 9 | tail -n +2 || true
         echo ""
         printf '%s[LIVE MONITOR - %s] Host Up %s (Svc %s) | Press "q" or Ctrl+C to return%s\n' "$C_CYAN$C_BOLD" "$(date '+%H:%M:%S' 2>/dev/null || echo '?')" "$(asl_uptime)" "$(asl_svc_uptime)" "$C_RESET"
@@ -1013,7 +1015,7 @@ dashboard() {
         padded=$(printf "%-30.30s" "$plain_str")
 
         if [ "$idx" -eq "$current_sel" ]; then
-            printf "%s│\033[1;30;46m ▶ %-30.30s \033[0m%s│%s" "$C_CYAN" "$plain_str" "$C_CYAN" "$C_RESET"
+            printf "%s│\033[1;30;46m▶ %-30.30s  \033[0m%s│%s" "$C_CYAN" "$plain_str" "$C_CYAN" "$C_RESET"
         else
             if [ -n "$hk" ]; then
                 colored="${padded/\[$hk\]/${C_YELLOW}[${hk}]${C_RESET}}"
