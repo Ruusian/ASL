@@ -1036,19 +1036,19 @@ dashboard() {
         printf "%s╭── Linux Chroot ──────────────────╮%s  %s╭── Desktop & Remote ──────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         render_opt 1 "s" "Start / Mount Chroot" "$sel"; printf "  "; render_opt 7 "d" "Start XFCE4 Desktop" "$sel"; echo ""
         render_opt 2 "x" "Stop & Unmount Chroot" "$sel"; printf "  "; render_opt 8 "" "Desktop Status / Stop" "$sel"; echo ""
-        render_opt 3 "" "Open Root Shell" "$sel"; printf "  "; render_opt 9 "" "Theme & Resolution" "$sel"; echo ""
+        render_opt 3 "e" "Open Root Shell" "$sel"; printf "  "; render_opt 9 "" "Theme & Resolution" "$sel"; echo ""
         render_opt 4 "" "Run Single Command" "$sel"; printf "  "; render_opt 10 "v" "Remote Access Manager" "$sel"; echo ""
-        render_opt 5 "" "Snapshots & Backups" "$sel"; printf "  "; render_opt 11 "" "PulseAudio Control" "$sel"; echo ""
+        render_opt 5 "y" "Snapshots & Backups" "$sel"; printf "  "; render_opt 11 "" "PulseAudio Control" "$sel"; echo ""
         render_opt 6 "a" "Android AID Groups" "$sel"; printf "  "; render_opt 12 "" "Sync Debian Launchers" "$sel"; echo ""
         printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         printf "%s╭── GPU & Performance ─────────────╮%s  %s╭── Android Bridge ────────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         render_opt 13 "g" "GPU Hardware Profile" "$sel"; printf "  "; render_opt 17 "k" "CPU Wake Lock Toggle" "$sel"; echo ""
         render_opt 14 "m" "Performance Profile" "$sel"; printf "  "; render_opt 18 "o" "Open File in Host App" "$sel"; echo ""
-        render_opt 15 "" "MangoHud & Gamepad" "$sel"; printf "  "; render_opt 19 "c" "System Clipboard Sync" "$sel"; echo ""
-        render_opt 16 "" "Benchmark GPU" "$sel"; printf "  "; render_opt 20 "n" "Notification / Toast" "$sel"; echo ""
+        render_opt 15 "f" "MangoHud & Gamepad" "$sel"; printf "  "; render_opt 19 "c" "System Clipboard Sync" "$sel"; echo ""
+        render_opt 16 "j" "Benchmark Hardware" "$sel"; printf "  "; render_opt 20 "n" "Notification / Toast" "$sel"; echo ""
         printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         printf "%s╭── Diagnostics & System ──────────╮%s  %s╭── AI & Service Hub ──────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
-        render_opt 21 "p" "Resource Manager" "$sel"; printf "  "; render_opt 25 "" "Apps & Dev Suites" "$sel"; echo ""
+        render_opt 21 "p" "Resource Manager" "$sel"; printf "  "; render_opt 25 "l" "Apps & Dev Suites" "$sel"; echo ""
         render_opt 22 "t" "Thermal Monitor" "$sel"; printf "  "; render_opt 26 "z" "Guided Setup Wizard" "$sel"; echo ""
         render_opt 23 "" "Doctor & Auto-Repair" "$sel"; printf "  "; render_opt 27 "i" "OmniRoute AI Proxy" "$sel"; echo ""
         render_opt 24 "u" "Storage & Cache Clean" "$sel"; printf "  "; render_opt 28 "b" "24/7 Service Manager" "$sel"; echo ""
@@ -1057,7 +1057,7 @@ dashboard() {
         printf "%s│%s  %s[h]%s Help  %s[r]%s Refresh  %s[w]%s Watch  %s[q]%s Exit  %s[↑↓←→]%s Move  %s[↵]%s Select   %s│%s\n" \
             "$C_CYAN" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_YELLOW" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_GREEN" "$C_RESET" "$C_CYAN" "$C_RESET"
         printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
-        printf "\033[J\033[?25h" 2>/dev/null || true
+        printf "\033[J" 2>/dev/null || true
     }
 
     while true; do
@@ -1165,11 +1165,15 @@ dashboard() {
                     ;;
                 s|S) choice="1"; need_refresh=1 ;;
                 x|X) choice="2"; need_refresh=1 ;;
+                e|E) choice="3"; need_refresh=1 ;;
+                y|Y) choice="5"; need_refresh=1 ;;
                 a|A) choice="6"; need_refresh=1 ;;
                 d|D) choice="7"; need_refresh=1 ;;
                 v|V) choice="10"; need_refresh=1 ;;
                 g|G) choice="13"; need_refresh=1 ;;
                 m|M) choice="14"; need_refresh=1 ;;
+                f|F) choice="15"; need_refresh=1 ;;
+                j|J) choice="16"; need_refresh=1 ;;
                 k|K) choice="17"; need_refresh=1 ;;
                 o|O) choice="18"; need_refresh=1 ;;
                 c|C) choice="19"; need_refresh=1 ;;
@@ -1177,9 +1181,11 @@ dashboard() {
                 p|P) choice="21"; need_refresh=1 ;;
                 t|T) choice="22"; need_refresh=1 ;;
                 u|U) choice="24"; need_refresh=1 ;;
+                l|L) choice="25"; need_refresh=1 ;;
                 z|Z) choice="26"; need_refresh=1 ;;
                 i|I) choice="27"; need_refresh=1 ;;
                 b|B) choice="28"; need_refresh=1 ;;
+                ESC) need_refresh=1; continue ;;
                 h|H)
                     printf "\033[?1049l\033[?25h" 2>/dev/null || true
                     show_help
@@ -1214,12 +1220,13 @@ dashboard() {
             2|x|X)
                 if confirm_action "Stop all chroot processes and unmount Debian?"; then bash "$REAL_SCRIPT" stop; fi
                 pause_dashboard ;;
-            3) bash "$REAL_SCRIPT" shell ;;
+            3|e|E)
+                bash "$REAL_SCRIPT" shell || pause_dashboard ;;
             4)
                 read -r -p "Debian command: " command
                 if [ -n "$command" ]; then bash "$REAL_SCRIPT" exec "$command"; fi
                 pause_dashboard ;;
-            5)
+            5|y|Y)
                 echo "Snapshot actions: 1) list  2) create  3) restore  4) delete  5) backup (tar.gz)  6) restore archive"
                 read -r -p "Select action [1-6]: " s_act
                 case "$s_act" in
@@ -1416,7 +1423,7 @@ dashboard() {
                     *) bash "$REAL_SCRIPT" mode status ;;
                 esac
                 pause_dashboard ;;
-            15)
+            15|f|F)
                 echo "MangoHud & Gamepad:"
                 echo "  1) MangoHud HUD toggle  2) Gamepad / Joystick status & test"
                 read -r -p "Select option [1-2]: " g_opt
@@ -1442,7 +1449,7 @@ dashboard() {
                         ;;
                 esac
                 pause_dashboard ;;
-            16)
+            16|j|J)
                 bash "$REAL_SCRIPT" benchmark; pause_dashboard ;;
             17|k|K)
                 echo "Wake lock actions: 1) status  2) enable (on)  3) disable (off)"
@@ -1532,7 +1539,7 @@ dashboard() {
                     *) bash "$REAL_SCRIPT" clean safe ;;
                 esac
                 pause_dashboard ;;
-            25|apps|host)
+            25|l|L|apps|host)
                 echo "Host Applications & Suites:"
                 echo "  1) Interactive Applications & Games Hub (asl game menu)"
                 echo "  2) Developer Environment Toolchains (VS Code, Neovim, Python, Node, Go, Rust)"
