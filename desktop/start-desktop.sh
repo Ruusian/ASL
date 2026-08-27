@@ -411,12 +411,18 @@ rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/x
 
     xfconf-query -c xfwm4 -p /general/titleless_fullscreen >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/borderless_maximize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/use_compositing -s true 2>/dev/null || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/vblank_mode -s off 2>/dev/null || xfconf-query -c xfwm4 -p /general/vblank_mode -n -t string -s off 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/show_dock_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_dock_shadow -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/show_popup_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_popup_shadow -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/show_frame_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_frame_shadow -n -t bool -s false 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/use_compositing >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/vblank_mode >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/vblank_mode -n -t string -s off 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/show_dock_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_dock_shadow -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/show_popup_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_popup_shadow -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/show_frame_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_frame_shadow -n -t bool -s true 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/unredirect_overlays >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/unredirect_overlays -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/zoom_desktop >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/zoom_desktop -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/cycle_preview >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/cycle_preview -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/cycle_tabwin_mode >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/cycle_tabwin_mode -n -t int -s 1 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/move_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/move_opacity -n -t int -s 90 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/resize_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/resize_opacity -n -t int -s 90 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/popup_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/popup_opacity -n -t int -s 95 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_move >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_resize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Antialias >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
