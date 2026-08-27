@@ -423,6 +423,10 @@ rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/x
     xfconf-query -c xfwm4 -p /general/move_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/move_opacity -n -t int -s 90 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/resize_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/resize_opacity -n -t int -s 90 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/popup_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/popup_opacity -n -t int -s 95 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/tile_on_move >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/tile_on_move -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/snap_to_border >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/snap_to_border -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/snap_to_windows >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/snap_to_windows -n -t bool -s true 2>/dev/null || true
+    xfconf-query -c xfwm4 -p /general/snap_width >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/snap_width -n -t int -s 10 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_move >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xfwm4 -p /general/box_resize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
     xfconf-query -c xsettings -p /Xft/Antialias >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
