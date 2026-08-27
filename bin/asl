@@ -531,12 +531,12 @@ asl_remote_details() {
     host_ip=$(asl_host_ip)
 
     if asl_is_sshd_running; then
-        details+=("* LAN SSH:        ssh -p 8022 ${user}@${host_ip}")
+        details+=("* LAN:     ssh -p 8022 ${user}@${host_ip}")
     fi
     if [ -n "$o_host" ] && [ -f "$prefix/tmp/asl-oracle.state" ] && (pgrep -f "ssh.*${o_host}" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*${o_host}'" >/dev/null 2>&1); then
-        details+=("* Oracle VPS:     ssh -J ${o_user}@${o_host} -p ${o_port} ${user}@127.0.0.1")
+        details+=("* Oracle:  ssh -J ${o_user}@${o_host} -p ${o_port} ${user}@127.0.0.1")
     elif [ -n "$o_host" ] && [ -f "$o_key" ]; then
-        details+=("* Oracle VPS:     Standby (Host: ${o_host}:${o_port}, Run 'asl remote oracle start')")
+        details+=("* Oracle:  Standby (${o_host}:${o_port} - 'asl remote oracle start')")
     fi
     if [ -f "$prefix/tmp/asl-serveo.state" ] && (pgrep -f "ssh.*serveo\.net" >/dev/null 2>&1 || su -c "pgrep -f 'ssh.*serveo\.net'" >/dev/null 2>&1); then
         local s_alias="asl-${user}"
@@ -547,7 +547,7 @@ asl_remote_details() {
         elif [ -n "${ASL_SERVEO_ALIAS:-}" ]; then
             s_alias="$ASL_SERVEO_ALIAS"
         fi
-        details+=("* Serveo Tunnel:  ssh -J serveo.net ${user}@${s_alias}")
+        details+=("* Serveo:  ssh -J serveo.net ${user}@${s_alias}")
     fi
     if [ -f "$prefix/tmp/asl-ngrok.state" ] && (pgrep -x ngrok >/dev/null 2>&1 || pgrep -f "ngrok.*tcp" >/dev/null 2>&1 || su -c "pgrep -x ngrok" >/dev/null 2>&1); then
         local ng_url ng_host ng_port ng_json ng_status_json ng_lat ng_region ng_conns
@@ -573,16 +573,16 @@ asl_remote_details() {
         if [ -n "$ng_url" ]; then
             ng_host=$(echo "$ng_url" | sed -E 's|tcp://([^:]+):.*|\1|')
             ng_port=$(echo "$ng_url" | sed -E 's|tcp://([^:]+:([0-9]+))|\1|' | sed -E 's|.*:||')
-            details+=("* Ngrok Tunnel:   ssh -p ${ng_port} ${user}@${ng_host}")
+            details+=("* Ngrok:   ssh -p ${ng_port} ${user}@${ng_host}")
         else
-            details+=("* Ngrok Tunnel:   Active (Fetching tunnel URL...)")
+            details+=("* Ngrok:   Active (Fetching tunnel URL...)")
         fi
 
         ng_lat=$(echo "$ng_status_json" | grep -oE '"latency":"[^"]+"' | cut -d'"' -f4)
         ng_region=$(echo "$ng_status_json" | grep -oE '"region":"[^"]+"' | cut -d'"' -f4)
         ng_conns=$(echo "$ng_json" | grep -oE '"count":[0-9]+' | head -1 | cut -d':' -f2)
         if [ -n "$ng_lat" ] || [ -n "$ng_region" ]; then
-            details+=("  - Performance:  Region: ${ng_region:-global} | Latency: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
+            details+=("  - Perf:  Region: ${ng_region:-global} | Latency: ${ng_lat:-N/A} | Conns: ${ng_conns:-0}")
         fi
     fi
 
@@ -598,23 +598,11 @@ asl_remote_details() {
             if [ ${#d} -le 68 ]; then
                 printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$d" "$C_CYAN" "$C_RESET"
             else
-                if [[ "$d" == *": "* ]]; then
-                    local lbl="${d%%: *}":
-                    local cmd="${d#*: }"
-                    cmd=$(echo "$cmd" | sed -e "s/^[[:space:]]*//")
-                    printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$lbl" "$C_CYAN" "$C_RESET"
-                    while [ -n "$cmd" ]; do
-                        local chunk="${cmd:0:66}"
-                        cmd="${cmd:66}"
-                        printf "%s│%s    %s%-66.66s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$chunk" "$C_CYAN" "$C_RESET"
-                    done
-                else
-                    while [ -n "$d" ]; do
-                        local chunk="${d:0:68}"
-                        d="${d:68}"
-                        printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$chunk" "$C_CYAN" "$C_RESET"
-                    done
-                fi
+                while [ -n "$d" ]; do
+                    local chunk="${d:0:68}"
+                    d="${d:68}"
+                    printf "%s│%s  %s%-68.68s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$chunk" "$C_CYAN" "$C_RESET"
+                done
             fi
         done
     fi
@@ -762,13 +750,12 @@ overview() {
     if [ "$mode" = "compact" ]; then
         printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
         printf "%s│%s  %sChroot:    %s%s  %sDesktop:   %s%s  %sDisplay:   %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sCPU Temp:  %s%s%-4s%s %s %sGov:       %s%s%-9.9s%s  %sGPU:       %s%s%-11.11s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$C_GREEN" "$governor" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sCPU Temp:  %s%s%-4s%s %s %sCPU Load:  %s%s%-9.9s%s  %sGPU:       %s%s%-11.11s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_RESET" "$C_CYAN" "$C_RESET"
         printf "%s│%s  %sBattery:   %s%s%-11s%s  %sHost IP:   %s%s%-13.13s%s  %sOmni:     %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_RESET" "$C_BOLD" "$C_RESET" "$omni_compact_lbl" "$C_CYAN" "$C_RESET"
         printf "%s│%s  %sRAM:%s  [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
-        draw_bar "$mem_pct" 8
-        printf "] %3d%%   %sSwap:%s [" "$mem_pct" "$C_BOLD" "$C_RESET"
-        draw_bar "$swap_pct" 8
-        printf "] %3d%%   %sUptime:%s %s%-12.12s%s  %s│%s\n" "$swap_pct" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_RESET" "$C_CYAN" "$C_RESET"
+        draw_bar "$mem_pct" 6
+        printf "] %3d%% (%4d/%4dMB)  %sSwap:%s %3d%% (%4dMB)  %sUp:%s %s%-8.8s%s  %s│%s\n" \
+            "$mem_pct" "$mem_used" "$mem_total" "$C_BOLD" "$C_RESET" "$swap_pct" "$swap_used" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$up_str" "$C_RESET" "$C_CYAN" "$C_RESET"
         asl_remote_details
         printf "%s╰────────────────────────────────────────────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET"
         return 0
