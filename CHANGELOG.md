@@ -4,10 +4,11 @@ All notable changes to the ASL (Android Subsystem for Linux) project are documen
 
 ## [Unreleased] - Development Fork
 
-This repository is a continuously updated nightly development fork of
-[Ruusian/ASL](https://github.com/Ruusian/ASL), maintained by **Abhik Sarkar**.
-Users can install and test it, but changes may be frequent and stability is not
-guaranteed while new features, fixes, and project updates are being developed.
+- **Codebase Hardening & Variable Safety**:
+  - Resolved unbound local variable lookups and hardened variable declarations across `bin/asl`, `core/asl-conf.sh`, `core/termux-bridge.sh`, and `core/service-manager.sh`.
+  - Guarded swap loop-device attachments in `core/swap-manager.sh` to detach duplicate loop allocations.
+  - Enhanced kernel capability and virtual swap detection in `core/kernel-check.sh` with direct `/proc/swaps` fallback.
+  - Streamlined module path resolution, mount checks, and shell initializations in `desktop/start-desktop.sh`, `core/common.sh`, and `core/benchmark.sh`.
 
 ## [2.5.1] - 2026-08-25
 

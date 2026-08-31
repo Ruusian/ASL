@@ -9,7 +9,6 @@ fi
 
 asl_kernel_check() {
     local c_reset=$'\033[0m' c_bold=$'\033[1m' c_cyan=$'\033[36m'
-    local c_green=$'\033[32m' c_yellow=$'\033[33m' c_red=$'\033[31m'
 
     printf '%s=== ASL Kernel Configuration Check ===%s\n' "$c_cyan$c_bold" "$c_reset"
     echo ""
@@ -115,7 +114,7 @@ asl_kernel_check() {
         echo "  [✗] ZRAM: Not available"
     fi
     
-    if swapon --show 2>/dev/null | grep -q "/"; then
+    if swapon --show 2>/dev/null | grep -q "/" || (cat /proc/swaps 2>/dev/null || su -c "cat /proc/swaps" 2>/dev/null) | grep -q -E "loop|file|img|\.swap"; then
         echo "  [✓] File swap: Available"
     else
         echo "  [ ] File swap: Not configured"

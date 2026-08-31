@@ -1,3 +1,30 @@
+# ASL Bug Fixes Summary - Round 4 (Codebase Hardening & Variable Safety)
+
+## Round 4 Codebase Hardening & Variable Safety
+
+### ✅ 1. Unset Local Variable Guarding & TUI Summary Diagnostics
+**Files**: `bin/asl`, `core/asl-conf.sh`, `core/termux-bridge.sh`
+- Fixed unbound/unset variable warnings in `bin/asl` overview badges (`boot_lbl`, `wdog_lbl`).
+- Resolved variable scoping and initialization in screen resolution/orientation bridge helpers (`CURR_SIZE`, `CURR_DENSITY`).
+- Corrected template directory extraction in `core/asl-conf.sh`.
+
+---
+
+### ✅ 2. Robust Swap Pool & Kernel Capability Detection
+**Files**: `core/swap-manager.sh`, `core/kernel-check.sh`
+- Hardened loop-mounted swap image handling in `core/swap-manager.sh` to safely detach duplicate or stale loop devices.
+- Enhanced virtual/file swap detection in `core/kernel-check.sh` by inspecting `/proc/swaps` directly when `swapon` utility is restricted or absent in user space.
+
+---
+
+### ✅ 3. Mount Verification & Fallback Path Consistency
+**Files**: `core/common.sh`, `core/mount-chroot.sh`, `desktop/start-desktop.sh`, `core/benchmark.sh`
+- Standardized `ensure_chroot_mounted` alias in `core/common.sh` for cross-module consistency.
+- Synchronized chroot state checks with exact filesystem mount table inspection.
+- Cleaned up redundant shell initializations and path sourcing in `desktop/start-desktop.sh` and `core/benchmark.sh`.
+
+---
+
 # ASL Bug Fixes Summary - Round 3 (v1.2 Stress Test Pass)
 
 ## Round 3 Stress Test Fixes Applied

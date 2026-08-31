@@ -58,10 +58,10 @@ asl_gamepad_sync() {
             # Match the gid-1003/0660 scheme used by mount-chroot.sh instead of
             # making input nodes world-writable (0666 permits input injection).
             for node in /dev/input/event* /dev/input/js* /dev/uinput; do
-                [ -e "\$node" ] && chgrp 1003 "\$node" 2>/dev/null && chmod 0660 "\$node" 2>/dev/null || true
+                [ -e \"\$node\" ] && chgrp 1003 \"\$node\" 2>/dev/null && chmod 0660 \"\$node\" 2>/dev/null || true
             done
             for cnode in '$DEBIANPATH'/dev/input/event* '$DEBIANPATH'/dev/input/js*; do
-                [ -e "\$cnode" ] && chmod 0660 "\$cnode" 2>/dev/null || true
+                [ -e \"\$cnode\" ] && chmod 0660 \"\$cnode\" 2>/dev/null || true
             done
         " 2>/dev/null || true
 

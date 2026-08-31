@@ -9,7 +9,6 @@ fi
 
 asl_swap_status() {
     local c_reset=$'\033[0m' c_bold=$'\033[1m' c_cyan=$'\033[36m'
-    local c_green=$'\033[32m' c_yellow=$'\033[33m' c_red=$'\033[31m'
 
     printf '%s=== ASL Memory & Swap Status ===%s\n' "$c_cyan$c_bold" "$c_reset"
 
@@ -22,7 +21,7 @@ asl_swap_status() {
     echo ""
     echo "ZRAM Status:"
     if [ -d /sys/block/zram0 ]; then
-        local zram_size zram_used zram_comp algo
+        local zram_size zram_used algo
         zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || su -c "cat /sys/block/zram0/disksize" 2>/dev/null)
         zram_size=$(printf '%s' "$zram_size" | tr -d '[:space:]')
         zram_used=$( (cat /sys/block/zram0/mm_stat 2>/dev/null || su -c "cat /sys/block/zram0/mm_stat" 2>/dev/null) | awk '{print $3}')

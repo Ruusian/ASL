@@ -278,6 +278,7 @@ start_desktop() {
     [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
     local target_home="/root"
     local target_uid=0
+    local asl_target_user="root"
     local gpu_exports
     gpu_exports=$(asl_gpu_env_exports 2>/dev/null || true)
     mkdir -p "$termux_tmp"

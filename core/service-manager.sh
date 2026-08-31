@@ -11,8 +11,6 @@ fi
 BOOT_DIR="$HOME/.termux/boot"
 BOOT_SCRIPT="$BOOT_DIR/00-asl-autostart.sh"
 BASHRC="$HOME/.bashrc"
-SERVICE_LOG="${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-service.log"
-SERVICE_PIDFILE="${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-service.pid"
 
 asl_service_start() {
     echo "[*] Initializing ASL 24/7 Background Services..."

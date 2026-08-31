@@ -2,12 +2,20 @@
 # Android Subsystem for Linux (ASL): Shared Environment & Common Utilities
 # Consolidates path checks, mount verification, color definitions, and logging.
 
-MODE_CONFIG="$PREFIX/etc/asl_exec_mode"
+MODE_CONFIG="${PREFIX:-/data/data/com.termux/files/usr}/etc/asl_exec_mode"
 
 asl_detect_mode() {
     if [ -n "${ASL_EXEC_MODE:-}" ]; then
         echo "$ASL_EXEC_MODE"
         return
+    fi
+    if [ -f "$MODE_CONFIG" ]; then
+        local configured_mode
+        configured_mode=$(cat "$MODE_CONFIG" 2>/dev/null | tr -d '[:space:]')
+        if [ "$configured_mode" = "root" ] || [ "$configured_mode" = "direct" ]; then
+            echo "$configured_mode"
+            return
+        fi
     fi
     if [ -f /etc/debian_version ] && [ ! -d "/data/local/tmp/chrootDebian" ]; then
         echo "direct"
@@ -21,7 +29,7 @@ export ASL_EXEC_MODE
 
 # Self-contained mode: when running inside the Debian chroot, commands
 # target the current rootfs directly instead of re-entering the chroot.
-if [ "${ASL_CHROOT_SELF:-0}" = "1" ] || [ -f /etc/debian_version -a ! -d "/data/local/tmp/chrootDebian" ]; then
+if [ "${ASL_CHROOT_SELF:-0}" = "1" ] || ([ -f /etc/debian_version ] && [ ! -d "/data/local/tmp/chrootDebian" ]); then
     ASL_EXEC_MODE="direct"
     DEBIANPATH="/"
 fi

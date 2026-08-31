@@ -95,7 +95,7 @@ asl_exec "
         domount_bind /proc/sys/fs/binfmt_misc \"$DEBIANPATH/proc/sys/fs/binfmt_misc\"
     fi
 
-    if [ "${ASL_MOUNT_SDCARD:-1}" = "1" ] && [ -d /sdcard ]; then
+    if [ \"${ASL_MOUNT_SDCARD:-1}\" = \"1\" ] && [ -d /sdcard ]; then
         domount_bind /sdcard \"$DEBIANPATH/sdcard\"
         domount_bind /sdcard \"$DEBIANPATH/storage/emulated/0\"
     fi
@@ -178,7 +178,7 @@ static syscall_fn_t real_syscall = NULL;
 int close_range(unsigned int first, unsigned int last, int flags) {
     if (last > 2048) last = 2048;
     if (!real_syscall) {
-        real_syscall = (syscall_fn_t)dlsym(RTLD_NEXT, "syscall");
+        real_syscall = (syscall_fn_t)dlsym(RTLD_NEXT, \"syscall\");
     }
     if (real_syscall) {
         return (int)real_syscall(__NR_close_range, (long)first, (long)last, (long)flags);
@@ -192,7 +192,7 @@ void closefrom(int lowfd) {
 
 long syscall(long number, ...) {
     if (!real_syscall) {
-        real_syscall = (syscall_fn_t)dlsym(RTLD_NEXT, "syscall");
+        real_syscall = (syscall_fn_t)dlsym(RTLD_NEXT, \"syscall\");
     }
     va_list args;
     va_start(args, number);

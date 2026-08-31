@@ -274,7 +274,8 @@ _asl_save_rotation_state() {
     local s_dir
     s_dir=$(dirname "$ROTATION_STATE_FILE")
     mkdir -p "$s_dir" 2>/dev/null || true
-    local content="FORCED_LANDSCAPE=${forced}
+    local content
+    content="FORCED_LANDSCAPE=${forced}
 ROTATION_MODE=${mode}
 USER_ROTATION=${rot_val}
 OVERRIDE_NATIVE_AUTOROTATE=${forced}
@@ -286,6 +287,7 @@ LAST_UPDATED=$(date '+%Y-%m-%d %H:%M:%S')"
 }
 
 _asl_load_rotation_state() {
+    # shellcheck source=/dev/null
     if [ -f "$ROTATION_CONF_FILE" ]; then
         source "$ROTATION_CONF_FILE" 2>/dev/null || true
     elif [ -f "$ROTATION_STATE_FILE" ]; then
@@ -327,7 +329,8 @@ _asl_save_screen_state() {
     local s_dir
     s_dir=$(dirname "$SCREEN_STATE_FILE")
     mkdir -p "$s_dir" 2>/dev/null || true
-    local content="PHYSICAL_SIZE=${PHYS_SIZE}
+    local content
+    content="PHYSICAL_SIZE=${PHYS_SIZE}
 PHYSICAL_DENSITY=${PHYS_DENSITY}
 SAVED_OVERRIDE_SIZE=${save_size:-$CURR_SIZE}
 SAVED_OVERRIDE_DENSITY=${save_den:-$CURR_DENSITY}
@@ -337,6 +340,7 @@ LAST_SAVED_AT=$(date '+%Y-%m-%d %H:%M:%S')"
 }
 
 _asl_load_screen_state() {
+    # shellcheck source=/dev/null
     if [ -f "$SCREEN_STATE_FILE" ]; then
         source "$SCREEN_STATE_FILE" 2>/dev/null || true
     fi

@@ -17,7 +17,8 @@ init_default_config() {
         target="$HOST_CONF_FILE"
     fi
 
-    local target_dir="$(dirname "$target")"
+    local target_dir
+    target_dir="$(dirname "$target")"
     mkdir -p "$target_dir" 2>/dev/null || asl_exec "mkdir -p '$target_dir'" 2>/dev/null || true
 
     if [ -f "$target" ]; then

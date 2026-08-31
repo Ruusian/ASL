@@ -562,7 +562,7 @@ overview() {
     local mem_total mem_avail mem_used mem_pct disk_data load_avg
     local swap_total swap_free swap_used swap_pct governor
     local batt_level batt_temp cpu_temp batt_str cpu_str host_ip wlock_status
-    local up_str freq_str swap_from_zram remote_summary audio_status omni_lbl chroot_disk=""
+    local up_str swap_from_zram remote_summary audio_status omni_lbl chroot_disk=""
     local res_str rot_str wm_size_out rot_out user_rot
 
     host_ip=$(asl_host_ip)
@@ -673,7 +673,6 @@ overview() {
     cpu_str="${cpu_temp:-N/A}°C"
     up_str=$(asl_uptime)
     svc_up_str=$(asl_svc_uptime)
-    freq_str=$(asl_cpu_freq)
     remote_summary=$(asl_remote_summary)
 
     local max_temp=0 thermal_badge=""
@@ -706,16 +705,15 @@ overview() {
     fi
     wan_ping=$(asl_wan_ping_cached)
 
-    local omni_status="INACTIVE" omni_compact="INACT"
+    local omni_status="INACTIVE"
     if asl_is_omniroute_running; then
         omni_status="ACTIVE"
-        omni_compact="ACTIVE"
     fi
-    local omni_lbl="$(status_badge "$omni_status" 11)"
-    local omni_compact_lbl="$(status_badge "$omni_compact" 8)"
+    omni_lbl=$(status_badge "$omni_status" 11)
 
-    local boot_lbl="$(status_badge "$boot_status" 10)"
-    local wdog_lbl="$(status_badge "$wdog_status" 10)"
+    local boot_lbl wdog_lbl
+    boot_lbl=$(status_badge "$boot_status" 10)
+    wdog_lbl=$(status_badge "$wdog_status" 10)
 
     if [ "$mode" = "compact" ]; then
         printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
@@ -780,7 +778,7 @@ process_manager() {
     printf "\033[?1049h\033[?25l" 2>/dev/null || true
     while true; do
         printf "\033[H\033[J" 2>/dev/null || true
-        printf "%s╭─── %sASL Resource & Process Manager%s %s────────────────────────────╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
+        printf "%s╭─── %sASL Resource & Process Manager%s %s────────────────────────────%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
         if [ "$sort_mode" = "mem" ]; then
             printf "%s│%s  %sTop Processes by RAM / Memory Usage (%s%s%s):%s                        %s│%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN$C_BOLD" "$C_YELLOW" "sorted by %MEM" "$C_CYAN$C_BOLD" "$C_RESET" "$C_CYAN" "$C_RESET"
         else

@@ -20,7 +20,6 @@ fi
 asl_benchmark_run() {
     local c_reset=$'\033[0m' c_bold=$'\033[1m' c_cyan=$'\033[36m'
     local c_green=$'\033[32m' c_yellow=$'\033[33m' c_red=$'\033[31m'
-    local c_shadow=$'\033[90m'
 
     printf '%s=== ASL Hardware & Compute Benchmark ===%s\n\n' "$c_cyan$c_bold" "$c_reset"
 
