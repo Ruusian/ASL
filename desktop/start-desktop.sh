@@ -57,20 +57,20 @@ process_matches() {
 # Note: $pat is expanded by the outer shell; all other vars run under su.
 chroot_pkill() {
     local sig="$1" pat="$2"
-    asl_exec "
-        for pid in \$(pgrep -f '$pat' 2>/dev/null); do
-            [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"$DEBIANPATH\" ] && kill $sig \"\$pid\" 2>/dev/null || true
-        done
-    " 2>/dev/null || true
+    local pids
+    pids=$(asl_exec "pgrep -f '$pat'" 2>/dev/null || pgrep -f "$pat" 2>/dev/null || true)
+    for pid in $pids; do
+        if [ "$(su -c "readlink /proc/$pid/root" 2>/dev/null)" = "$DEBIANPATH" ] || [ "$(readlink "/proc/$pid/root" 2>/dev/null)" = "$DEBIANPATH" ]; then
+            kill "-$sig" "$pid" 2>/dev/null || su -c "kill -$sig $pid" 2>/dev/null || true
+        fi
+    done
 }
 
 host_pkill() {
     local sig="$1" pat="$2"
-    asl_exec "
-        for pid in \$(pgrep -f '$pat' 2>/dev/null); do
-            [ \"\$(readlink \"/proc/\$pid/root\" 2>/dev/null)\" = \"/\" ] && kill $sig \"\$pid\" 2>/dev/null || true
-        done
-    " 2>/dev/null || true
+    for pid in $(pgrep -f "$pat" 2>/dev/null); do
+        kill "-$sig" "$pid" 2>/dev/null || su -c "kill -$sig $pid" 2>/dev/null || true
+    done
 }
 
 read_state() {
@@ -112,6 +112,7 @@ start_audio() {
     if pgrep -x pulseaudio >/dev/null 2>&1 || pactl --server=127.0.0.1:4713 info >/dev/null 2>&1; then
         echo "[*] Reusing existing PulseAudio server."
         export PULSE_SERVER="127.0.0.1:4713"
+        command -v termux-volume >/dev/null && [ "$(termux-volume 2>/dev/null | grep -A1 '"stream": "music"' | grep '"volume": 0')" ] && termux-volume music 10 >/dev/null 2>&1 || true
         return 0
     fi
     if ! command -v pulseaudio >/dev/null; then
@@ -119,14 +120,17 @@ start_audio() {
         return 1
     fi
     echo "[*] Initializing PulseAudio sound server..."
+    rm -rf "${PREFIX:-/data/data/com.termux/files/usr}/tmp"/pulse-* "$HOME"/.config/pulse/*-runtime 2>/dev/null || true
     (
         unset PULSE_SERVER
-        pulseaudio -D --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --exit-idle-time=-1 2>/dev/null || \
-        pulseaudio --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --exit-idle-time=-1 --daemonize=yes 2>/dev/null || \
-        nohup pulseaudio --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --exit-idle-time=-1 >/dev/null 2>&1 &
+        pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --load="module-sles-source" 2>/dev/null || \
+        pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-aaudio-sink" 2>/dev/null || \
+        pulseaudio -D --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --load="module-sles-source" --exit-idle-time=-1 2>/dev/null || \
+        nohup pulseaudio --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --load="module-sles-source" --exit-idle-time=-1 >/dev/null 2>&1 &
     )
     sleep 1
     export PULSE_SERVER="127.0.0.1:4713"
+    command -v termux-volume >/dev/null && [ "$(termux-volume 2>/dev/null | grep -A1 '"stream": "music"' | grep '"volume": 0')" ] && termux-volume music 10 >/dev/null 2>&1 || true
     if pactl --server=127.0.0.1:4713 info >/dev/null 2>&1; then
         echo "[✓] PulseAudio server active."
         return 0
@@ -187,6 +191,10 @@ start_desktop() {
         fi
         rm -f "$STATE_FILE"
     fi
+    if ! ensure_chroot_mounted; then
+        echo "[!] Cannot start desktop: Linux chroot failed to mount."
+        return 1
+    fi
     if command -v termux-wake-lock >/dev/null 2>&1; then
         termux-wake-lock 2>/dev/null || true
     fi
@@ -211,6 +219,9 @@ start_desktop() {
     am start -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
     echo "[*] Starting Termux:X11 display server..."
     local termux_tmp="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+    mkdir -p "$termux_tmp/.X11-unix"
+    chmod 1777 "$termux_tmp/.X11-unix" 2>/dev/null || su -c "chmod 1777 '$termux_tmp/.X11-unix'" 2>/dev/null || true
+    chown "$(id -u):$(id -g)" "$termux_tmp/.X11-unix" 2>/dev/null || su -c "chown $(id -u):$(id -g) '$termux_tmp/.X11-unix'" 2>/dev/null || true
     local xauth_file="$termux_tmp/.Xauthority"
     local xauth_cmd=""
     if command -v xauth >/dev/null 2>&1; then
@@ -223,7 +234,7 @@ start_desktop() {
         chmod 600 "$xauth_file" 2>/dev/null || true
     fi
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
-        rm -f "/data/data/com.termux/files/usr/tmp/.X11-unix/X0" "/data/data/com.termux/files/usr/tmp/.X0-lock" 2>/dev/null || true
+        rm -f "$termux_tmp/.X11-unix/X0" "$termux_tmp/.X0-lock" 2>/dev/null || su -c "rm -f '$termux_tmp/.X11-unix/X0' '$termux_tmp/.X0-lock'" 2>/dev/null || true
         if [ -f "$xauth_file" ] && [ -s "$xauth_file" ]; then
             termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp -auth "$xauth_file" >/dev/null 2>&1 &
         else
@@ -255,10 +266,7 @@ start_desktop() {
     done
     mkdir -p "$termux_tmp/.X11-unix"
     if [ ! -S "$termux_tmp/.X11-unix/X0" ] && command -v socat >/dev/null 2>&1; then
-        # mode=700: only the Termux user (plus root, who bypasses mode checks)
-        # may connect to the X socket; world-accessible 777 would let any local
-        # app drive the display.
-        socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=700 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
+        socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=777 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
         SOCAT_PID=$!
         SOCAT_START=$(pid_start_time "$SOCAT_PID")
         protect_pid_oom "$SOCAT_PID"
@@ -278,6 +286,7 @@ start_desktop() {
     umask 022
     cat << LAUNCHER_EOF > "$launcher_script"
 #!/bin/bash
+ulimit -n 2048 2>/dev/null || true
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 [ -f /usr/local/lib/libdisable_close_range.so ] && export LD_PRELOAD=/usr/local/lib/libdisable_close_range.so
 [ -f /usr/local/lib/libno_close_range.so ] && export LD_PRELOAD=/usr/local/lib/libno_close_range.so
@@ -309,17 +318,17 @@ export QT_STYLE_OVERRIDE=gtk2
 $gpu_exports
 
 mkdir -p /etc/pulse "$target_home/.config/pulse" "$target_home/Desktop" "$target_home/.config/gtk-3.0" /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
-for app_id in asl-hub code chromium thunar xfce4-terminal synaptic pavucontrol; do
-    if [ -f "/usr/share/applications/${app_id}.desktop" ] && [ ! -f "$target_home/Desktop/${app_id}.desktop" ]; then
-        cp -f "/usr/share/applications/${app_id}.desktop" "$target_home/Desktop/" 2>/dev/null || true
+for app_id in code chromium thunar xfce4-terminal synaptic pavucontrol; do
+    if [ -f "/usr/share/applications/\${app_id}.desktop" ] && [ ! -f "$target_home/Desktop/\${app_id}.desktop" ]; then
+        cp -f "/usr/share/applications/\${app_id}.desktop" "$target_home/Desktop/" 2>/dev/null || true
     fi
 done
 for f in "$target_home/Desktop"/*.desktop; do
-    if [ -f "$f" ]; then
-        chmod +x "$f" 2>/dev/null || true
-        chk=$(sha256sum "$f" 2>/dev/null | awk '{print $1}')
-        gio set -t string "$f" metadata::xfce-exe-checksum "$chk" 2>/dev/null || true
-        gio set -t string "$f" metadata::trusted true 2>/dev/null || true
+    if [ -f "\$f" ]; then
+        chmod +x "\$f" 2>/dev/null || true
+        chk=\$(sha256sum "\$f" 2>/dev/null | awk '{print \$1}')
+        gio set -t string "\$f" metadata::xfce-exe-checksum "\$chk" 2>/dev/null || true
+        gio set -t string "\$f" metadata::trusted true 2>/dev/null || true
     fi
 done
 if [ ! -f "$target_home/.config/gtk-3.0/settings.ini" ]; then
@@ -375,13 +384,17 @@ mkdir -p /tmp/.cache 2>/dev/null
 
 # Start system and session D-Bus daemons on standard socket paths
 mkdir -p /run/dbus /run/user/$target_uid 2>/dev/null
+chmod 755 /run/dbus 2>/dev/null
 chmod 700 /run/user/$target_uid 2>/dev/null
-if ! pgrep -f "dbus-daemon --system" >/dev/null 2>&1; then
+
+if ! dbus-send --system --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.Peer.Ping >/dev/null 2>&1; then
+    pkill -9 -f "dbus-daemon.*--system" 2>/dev/null || true
     rm -f /run/dbus/system_bus_socket /run/dbus/pid 2>/dev/null
     /usr/bin/dbus-daemon --system --fork 2>/dev/null || /usr/bin/dbus-daemon --system >/tmp/dbus-system.log 2>&1 &
 fi
 
-if ! pgrep -f "dbus-daemon --session.*run/user/$target_uid/bus" >/dev/null 2>&1; then
+if ! dbus-send --address=unix:path=/run/user/$target_uid/bus --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.Peer.Ping >/dev/null 2>&1; then
+    pkill -9 -f "dbus-daemon.*--session" 2>/dev/null || true
     rm -f /run/user/$target_uid/bus /run/user/$target_uid/bus.pid 2>/dev/null
     /usr/bin/dbus-daemon --session --address=unix:path=/run/user/$target_uid/bus --fork 2>/dev/null || /usr/bin/dbus-daemon --session --address=unix:path=/run/user/$target_uid/bus >/tmp/dbus-session.log 2>&1 &
 fi
@@ -439,14 +452,14 @@ rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/x
     xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -n -t bool -s true 2>/dev/null || true
 ) &
 
-rm -f /etc/xdg/autostart/light-locker.desktop "$HOME/.config/autostart/light-locker.desktop" 2>/dev/null || true
+rm -f /etc/xdg/autostart/light-locker.desktop "$target_home/.config/autostart/light-locker.desktop" 2>/dev/null || true
 
-if command -v xfce4-session >/dev/null 2>&1; then
-    exec xfce4-session
-elif command -v startxfce4 >/dev/null 2>&1; then
+if command -v startxfce4 >/dev/null 2>&1; then
     exec startxfce4
 elif [ -x /usr/bin/startxfce4 ]; then
     exec /usr/bin/startxfce4
+elif command -v xfce4-session >/dev/null 2>&1; then
+    exec xfce4-session
 elif [ -x /usr/bin/xfce4-session ]; then
     exec /usr/bin/xfce4-session
 else
@@ -457,13 +470,15 @@ LAUNCHER_EOF
     asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp -f '$launcher_script' '$DEBIANPATH/tmp/asl-start-xfce.sh' && chmod 755 '$DEBIANPATH/tmp/asl-start-xfce.sh'" 2>/dev/null || cp -f "$launcher_script" "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
     rm -f "$launcher_script" 2>/dev/null || true
     LAUNCHER_PID=
-    asl_exec "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash /tmp/asl-start-xfce.sh >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1" &
+    asl_exec "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c 'ulimit -n 2048 2>/dev/null || true; exec /bin/bash /tmp/asl-start-xfce.sh' >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1" &
     LAUNCHER_PID=$!
     SESSION_PID=
     SESSION_START=
     for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
         for name in xfce4-session xfwm4 startxfce4; do
-            for pid in $(asl_chroot_exec "pgrep -x $name" 2>/dev/null); do
+            local found_pids
+            found_pids=$(asl_exec "pgrep -x '$name' || pgrep -f '$name'" 2>/dev/null || pgrep -x "$name" 2>/dev/null || pgrep -f "$name" 2>/dev/null || true)
+            for pid in $found_pids; do
                 st=$(pid_start_time "$pid")
                 if [ -n "$st" ] && process_matches "$pid" "$name" "$st"; then
                     SESSION_PID="$pid"

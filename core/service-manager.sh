@@ -473,6 +473,29 @@ asl_service_check() {
         echo "[!] LOW STORAGE WARNING: Only ${free_mb}MB free on /data partition! Run 'asl clean' to free up space."
     fi
 
+    # 10. Forced Landscape Orientation & Auto-Rotation Override Enforcement
+    local rot_conf="${HOME:-/data/data/com.termux/files/home}/.config/asl/rotation.conf"
+    local rot_state="${prefix}/tmp/.asl_rotation_state"
+    local is_forced_rot=0 target_rot=1
+    if [ -f "$rot_conf" ]; then
+        is_forced_rot=$(grep -E '^FORCED_LANDSCAPE=' "$rot_conf" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+        target_rot=$(grep -E '^USER_ROTATION=' "$rot_conf" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    elif [ -f "$rot_state" ]; then
+        is_forced_rot=$(grep -E '^FORCED_LANDSCAPE=' "$rot_state" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+        target_rot=$(grep -E '^USER_ROTATION=' "$rot_state" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    fi
+    target_rot="${target_rot:-1}"
+    if [ "$is_forced_rot" = "1" ] && command -v su >/dev/null 2>&1; then
+        local cur_accel cur_u_rot
+        cur_accel=$(su -c "settings get system accelerometer_rotation" 2>/dev/null | tr -d '[:space:]')
+        cur_u_rot=$(su -c "settings get system user_rotation" 2>/dev/null | tr -d '[:space:]')
+        if [ "$cur_accel" = "1" ] || [ "$cur_u_rot" != "$target_rot" ]; then
+            echo "[!] Native Android auto-rotation active while Forced Landscape is configured — enforcing 90° Landscape override..."
+            su -c "settings put system accelerometer_rotation 0; settings put system user_rotation $target_rot" 2>/dev/null || true
+            healed=$((healed + 1))
+        fi
+    fi
+
     if [ "$healed" -eq 0 ]; then
         echo "[✓] All 24/7 background services are healthy and running."
     else

@@ -71,11 +71,6 @@ run_preset_workstation() {
     run_preset_dev
     run_preset_security
 
-    echo "[*] Deploying ASL Hub GTK3 Control Center to Debian Desktop..."
-    if [ -f "$SCRIPT_DIR/desktop/asl-hub-installer.sh" ]; then
-        bash "$SCRIPT_DIR/desktop/asl-hub-installer.sh" install || true
-    fi
-
     echo "[✓] Full Linux Workstation setup completed!"
 }
 
@@ -91,7 +86,7 @@ asl_wizard_interactive() {
     echo "   [1] 🎮 GPU & Graphics      (Turnip Vulkan, MangoHud, Gamepad)"
     echo "   [2] 💻 Software Developer   (Python, Node.js, Neovim, Go, Rust, VS Code)"
     echo "   [3] 🛡️ Security Auditing    (Nmap, Wireshark/TShark, Netcat, Socat)"
-    echo "   [4] 🚀 Full Workstation    (Install All Toolsuites + ASL Hub Desktop App)"
+    echo "   [4] 🚀 Full Workstation    (Install All Toolsuites)"
     echo ""
     read -p " Enter choice [1-4] (default: 4): " choice
     choice="${choice:-4}"
@@ -131,7 +126,6 @@ asl_wizard_interactive() {
     echo "============================================================"
     echo " Next steps:"
     echo "   • Launch Linux Desktop: run 'asl desktop start'"
-    echo "   • Open Control Center:  run 'asl hub' or click 'ASL Hub' on Desktop"
     echo "   • Launch Interactive Console: run 'asl'"
     echo "============================================================"
 }

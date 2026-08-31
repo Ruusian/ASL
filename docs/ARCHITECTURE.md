@@ -22,7 +22,7 @@ ASL is an enterprise-grade, high-performance Linux container and subsystem manag
 |     Multi-Distro Linux Subsystem RootFS (/data/local/tmp/...)    |
 |   (Debian Modded / Trixie, Ubuntu 24.04, Arch, Alpine, Kali)      |
 |    - Mesa Turnip Vulkan + Zink OpenGL/Vulkan Driver Stack         |
-|    - GTK3 GUI Control Center (asl-hub using os.posix_spawn)       |
+|    - Systemd Emulation Engine & Custom Desktop Environments       |
 +-------------------------------------------------------------------+
 ```
 
@@ -40,12 +40,7 @@ Subsystem execution is transparently routed via helper functions:
 
 ## Critical System Invariants
 
-### 1. Process Spawning Invariant (`os.posix_spawn`)
-- **Requirement:** Any Python / GTK3 desktop interface (`asl-gui` / `asl-hub`) running inside the rootfs **MUST** use `os.posix_spawn` (`safe_spawn`) to spawn subprocesses.
-- **Why:** GTK3 initializes background GMainLoop event threads. Under containerized chroot environments on Android Linux kernels, standard `os.fork()` / `subprocess.Popen` deadlocks in glibc `atfork` handlers and causes child processes to lock up at 100% CPU utilization.
-- **Implementation:** Built-in `os.posix_spawn` process runner inside `desktop/asl-hub-installer.sh` (`asl-control-center`).
-
-### 2. Mount Safety & Error Rollback Invariant
+### 1. Mount Safety & Error Rollback Invariant
 - **Requirement:** Mount managers (`core/mount-chroot.sh`) enforce private bind mounts (`--make-rprivate` and `--make-rslave`) without mounting host Android system partitions (`/system`, `/vendor`, `/apex`).
 - **Rollback Trap:** Implements `trap cleanup_on_error ERR` to automatically unmount partially mounted filesystems if an error occurs during initialization.
 

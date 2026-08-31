@@ -11,7 +11,6 @@ The `asl` binary in `$PREFIX/bin/asl` (and `$PREFIX/share/asl/bin/asl`) serves a
 | **DNS Synchronization** | `asl dns [sync\|status]` | Synchronizes active Android nameservers into chroot `/etc/resolv.conf`. |
 | **Phantom Process Killer**| `asl ppk [off\|on\|status]` | Disables or inspects Android 12+ background process limits. |
 | **Setup Wizard** | `asl wizard` or `asl init` | Guided first-time setup wizard for Graphics, Dev, Security, or Full Workstation presets. |
-| **Interactive GUI Hub** | `asl hub` or `asl gui` | Launches the GTK3 Python Control Center dashboard ("ASL Hub") inside XFCE4. |
 | **GPU Acceleration** | `asl gpu [profile\|apply]` | Auto-detects and applies Turnip/Zink GPU acceleration profiles. |
 | **Turbo Governor** | `asl turbo` or `asl gpu` | Applies maximum CPU/GPU performance governor and OOM protection. |
 | **Bluetooth Gamepad** | `asl gamepad [status\|sync\|test]` | Synchronizes and tests host `/dev/input` evdev gamepads into chroot. |
@@ -66,6 +65,5 @@ All core helper scripts reside in `core/`, `desktop/`, `gaming/`, and `$PREFIX/s
 - `core/asl-conf.sh`: Declarative `/etc/asl.conf` configuration manager.
 - `core/asl-path.sh`: Host <-> Subsystem path translation utility.
 - `core/termux-bridge.sh`: Android host bridge (wakelock, clipboard, notifications, shortcuts).
-- `desktop/asl-hub-installer.sh`: Python3 + GTK3 desktop launcher installer (`os.posix_spawn` invariant).
 - `desktop/remote.sh`: Modular remote bridge dispatcher (LAN SSH, Oracle VPS, Serveo, Ngrok).
 - `core/gpu-profile.sh`: Qualcomm Turnip and Mesa Zink GPU hardware acceleration profile engine.

@@ -152,11 +152,12 @@ asl_exec "
             printf '\n# ASL Environment Isolation\nunset PREFIX TERMUX_VERSION TERMUX_APP_PID TERMUX_MAIN_PACKAGE_NAME TERMUX__PREFIX TERMUX__HOME TERMUX__ROOTFS_DIR TMPDIR\nulimit -n 2048 2>/dev/null || true\n' >> \"\$rc\" 2>/dev/null || true
         fi
     done
+    mkdir -p \"$DEBIANPATH/etc/security\" 2>/dev/null || true
+    printf '* soft nofile 2048\n* hard nofile 2048\nroot soft nofile 2048\nroot hard nofile 2048\n' > \"$DEBIANPATH/etc/security/limits.conf\" 2>/dev/null || true
 
     # Provision kernel close_range workaround shim to prevent Android kernel 4.14 close_range spin locks in Python 3.13 / glibc
     mkdir -p \"$DEBIANPATH/usr/local/lib\" \"$DEBIANPATH/etc\" 2>/dev/null || true
     if [ ! -f \"$DEBIANPATH/usr/local/lib/libdisable_close_range.so\" ]; then
-        local cc_cmd
         cc_cmd=\$(chroot \"$DEBIANPATH\" /bin/sh -c 'command -v gcc || command -v clang || command -v cc' 2>/dev/null || true)
         if [ -n \"\$cc_cmd\" ]; then
             cat <<'EOFCR' > \"$DEBIANPATH/tmp/libdisable_close_range.c\"

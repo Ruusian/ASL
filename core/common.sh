@@ -46,7 +46,7 @@ asl_exec() {
         root|*)
             local enc_cmd
             enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-            su -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; printf '%s' '$enc_cmd' | base64 -d | bash"
+            su -c "ulimit -n 2048 2>/dev/null || true; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/data/data/com.termux/files/usr/bin:\$PATH; printf '%s' '$enc_cmd' | base64 -d | bash"
             ;;
     esac
 }
@@ -60,12 +60,7 @@ asl_chroot_exec() {
         root|*)
             local enc_cmd
             enc_cmd=$(printf '%s' "$cmd" | base64 | tr -d '\n')
-            if [[ "$cmd" == *$'\n'* ]] || [[ "$cmd" == *"'"* ]]; then
-                local tmp_dir="$DEBIANPATH/tmp"
-                su -c "mkdir -p '$tmp_dir'; tmpf=\$(mktemp '$tmp_dir/.asl_chroot_cmd_XXXXXX.sh' 2>/dev/null) || tmpf='$tmp_dir/.asl_chroot_cmd_\$\$.sh'; printf '%s' '$enc_cmd' | base64 -d > \"\$tmpf\" && chmod 700 \"\$tmpf\" && chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c 'ulimit -n 2048 2>/dev/null || true; exec /bin/bash /tmp/\${tmpf##*/}'; res=\$?; rm -f \"\$tmpf\" 2>/dev/null; exit \$res"
-            else
-                su -c "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c \"ulimit -n 2048 2>/dev/null || true; \$(printf '%s' '$enc_cmd' | base64 -d)\""
-            fi
+            su -c "ulimit -n 2048 2>/dev/null || true; printf '%s' '$enc_cmd' | base64 -d | chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -s"
             ;;
     esac
 }
@@ -146,10 +141,13 @@ is_mounted() {
         return 0
     fi
     local target="${1:-$DEBIANPATH}"
-    (awk -v target="$target" '$2 == target || index($2, target "/") == 1 {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null) && return 0
+    if [ "$target" = "/" ]; then
+        return 0
+    fi
+    (awk -v target="$target" '$2 == target "/dev" || $2 == target "/proc" || $2 == target {found=1; exit} END {exit !found}' /proc/mounts 2>/dev/null) && return 0
     local enc_target
     enc_target=$(printf '%s' "$target" | base64 | tr -d '\n')
-    su -c "target=\$(echo $enc_target | base64 -d); awk -v target=\"\$target\" '\$2 == target || index(\$2, target \"/\") == 1 {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
+    su -c "target=\$(echo $enc_target | base64 -d); awk -v target=\"\$target\" '\$2 == target \"/dev\" || \$2 == target \"/proc\" || \$2 == target {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
 }
 
 status_label() {

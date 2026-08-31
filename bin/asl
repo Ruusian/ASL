@@ -281,7 +281,6 @@ show_help() {
     echo "  host [app]       Launch Modded Debian applications & launchers"
     echo "                   Options: xfce, list, launch <id>"
     echo "  apps             Alias for 'asl host' launcher menu"
-    echo "  hub, asl-hub     Deploy/Launch GTK3 Control Center (ASL Hub)"
     echo "  dev-suite [act]  Install IDE & dev environments (python|webdev|neovim|go|rust|vscode)"
     echo "  security-suite   Defensive security audit & tools (basic|audit|all|nmap|wireshark)"
     echo "  clean [safe|deep] Purge package archives, caches, and temporary files"
@@ -303,6 +302,8 @@ show_help() {
     echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
     echo ""
     echo "Termux & Android Bridge Commands:"
+    echo "  screen-res [res] Toggle/set Android screen resolution & saved DPI (toggle|reset|1080p|720p|set <WxH> [DPI])"
+    echo "  rotation [mode]  Manage Android orientation & forced landscape (landscape|auto|off|portrait|toggle)"
     echo "  open <target>    Open file or URL in default Android host application"
     echo "  clip [copy|paste] Set or read Android system clipboard content"
     echo "  clip-sync [start|stop|status] Bi-directional clipboard sync daemon"
@@ -563,8 +564,30 @@ overview() {
     local swap_total swap_free swap_used swap_pct governor
     local batt_level batt_temp cpu_temp batt_str cpu_str host_ip wlock_status
     local up_str freq_str swap_from_zram remote_summary audio_status omni_lbl chroot_disk=""
+    local res_str rot_str wm_size_out rot_out user_rot
 
     host_ip=$(asl_host_ip)
+
+    wm_size_out=$(wm size 2>/dev/null || timeout 1 su -c "wm size" 2>/dev/null || true)
+    if echo "$wm_size_out" | grep -q "Override size:"; then
+        res_str=$(echo "$wm_size_out" | awk '/Override size:/ {print $3}')" (OVR)"
+    else
+        res_str=$(echo "$wm_size_out" | awk '/Physical size:/ {print $3}')
+    fi
+    [ -n "$res_str" ] || res_str="Native"
+
+    rot_out=$(settings get system accelerometer_rotation 2>/dev/null || timeout 1 su -c "settings get system accelerometer_rotation" 2>/dev/null || true)
+    if [ "$rot_out" = "0" ]; then
+        user_rot=$(settings get system user_rotation 2>/dev/null || timeout 1 su -c "settings get system user_rotation" 2>/dev/null || true)
+        case "$user_rot" in
+            1) rot_str="Landscape" ;;
+            3) rot_str="Rev-Land" ;;
+            2) rot_str="Rev-Port" ;;
+            *) rot_str="Portrait" ;;
+        esac
+    else
+        rot_str="Auto-Rot"
+    fi
 
     wlock_status="OFF"
     local wlock_lbl=""
@@ -699,7 +722,7 @@ overview() {
         printf "%s╭─── %sAndroid Subsystem for Linux (ASL)%s %s──────────────────────── v2.5.1 ──%s╮%s\n" "$C_CYAN" "$C_YELLOW$C_BOLD" "$C_CYAN" "$C_SHADOW" "$C_CYAN" "$C_RESET"
         printf "%s│%s  %sChroot:    %s%s  %sDesktop:   %s%s  %sDisplay:   %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$chroot_lbl" "$C_BOLD" "$C_RESET" "$desktop_lbl" "$C_BOLD" "$C_RESET" "$x11_lbl" "$C_CYAN" "$C_RESET"
         printf "%s│%s  %sCPU Temp:  %s%s%-4s%s %s %sCPU Load:  %s%s%-9.9s%s  %sGPU:       %s%s%-11.11s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$cpu_str" "$C_RESET" "$thermal_badge" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$load_avg" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_YELLOW" "$ASL_GPU_PROFILE" "$C_RESET" "$C_CYAN" "$C_RESET"
-        printf "%s│%s  %sBattery:   %s%s%-11s%s  %sHost IP:   %s%s%-13.13s%s  %sOmni:     %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_RESET" "$C_BOLD" "$C_RESET" "$omni_compact_lbl" "$C_CYAN" "$C_RESET"
+        printf "%s│%s  %sDisplay:   %s%s%-13.13s%s  %sRotation:  %s%s%-11.11s%s  %sHost IP:   %s%s%-12.12s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$res_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$rot_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_RESET" "$C_CYAN" "$C_RESET"
         printf "%s│%s  %sRAM:%s  [" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET"
         draw_bar "$mem_pct" 6
         printf "] %3d%% (%4d/%4dMB)  %sSwap:%s %3d%% (%4dMB)  %sUp:%s %s%-8.8s%s  %s│%s\n" \
@@ -715,7 +738,8 @@ overview() {
     printf "%s│%s  %sBattery:   %s%s%-11s%s  %sWake-Lock: %s%s  %sAudio:     %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$batt_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$wlock_lbl" "$C_BOLD" "$C_RESET" "$audio_lbl" "$C_CYAN" "$C_RESET"
     printf "%s│%s  %sHost IP:   %s%s%-15.15s%s  %sWAN:       %s%s%-5.5s%s  %sOmniRoute: %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$host_ip" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$wan_ping" "$C_RESET" "$C_BOLD" "$C_RESET" "$omni_lbl" "$C_CYAN" "$C_RESET"
     printf "%s│%s  %sAutostart: %s%s  %sOOM:       %s%s%-11.11s%s  %sWatchdog:  %s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$boot_lbl" "$C_BOLD" "$C_RESET" "$C_GREEN" "$oom_status" "$C_RESET" "$C_BOLD" "$C_RESET" "$wdog_lbl" "$C_CYAN" "$C_RESET"
-    printf "%s│%s  %sStorage:   %s%s%-21.21s%s    %sRemote:    %s%s%-21.21s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_RESET" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sScreen:    %s%s%-15.15s%s  %sRotation:  %s%s%-11.11s%s  %sRemote:    %s%s%-11.11s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$res_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$rot_str" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$remote_summary" "$C_RESET" "$C_CYAN" "$C_RESET"
+    printf "%s│%s  %sStorage:   %s%s%-56.56s%s  %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$disk_data" "$C_RESET" "$C_CYAN" "$C_RESET"
 
     asl_remote_details
 
@@ -886,17 +910,13 @@ show_host_apps_menu() {
     echo ""
     echo "  Actions:"
     echo "   [D] Start Full XFCE4 Desktop"
-    echo "   [H] Launch ASL Hub Control Center"
     echo "   [S] Sync Desktop Launchers into Termux"
     echo "   [Q] Return"
     echo ""
-    read -r -p "Select application [1-$count, or D/H/S/Q]: " choice_app
+    read -r -p "Select application [1-$count, or D/S/Q]: " choice_app
     case "$choice_app" in
         [dD])
             bash "$ASL_DIR/desktop/start-desktop.sh" start
-            ;;
-        [hH])
-            launch_desktop_app "asl-hub.desktop"
             ;;
         [sS])
             bash "$ASL_DIR/desktop/start-desktop.sh" sync-apps
@@ -971,16 +991,16 @@ dashboard() {
         printf "%s╭── Linux Chroot ──────────────────╮%s  %s╭── Desktop & Remote ──────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         render_opt 1 "s" "Start / Mount Chroot" "$sel"; printf "  "; render_opt 7 "d" "Start XFCE4 Desktop" "$sel"; echo ""
         render_opt 2 "x" "Stop & Unmount Chroot" "$sel"; printf "  "; render_opt 8 "" "Desktop Status / Stop" "$sel"; echo ""
-        render_opt 3 "e" "Open Root Shell" "$sel"; printf "  "; render_opt 9 "" "Theme & Resolution" "$sel"; echo ""
+        render_opt 3 "e" "Open Root Shell" "$sel"; printf "  "; render_opt 9 "" "Desktop Themes & Window" "$sel"; echo ""
         render_opt 4 "" "Run Single Command" "$sel"; printf "  "; render_opt 10 "v" "Remote Access Manager" "$sel"; echo ""
         render_opt 5 "y" "Snapshots & Backups" "$sel"; printf "  "; render_opt 11 "" "PulseAudio Control" "$sel"; echo ""
         render_opt 6 "a" "Android AID Groups" "$sel"; printf "  "; render_opt 12 "" "Sync Debian Launchers" "$sel"; echo ""
         printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
-        printf "%s╭── GPU & Performance ─────────────╮%s  %s╭── Android Bridge ────────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
+        printf "%s╭── GPU & Performance ─────────────╮%s  %s╭── Android Display & Bridge ─────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         render_opt 13 "g" "GPU Hardware Profile" "$sel"; printf "  "; render_opt 17 "k" "CPU Wake Lock Toggle" "$sel"; echo ""
-        render_opt 14 "m" "Performance Profile" "$sel"; printf "  "; render_opt 18 "o" "Open File in Host App" "$sel"; echo ""
-        render_opt 15 "f" "MangoHud & Gamepad" "$sel"; printf "  "; render_opt 19 "c" "System Clipboard Sync" "$sel"; echo ""
-        render_opt 16 "j" "Benchmark Hardware" "$sel"; printf "  "; render_opt 20 "n" "Notification / Toast" "$sel"; echo ""
+        render_opt 14 "m" "Performance Profile" "$sel"; printf "  "; render_opt 18 "" "Display Resolution Toggle" "$sel"; echo ""
+        render_opt 15 "f" "MangoHud & Gamepad" "$sel"; printf "  "; render_opt 19 "o" "Forced Landscape / Rotate" "$sel"; echo ""
+        render_opt 16 "j" "Benchmark Hardware" "$sel"; printf "  "; render_opt 20 "c" "Host Share & Clipboard" "$sel"; echo ""
         printf "%s╰──────────────────────────────────╯%s  %s╰──────────────────────────────────╯%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         printf "%s╭── Diagnostics & System ──────────╮%s  %s╭── AI & Service Hub ──────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         render_opt 21 "p" "Resource Manager" "$sel"; printf "  "; render_opt 25 "l" "Apps & Dev Suites" "$sel"; echo ""
@@ -1110,9 +1130,8 @@ dashboard() {
                 f|F) choice="15"; need_refresh=1 ;;
                 j|J) choice="16"; need_refresh=1 ;;
                 k|K) choice="17"; need_refresh=1 ;;
-                o|O) choice="18"; need_refresh=1 ;;
-                c|C) choice="19"; need_refresh=1 ;;
-                n|N) choice="20"; need_refresh=1 ;;
+                o|O) choice="19"; need_refresh=1 ;;
+                c|C|n|N) choice="20"; need_refresh=1 ;;
                 p|P) choice="21"; need_refresh=1 ;;
                 t|T) choice="22"; need_refresh=1 ;;
                 u|U) choice="24"; need_refresh=1 ;;
@@ -1193,8 +1212,13 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             9)
-                echo "Appearance options: 1) Theme preset  2) Termux:X11 Resolution  3) List all themes"
-                read -r -p "Select option [1-3]: " app_act
+                echo "Display & Appearance Options:"
+                echo "  1) Theme preset"
+                echo "  2) Android Screen Resolution & Density (Toggle 1080x1920 ↔ Native, Reset, Set)"
+                echo "  3) Android Screen Rotation (Forced Landscape, Auto-Rotate, Portrait, Toggle)"
+                echo "  4) Termux:X11 Window Resolution"
+                echo "  5) List all themes"
+                read -r -p "Select option [1-5]: " app_act
                 case "$app_act" in
                     1)
                         echo "Presets: blacklight, win11, win11-light, win11-compact, tokyonight, aesthetic, graphite, habiboow, dark, light, nord, dracula, greybird"
@@ -1202,6 +1226,48 @@ dashboard() {
                         [ -n "$t_preset" ] && bash "$REAL_SCRIPT" theme "$t_preset"
                         ;;
                     2)
+                        echo "Android Screen Resolution & Density:"
+                        echo "  1) Toggle 1080x1920 ↔ Native Display"
+                        echo "  2) Reset to Native Hardware Display"
+                        echo "  3) Set 1080x1920 FHD (163 DPI)"
+                        echo "  4) Set 720x1280 HD (120 DPI)"
+                        echo "  5) Set Custom Resolution & Density (WxH [DPI])"
+                        echo "  6) Save Current Active Resolution & DPI Profile"
+                        echo "  7) Show Current Display Status"
+                        read -r -p "Select action [1-7, default: 1]: " res_act
+                        case "$res_act" in
+                            2) bash "$REAL_SCRIPT" screen-res reset ;;
+                            3) bash "$REAL_SCRIPT" screen-res 1080p ;;
+                            4) bash "$REAL_SCRIPT" screen-res 720p ;;
+                            5)
+                                read -r -p "Resolution (e.g. 1080x1920): " c_res
+                                read -r -p "Density DPI (optional, e.g. 163): " c_den
+                                bash "$REAL_SCRIPT" screen-res set "$c_res" "$c_den"
+                                ;;
+                            6) bash "$REAL_SCRIPT" screen-res save ;;
+                            7) bash "$REAL_SCRIPT" screen-res status ;;
+                            *) bash "$REAL_SCRIPT" screen-res toggle ;;
+                        esac
+                        ;;
+                    3)
+                        echo "Android Screen Rotation & Forced Landscape:"
+                        echo "  1) Toggle Forced Landscape (ON / OFF)"
+                        echo "  2) Enable Forced Landscape (90° Locked)"
+                        echo "  3) Enable Sensor Auto-Rotation (accelerometer on)"
+                        echo "  4) Lock Current Orientation (auto-rotate off)"
+                        echo "  5) Lock to Portrait Mode (0°)"
+                        echo "  6) Show Rotation & Orientation Status"
+                        read -r -p "Select action [1-6, default: 1]: " rot_act
+                        case "$rot_act" in
+                            2) bash "$REAL_SCRIPT" rotation landscape ;;
+                            3) bash "$REAL_SCRIPT" rotation auto ;;
+                            4) bash "$REAL_SCRIPT" rotation off ;;
+                            5) bash "$REAL_SCRIPT" rotation portrait ;;
+                            6) bash "$REAL_SCRIPT" rotation status ;;
+                            *) bash "$REAL_SCRIPT" rotation toggle ;;
+                        esac
+                        ;;
+                    4)
                         echo "Presets: 720p, 1080p, native"
                         read -r -p "Resolution preset: " r_preset
                         if [ -n "$r_preset" ]; then
@@ -1213,7 +1279,7 @@ dashboard() {
                             fi
                         fi
                         ;;
-                    3)
+                    5)
                         bash "$REAL_SCRIPT" theme list
                         ;;
                 esac
@@ -1395,33 +1461,81 @@ dashboard() {
                     *) bash "$REAL_SCRIPT" wakelock status ;;
                 esac
                 pause_dashboard ;;
-            18|o|O)
-                read -r -p "Enter file path or URL to open in Android host: " target_open
-                if [ -n "$target_open" ]; then bash "$REAL_SCRIPT" open "$target_open"; fi
-                pause_dashboard ;;
-            19|c|C)
-                echo "Clipboard actions: 1) paste (read)  2) copy (write)  3) start sync daemon  4) stop sync daemon  5) sync status"
-                read -r -p "Select action [1-5]: " c_act
-                case "$c_act" in
-                    2) read -r -p "Text to copy to clipboard: " c_text; bash "$REAL_SCRIPT" clip copy "$c_text" ;;
-                    3) bash "$REAL_SCRIPT" clip-sync start ;;
-                    4) bash "$REAL_SCRIPT" clip-sync stop ;;
-                    5) bash "$REAL_SCRIPT" clip-sync status ;;
-                    *) bash "$REAL_SCRIPT" clip paste ;;
+            18)
+                echo "Android Screen Resolution & Density:"
+                echo "  1) Toggle 1080x1920 ↔ Native Display"
+                echo "  2) Reset to Native Hardware Display"
+                echo "  3) Set 1080x1920 FHD (163 DPI)"
+                echo "  4) Set 720x1280 HD (120 DPI)"
+                echo "  5) Set Custom Resolution & Density (WxH [DPI])"
+                echo "  6) Save Current Active Resolution & DPI Profile"
+                echo "  7) Show Current Display Status"
+                read -r -p "Select action [1-7, default: 1]: " res_act
+                case "$res_act" in
+                    2) bash "$REAL_SCRIPT" screen-res reset ;;
+                    3) bash "$REAL_SCRIPT" screen-res 1080p ;;
+                    4) bash "$REAL_SCRIPT" screen-res 720p ;;
+                    5)
+                        read -r -p "Resolution (e.g. 1080x1920): " c_res
+                        read -r -p "Density DPI (optional, e.g. 163): " c_den
+                        bash "$REAL_SCRIPT" screen-res set "$c_res" "$c_den"
+                        ;;
+                    6) bash "$REAL_SCRIPT" screen-res save ;;
+                    7) bash "$REAL_SCRIPT" screen-res status ;;
+                    *) bash "$REAL_SCRIPT" screen-res toggle ;;
                 esac
                 pause_dashboard ;;
-            20|n|N)
-                echo "Notification actions: 1) Toast popup  2) Banner notification"
-                read -r -p "Select action [1-2]: " n_act
-                case "$n_act" in
-                    2)
+            19|o|O)
+                echo "Android Screen Rotation & Forced Landscape:"
+                echo "  1) Toggle Forced Landscape (ON / OFF)"
+                echo "  2) Enable Forced Landscape (90° Locked)"
+                echo "  3) Enable Sensor Auto-Rotation (accelerometer on)"
+                echo "  4) Lock Current Orientation (auto-rotate off)"
+                echo "  5) Lock to Portrait Mode (0°)"
+                echo "  6) Show Rotation & Orientation Status"
+                read -r -p "Select action [1-6, default: 1]: " rot_act
+                case "$rot_act" in
+                    2) bash "$REAL_SCRIPT" rotation landscape ;;
+                    3) bash "$REAL_SCRIPT" rotation auto ;;
+                    4) bash "$REAL_SCRIPT" rotation off ;;
+                    5) bash "$REAL_SCRIPT" rotation portrait ;;
+                    6) bash "$REAL_SCRIPT" rotation status ;;
+                    *) bash "$REAL_SCRIPT" rotation toggle ;;
+                esac
+                pause_dashboard ;;
+            20|c|C|n|N)
+                echo "Android Host Integration & Clipboard:"
+                echo "  1) Open File / URL in Android Host App"
+                echo "  2) Copy Text to System Clipboard"
+                echo "  3) Paste from System Clipboard"
+                echo "  4) Clipboard Sync Daemon (Start / Stop / Status)"
+                echo "  5) Show Android Toast Popup"
+                echo "  6) Send System Notification Banner"
+                read -r -p "Select action [1-6, default: 1]: " h_act
+                case "$h_act" in
+                    2) read -r -p "Text to copy: " c_text; bash "$REAL_SCRIPT" clip copy "$c_text" ;;
+                    3) bash "$REAL_SCRIPT" clip paste ;;
+                    4)
+                        echo "Clipboard Sync: 1) Start  2) Stop  3) Status"
+                        read -r -p "Choice [1-3]: " cs_choice
+                        case "$cs_choice" in
+                            1) bash "$REAL_SCRIPT" clip-sync start ;;
+                            2) bash "$REAL_SCRIPT" clip-sync stop ;;
+                            *) bash "$REAL_SCRIPT" clip-sync status ;;
+                        esac
+                        ;;
+                    5)
+                        read -r -p "Toast message text: " t_msg
+                        [ -n "$t_msg" ] && bash "$REAL_SCRIPT" toast "$t_msg"
+                        ;;
+                    6)
                         read -r -p "Notification title: " n_title
                         read -r -p "Notification content: " n_text
-                        if [ -n "$n_text" ]; then bash "$REAL_SCRIPT" notify "${n_title:-ASL}" "$n_text"; fi
+                        [ -n "$n_text" ] && bash "$REAL_SCRIPT" notify "${n_title:-ASL}" "$n_text"
                         ;;
                     *)
-                        read -r -p "Toast message text: " n_text
-                        if [ -n "$n_text" ]; then bash "$REAL_SCRIPT" toast "$n_text"; fi
+                        read -r -p "Enter file path or URL to open in Android host: " target_open
+                        [ -n "$target_open" ] && bash "$REAL_SCRIPT" open "$target_open"
                         ;;
                 esac
                 pause_dashboard ;;
@@ -1898,6 +2012,12 @@ case "${1:-}" in
         RES="${1:-status}"
         SCALE="${2:-}"
         case "$RES" in
+            toggle|switch|reset|native|set|save|host|screen)
+                if [ "$RES" = "host" ] || [ "$RES" = "screen" ]; then
+                    shift || true
+                fi
+                bash "$ASL_DIR/core/termux-bridge.sh" screen-res "$@"
+                ;;
             720p)
                 pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
                 termux-x11 :0 -geometry 1280x720 +iglx -nolisten tcp -ac >/dev/null 2>&1 &
@@ -1908,19 +2028,21 @@ case "${1:-}" in
                 termux-x11 :0 -geometry 1920x1080 +iglx -nolisten tcp -ac >/dev/null 2>&1 &
                 echo "[✓] Termux:X11 display resolution set to 1920x1080."
                 ;;
-            native)
-                pkill -f "termux-x11.*:[0-9]" 2>/dev/null || true
-                termux-x11 :0 +iglx -nolisten tcp -ac >/dev/null 2>&1 &
-                echo "[✓] Termux:X11 display resolution set to native."
-                ;;
             status|"")
+                bash "$ASL_DIR/core/termux-bridge.sh" screen-res status 2>/dev/null || true
+                echo ""
                 cur_res=$(ps aux | grep -i termux-x11 | grep -v grep | grep -oE '\-geometry [0-9]+x[0-9]+' || echo "native / default")
                 echo "Current Termux:X11 Resolution: ${cur_res#-geometry }"
-                echo "Usage: asl resolution [720p|1080p|native] [scale]"
+                echo "Usage: asl screen-res [toggle|reset|1080p|720p|set <WxH> [DPI]|save|status]"
+                echo "       asl resolution [720p|1080p|native] [scale]"
                 ;;
             *)
-                echo "Error: Invalid resolution preset '$RES'. Use: 720p, 1080p, native"
-                exit 1
+                if [[ "$RES" =~ ^[0-9]+x[0-9]+$ ]]; then
+                    bash "$ASL_DIR/core/termux-bridge.sh" screen-res set "$RES" "$SCALE"
+                else
+                    echo "Error: Invalid resolution preset '$RES'. Use: toggle, reset, 720p, 1080p, native, or <WxH> [DPI]"
+                    exit 1
+                fi
                 ;;
         esac
         if [ "$RES" = 720p ] || [ "$RES" = 1080p ] || [ "$RES" = native ]; then
@@ -1953,7 +2075,7 @@ case "${1:-}" in
         shift
         asl_with_lock asl_restore "$@"
         ;;
-    wakelock|wake|open|clip|clipboard|shortcut|app-shortcut|clip-sync|clipdaemon|toast|notify|notification|storage)
+    screen-res|screen-resolution|host-resolution|resolution-host|host-res|screen-density|rotation|rotate|orientation|screen-rotation|forced-landscape|landscape|wakelock|wake|open|clip|clipboard|shortcut|app-shortcut|clip-sync|clipdaemon|toast|notify|notification|storage)
         bash "$ASL_DIR/core/termux-bridge.sh" "$@"
         ;;
     swap|memory|mem)
@@ -1995,10 +2117,6 @@ case "${1:-}" in
     repair)
         shift
         bash "$ASL_DIR/core/repair.sh" "$@"
-        ;;
-    hub|asl-hub|gui-hub)
-        shift
-        bash "$ASL_DIR/desktop/asl-hub-installer.sh" "$@"
         ;;
     host|apps|custom|game|games)
         shift

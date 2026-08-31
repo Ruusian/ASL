@@ -18,9 +18,9 @@ asl_orphan_kill() {
     # Find processes matching rogue patterns or high-cpu python spin loops
     while read -r pid comm pcpu etime cmd; do
         [ -n "$pid" ] || continue
-        # Exclude self, openclaude, claude-code, ASL Hub, and ASL tools
+        # Exclude self, openclaude, claude-code, and ASL tools
         [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
-        echo "$cmd" | grep -qE "openclaude|claude-code|asl-control-center|asl_control_center|free-web-search|release-helper" && continue
+        echo "$cmd" | grep -qE "openclaude|claude-code|free-web-search|release-helper" && continue
 
         # Match known stuck background spin-loop signatures (py3compile, node-gyp, stuck pip)
         if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
@@ -35,7 +35,7 @@ asl_orphan_kill() {
         while read -r pid comm pcpu etime cmd; do
             [ -n "$pid" ] || continue
             [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
-            echo "$cmd" | grep -qE "openclaude|claude-code|asl-control-center|asl_control_center|free-web-search|release-helper" && continue
+            echo "$cmd" | grep -qE "openclaude|claude-code|free-web-search|release-helper" && continue
             if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
                (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 ] 2>/dev/null)); then
                 local already=0

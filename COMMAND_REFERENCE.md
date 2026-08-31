@@ -567,16 +567,6 @@ asl security-suite install full     # Install complete security suite
 
 ---
 
-### `asl hub` / `asl gui`
-Launch native GTK3 Control Center desktop application inside XFCE4 session (`os.posix_spawn` invariant).
-
-```bash
-asl hub                             # Launch ASL Control Center GTK3 app
-asl gui                             # Alias for asl hub
-```
-
----
-
 ### `asl config`
 Manage declarative configuration in `/etc/asl.conf`.
 

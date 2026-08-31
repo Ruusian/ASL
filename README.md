@@ -31,14 +31,14 @@ Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or
  ├──────────────────────────────────────────────────────────────────────────────────┤
  │                                                                                  │
  │  ┌────────────────────────────────────────────────────────────────────────────┐  │
- │  │        Debian 13 Trixie / Multi-Distro Subsystem & GTK3 Control Suite      │  │
+ │  │        Debian 13 Trixie / Multi-Distro Subsystem & Core Tooling Suite      │  │
  │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
  │  │  │  XFCE4 Desktop   │  │ GPU & Vulkan     │  │ Turnip / Zink Acceleration │  │
  │  │  │  (Termux:X11 :0) │  │ Hardware Layer   │  │ OpenGL / Vulkan Drivers  │  │  │
  │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
  │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
- │  │  │ ASL Hub (GTK3)   │  │ Dev & Security   │  │ OmniRoute AI Gateway     │  │  │
- │  │  │ (posix_spawn)    │  │ Tooling Suites   │  │ (Port 20128 - Netd Bypass│  │  │
+ │  │  │ Systemd Emulation│  │ Dev & Security   │  │ OmniRoute AI Gateway     │  │  │
+ │  │  │ (Python Engine)  │  │ Tooling Suites   │  │ (Port 20128 - Netd Bypass│  │  │
  │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
  │  └──────────────────────────────────────▲─────────────────────────────────────┘  │
  │                                         │ Direct Hardware & Bridge IPC           │
@@ -106,7 +106,7 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 Pass non-interactive distribution flags or select interactively during setup:
 
 ```bash
-# ASL Modded Rootfs (Turnip Vulkan, GPU Drivers, XFCE & ASL Hub pre-configured):
+# ASL Modded Rootfs (Turnip Vulkan, GPU Drivers & XFCE pre-configured):
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --modded
 
 # Standard Clean Debian Trixie Base:
@@ -147,11 +147,7 @@ asl
 - **Strict Mount Isolation**: Uses `--make-rprivate` and `--make-rslave` bind mounts without mounting Android system partitions (`/system`, `/vendor`, `/apex`), eliminating SELinux deadlocks and OS kernel crashes.
 - **Automated Rollback Traps**: Catches mount errors on startup and unmounts partial paths automatically.
 
-### 🎛️ 2. Native Debian GTK3 Control Center ("ASL Hub")
-- **Desktop & CLI GUI**: Full GTK3 desktop app launcher installed directly on the Debian desktop (`/root/Desktop/asl-hub.desktop`) and callable via `asl hub` / `asl gui`.
-- **Multithreading Invariant**: Built with Python 3 + GTK3 using `os.posix_spawn` process creation to prevent glibc `atfork` multithreading deadlocks.
-
-### 🌐 3. 24/7 Remote Mesh Tunnels & Background Services
+### 🌐 2. 24/7 Remote Mesh Tunnels & Background Services
 - **Oracle Cloud VPS Dedicated Relay**: Always-on persistent reverse SSH tunnel forwarding SSH (2222) to your own remote VPS (`asl remote oracle setup`).
 - **LAN SSH Server**: Termux host SSH daemon on port 8022 with password or ED25519 key authentication.
 - **Serveo & Ngrok**: Instant public jump-host and multi-token rotation tunneling on demand.
@@ -193,7 +189,6 @@ asl
 | **Phantom Process Killer** | `asl ppk [off\|on\|status]` | Disable or inspect Android 12+ child process limits |
 | **Diagnostic Doctor** | `asl doctor` | Run non-mutating environment checks |
 | **Setup Wizard** | `asl wizard` / `asl init` | Guided first-time setup for Graphics, Dev, Security presets |
-| **GTK3 Control Center**| `asl hub` / `asl gui` | Launch ASL Hub GTK3 desktop control center |
 | **GPU Acceleration** | `asl gpu [profile\|apply]` | Configure Turnip/Zink GPU acceleration profiles |
 | **Turbo Governor** | `asl turbo` / `asl gpu` | Apply maximum CPU/GPU performance governor |
 | **Gamepad Passthrough**| `asl gamepad [sync\|test]` | Synchronize host Bluetooth/USB evdev gamepads into chroot |
