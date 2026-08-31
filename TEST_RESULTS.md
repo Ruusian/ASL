@@ -54,7 +54,6 @@ Result: ✅ PASS
 Verified Scripts:
   ✓ desktop/remote.sh
   ✓ desktop/start-desktop.sh (with FD management fixes)
-  ✓ desktop/theme.sh
   ✓ tools/make-release.sh
 ```
 

@@ -177,7 +177,6 @@ asl backup                   # Full chroot backup
 ```bash
 asl desktop start      # Start XFCE + Termux:X11
 asl desktop stop       # Stop desktop
-asl theme dark         # Set dark theme
 asl resolution 1080p   # Set 1080p resolution
 asl remote lan start   # Start LAN SSH server
 asl remote oracle start# Connect to dedicated VPS tunnel

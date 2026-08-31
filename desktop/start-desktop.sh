@@ -331,34 +331,6 @@ for f in "$target_home/Desktop"/*.desktop; do
         gio set -t string "\$f" metadata::trusted true 2>/dev/null || true
     fi
 done
-if [ ! -f "$target_home/.config/gtk-3.0/settings.ini" ]; then
-cat << 'GTK3_EOF' > "$target_home/.config/gtk-3.0/settings.ini"
-[Settings]
-gtk-theme-name=Tokyonight-Dark-BL
-gtk-icon-theme-name=Papirus-Dark
-gtk-cursor-theme-name=Adwaita
-gtk-cursor-theme-size=24
-gtk-font-name=Sans 10
-gtk-xft-antialias=1
-gtk-xft-hinting=1
-gtk-xft-hintstyle=hintslight
-gtk-xft-rgba=rgb
-gtk-application-prefer-dark-theme=1
-GTK3_EOF
-fi
-if [ ! -f "$target_home/.gtkrc-2.0" ]; then
-cat << 'GTK2_EOF' > "$target_home/.gtkrc-2.0"
-gtk-theme-name = "Tokyonight-Dark-BL"
-gtk-icon-theme-name = "Papirus-Dark"
-gtk-font-name = "Sans 10"
-gtk-cursor-theme-name = "Adwaita"
-gtk-cursor-theme-size = 24
-gtk-xft-antialias = 1
-gtk-xft-hinting = 1
-gtk-xft-hintstyle = "hintslight"
-gtk-xft-rgba = "rgb"
-GTK2_EOF
-fi
 [ -f /tmp/.Xauthority ] && cp -f /tmp/.Xauthority "$target_home/.Xauthority" 2>/dev/null && chmod 600 "$target_home/.Xauthority" 2>/dev/null || true
 ln -sf /usr/share/applications/org.pulseaudio.pavucontrol.desktop /usr/share/applications/pavucontrol.desktop 2>/dev/null || true
 cat << 'PULSE_CONF_EOF' > /etc/pulse/client.conf

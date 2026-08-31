@@ -195,17 +195,6 @@ asl resolution status               # Inspect current display resolution
 
 ---
 
-### `asl theme`
-Switch desktop theme and styling.
-
-```bash
-asl theme                           # Interactive theme menu
-asl theme dark                      # Apply dark GTK/XFCE theme
-asl theme light                     # Apply light theme
-```
-
----
-
 ## 🌐 Remote Access Bridges (`asl remote`)
 
 Modular remote connection manager supporting LAN SSH, user Oracle/custom VPS reverse tunnels, Serveo, and Ngrok.

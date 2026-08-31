@@ -296,7 +296,6 @@ show_help() {
     echo "  desktop stop     Stop only the ASL-managed desktop"
     echo "  desktop status   Show desktop lifecycle status"
     echo "  desktop sync-apps Create ASL-owned Termux launchers"
-    echo "  theme [preset]   Set XFCE look & feel (dark|light|nord|dracula)"
     echo "  resolution [res] Set Termux:X11 display resolution & scale (720p|1080p|native [scale])"
     echo "  remote [all|password|lan|serveo|ngrok|gui|autoconnect]  Manage SSH, Serveo, Ngrok (multi-token), VNC Desktop & Auto-Connect"
     echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
@@ -991,7 +990,7 @@ dashboard() {
         printf "%s╭── Linux Chroot ──────────────────╮%s  %s╭── Desktop & Remote ──────────────╮%s\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$C_RESET"
         render_opt 1 "s" "Start / Mount Chroot" "$sel"; printf "  "; render_opt 7 "d" "Start XFCE4 Desktop" "$sel"; echo ""
         render_opt 2 "x" "Stop & Unmount Chroot" "$sel"; printf "  "; render_opt 8 "" "Desktop Status / Stop" "$sel"; echo ""
-        render_opt 3 "e" "Open Root Shell" "$sel"; printf "  "; render_opt 9 "" "Desktop Themes & Window" "$sel"; echo ""
+        render_opt 3 "e" "Open Root Shell" "$sel"; printf "  "; render_opt 9 "" "Display & Window Settings" "$sel"; echo ""
         render_opt 4 "" "Run Single Command" "$sel"; printf "  "; render_opt 10 "v" "Remote Access Manager" "$sel"; echo ""
         render_opt 5 "y" "Snapshots & Backups" "$sel"; printf "  "; render_opt 11 "" "PulseAudio Control" "$sel"; echo ""
         render_opt 6 "a" "Android AID Groups" "$sel"; printf "  "; render_opt 12 "" "Sync Debian Launchers" "$sel"; echo ""
@@ -1212,18 +1211,23 @@ dashboard() {
                 esac
                 pause_dashboard ;;
             9)
-                echo "Display & Appearance Options:"
-                echo "  1) Theme preset"
+                echo "Display & Resolution Options:"
+                echo "  1) Termux:X11 Window Resolution"
                 echo "  2) Android Screen Resolution & Density (Toggle 1080x1920 ↔ Native, Reset, Set)"
                 echo "  3) Android Screen Rotation (Forced Landscape, Auto-Rotate, Portrait, Toggle)"
-                echo "  4) Termux:X11 Window Resolution"
-                echo "  5) List all themes"
-                read -r -p "Select option [1-5]: " app_act
+                read -r -p "Select option [1-3]: " app_act
                 case "$app_act" in
                     1)
-                        echo "Presets: blacklight, win11, win11-light, win11-compact, tokyonight, aesthetic, graphite, habiboow, dark, light, nord, dracula, greybird"
-                        read -r -p "Theme name: " t_preset
-                        [ -n "$t_preset" ] && bash "$REAL_SCRIPT" theme "$t_preset"
+                        echo "Presets: 720p, 1080p, native"
+                        read -r -p "Resolution preset: " r_preset
+                        if [ -n "$r_preset" ]; then
+                            read -r -p "Scale factor (optional, e.g. 1.0, 1.25, 1.5, Enter to skip): " s_factor
+                            if [ -n "$s_factor" ]; then
+                                bash "$REAL_SCRIPT" resolution "$r_preset" "$s_factor"
+                            else
+                                bash "$REAL_SCRIPT" resolution "$r_preset"
+                            fi
+                        fi
                         ;;
                     2)
                         echo "Android Screen Resolution & Density:"
@@ -1266,21 +1270,6 @@ dashboard() {
                             6) bash "$REAL_SCRIPT" rotation status ;;
                             *) bash "$REAL_SCRIPT" rotation toggle ;;
                         esac
-                        ;;
-                    4)
-                        echo "Presets: 720p, 1080p, native"
-                        read -r -p "Resolution preset: " r_preset
-                        if [ -n "$r_preset" ]; then
-                            read -r -p "Scale factor (optional, e.g. 1.0, 1.25, 1.5, Enter to skip): " s_factor
-                            if [ -n "$s_factor" ]; then
-                                bash "$REAL_SCRIPT" resolution "$r_preset" "$s_factor"
-                            else
-                                bash "$REAL_SCRIPT" resolution "$r_preset"
-                            fi
-                        fi
-                        ;;
-                    5)
-                        bash "$REAL_SCRIPT" theme list
                         ;;
                 esac
                 pause_dashboard ;;
@@ -1852,10 +1841,6 @@ case "${1:-}" in
     benchmark|bench)
         shift
         bash "$ASL_DIR/core/benchmark.sh" "$@"
-        ;;
-    theme)
-        shift
-        bash "$ASL_DIR/desktop/theme.sh" "$@"
         ;;
     snapshot)
         shift
