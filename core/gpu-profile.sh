@@ -12,7 +12,7 @@ fi
 
 asl_gpu_detect() {
     ASL_GPU_PLATFORM=$(getprop ro.board.platform 2>/dev/null || true)
-    ASL_GPU_PLATFORM=${ASL_GPU_PLATFORM,,}
+    ASL_GPU_PLATFORM=$(printf '%s' "$ASL_GPU_PLATFORM" | tr '[:upper:]' '[:lower:]')
     ASL_GPU_PROFILE="generic-virgl"
     ASL_GPU_MODEL="unknown"
 
@@ -82,15 +82,15 @@ asl_gpu_apply() {
             export GALLIUM_DRIVER=zink
             export MESA_LOADER_DRIVER_OVERRIDE=zink
             export MESA_VK_WINSYS=x11
-            export MESA_VK_WSI_DEBUG=sw
+            ##export MESA_VK_WSI_DEBUG="sw" # DISABLED FOR HERMES
             export ZINK_DESCRIPTORS=lazy
             export MESA_NO_ERROR=1
             export MESA_GL_VERSION_OVERRIDE=4.3COMPAT
             export MESA_GLES_VERSION_OVERRIDE=3.2
             local icd_chroot
             icd_chroot=$(asl_gpu_icd_in_chroot)
-            export VK_ICD_FILENAMES="$DEBIANPATH$icd_chroot"
-            export VK_DRIVER_FILES="$DEBIANPATH$icd_chroot"
+            #export VK_ICD_FILENAMES="$DEBIANPATH$icd_chroot"
+            #export VK_DRIVER_FILES="$DEBIANPATH$icd_chroot"
             export MESA_SHADER_CACHE_DIR="/tmp/.mesa_cache"
             export MESA_GL_SHADER_CACHE_DIR="/tmp/.mesa_cache"
             export MESA_VK_SHADER_CACHE_DIR="/tmp/.mesa_cache"
@@ -140,10 +140,11 @@ asl_gpu_env_exports() {
     [ -n "${GALLIUM_DRIVER:-}" ] && res="${res}export GALLIUM_DRIVER=\"${GALLIUM_DRIVER}\"\n"
     [ -n "${MESA_LOADER_DRIVER_OVERRIDE:-}" ] && res="${res}export MESA_LOADER_DRIVER_OVERRIDE=\"${MESA_LOADER_DRIVER_OVERRIDE}\"\n"
     res="${res}export MESA_VK_WINSYS=\"${MESA_VK_WINSYS:-x11}\"\n"
-    [ -n "${MESA_VK_WSI_DEBUG:-}" ] && res="${res}export MESA_VK_WSI_DEBUG=\"${MESA_VK_WSI_DEBUG}\"\n"
+    # [ -n "${MESA_VK_WSI_DEBUG:-}" ] && res="${res}export MESA_VK_WSI_DEBUG=\"sw\"\n"
     if [ -n "$icd_path_in_chroot" ]; then
-        res="${res}export VK_ICD_FILENAMES=\"${icd_path_in_chroot}\"\n"
-        res="${res}export VK_DRIVER_FILES=\"${icd_path_in_chroot}\"\n"
+        # res="${res}export VK_ICD_FILENAMES=\"${icd_path_in_chroot}\"\n"
+        # res="${res}export VK_DRIVER_FILES=\"${icd_path_in_chroot}\"\n"
+        :
     fi
     [ -n "${TU_DEBUG:-}" ] && res="${res}export TU_DEBUG=\"${TU_DEBUG}\"\n"
     [ -n "${ZINK_DESCRIPTORS:-}" ] && res="${res}export ZINK_DESCRIPTORS=\"${ZINK_DESCRIPTORS}\"\n"

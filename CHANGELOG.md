@@ -6,6 +6,9 @@ All notable changes to the ASL (Android Subsystem for Linux) project are documen
 
 - **Codebase Hardening & Variable Safety**:
   - Resolved unbound local variable lookups and hardened variable declarations across `bin/asl`, `core/asl-conf.sh`, `core/termux-bridge.sh`, and `core/service-manager.sh`.
+  - Fixed syntax and nested quoting errors in `core/gpu-profile.sh` for POSIX and shell parser compatibility.
+  - Hardened Android Screen Rotation & Forced Landscape lock in `core/termux-bridge.sh` with live system state detection, expanded command aliases, and detached rotation enforcement daemon.
+  - Reordered dashboard rotation menu actions to default directly to enabling Forced Landscape (90° Locked).
   - Guarded swap loop-device attachments in `core/swap-manager.sh` to detach duplicate loop allocations.
   - Enhanced kernel capability and virtual swap detection in `core/kernel-check.sh` with direct `/proc/swaps` fallback.
   - Streamlined module path resolution, mount checks, and shell initializations in `desktop/start-desktop.sh`, `core/common.sh`, and `core/benchmark.sh`.

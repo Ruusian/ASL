@@ -525,7 +525,7 @@ termux_screen_rotation() {
                 esac
             fi
             ;;
-        landscape|land|enable-forced-landscape|forced-landscape-on|on|90)
+        landscape|land|enable-forced-landscape|forced-landscape-on|forced-landscape|force-landscape|on|90|enable)
             echo "[*] Enabling Forced Landscape mode (Locking screen to 90° Landscape & Overriding Auto-Rotate)..."
             _asl_host_su "settings put system accelerometer_rotation 0; settings put system user_rotation 1" 2>/dev/null
             _asl_save_rotation_state "1" "landscape" "1"
@@ -537,13 +537,14 @@ termux_screen_rotation() {
             _asl_save_rotation_state "1" "rev-landscape" "3"
             echo "[✓] Forced Reverse Landscape mode ENABLED (Native Auto-Rotate overridden, 270° orientation active)."
             ;;
-        disable-forced-landscape|forced-landscape-off|off|auto|auto-on|enable|auto-rotate)
+        disable-forced-landscape|forced-landscape-off|auto|auto-on|auto-rotate|sensor)
             echo "[*] Disabling Forced Landscape mode (Enabling Android Auto-Rotation Sensor Mode)..."
+            termux_screen_rotation watch stop >/dev/null 2>&1 || true
             _asl_host_su "settings put system accelerometer_rotation 1" 2>/dev/null
             _asl_save_rotation_state "0" "auto" ""
             echo "[✓] Forced Landscape mode DISABLED (Android Auto-Rotation sensor mode active)."
             ;;
-        lock|auto-off|disable)
+        lock|locked|auto-off|off|disable|disable-auto-rotate)
             echo "[*] Disabling Android Auto-Rotation (Locking current orientation)..."
             _asl_host_su "settings put system accelerometer_rotation 0" 2>/dev/null
             _asl_save_rotation_state "0" "locked" ""
@@ -581,14 +582,12 @@ termux_screen_rotation() {
                         return 0
                     fi
                     echo "[*] Starting ASL Rotation Watcher daemon (auto-overriding Android auto-rotation)..."
-                    (
-                        while true; do
-                            _asl_enforce_rotation_lock >/dev/null 2>&1 || true
-                            sleep 2
-                        done
-                    ) &
-                    echo $! > "$ROTATION_WATCHER_PID" 2>/dev/null || true
-                    echo "[✓] Rotation watcher active (PID: $!)."
+                    local asl_bin="${PREFIX:-/data/data/com.termux/files/usr}/bin/asl"
+                    [ ! -x "$asl_bin" ] && asl_bin="asl"
+                    ((nohup bash -c "while true; do $asl_bin rotation enforce >/dev/null 2>&1 || true; sleep 3; done" >/dev/null 2>&1 &) &)
+                    sleep 0.2
+                    pgrep -f "rotation enforce" | head -1 > "$ROTATION_WATCHER_PID" 2>/dev/null || true
+                    echo "[✓] Rotation watcher active."
                     ;;
                 stop)
                     if [ -f "$ROTATION_WATCHER_PID" ]; then
@@ -596,10 +595,9 @@ termux_screen_rotation() {
                         w_pid=$(cat "$ROTATION_WATCHER_PID" 2>/dev/null)
                         [ -n "$w_pid" ] && kill "$w_pid" 2>/dev/null || true
                         rm -f "$ROTATION_WATCHER_PID" 2>/dev/null || true
-                        echo "[✓] Rotation watcher stopped."
-                    else
-                        echo "[*] Rotation watcher is not running."
                     fi
+                    pkill -f "rotation enforce" 2>/dev/null || true
+                    echo "[✓] Rotation watcher stopped."
                     ;;
                 status|*)
                     if [ -f "$ROTATION_WATCHER_PID" ] && kill -0 "$(cat "$ROTATION_WATCHER_PID" 2>/dev/null)" 2>/dev/null; then
@@ -615,7 +613,7 @@ termux_screen_rotation() {
             local accel user_rot
             accel=$(_asl_host_su "settings get system accelerometer_rotation" 2>/dev/null | tr -d '[:space:]')
             user_rot=$(_asl_host_su "settings get system user_rotation" 2>/dev/null | tr -d '[:space:]')
-            if [ "${FORCED_LANDSCAPE:-0}" = "1" ] || ([ "$accel" = "0" ] && [ "$user_rot" = "1" ]); then
+            if [ "$accel" = "0" ] && { [ "$user_rot" = "1" ] || [ "$user_rot" = "3" ]; }; then
                 termux_screen_rotation disable-forced-landscape
             else
                 termux_screen_rotation landscape

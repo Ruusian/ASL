@@ -1253,20 +1253,20 @@ dashboard() {
                         ;;
                     3)
                         echo "Android Screen Rotation & Forced Landscape:"
-                        echo "  1) Toggle Forced Landscape (ON / OFF)"
-                        echo "  2) Enable Forced Landscape (90° Locked)"
+                        echo "  1) Enable Forced Landscape (90° Locked - Recommended)"
+                        echo "  2) Toggle Forced Landscape (ON / OFF)"
                         echo "  3) Enable Sensor Auto-Rotation (accelerometer on)"
                         echo "  4) Lock Current Orientation (auto-rotate off)"
                         echo "  5) Lock to Portrait Mode (0°)"
                         echo "  6) Show Rotation & Orientation Status"
                         read -r -p "Select action [1-6, default: 1]: " rot_act
                         case "$rot_act" in
-                            2) bash "$REAL_SCRIPT" rotation landscape ;;
+                            2) bash "$REAL_SCRIPT" rotation toggle ;;
                             3) bash "$REAL_SCRIPT" rotation auto ;;
                             4) bash "$REAL_SCRIPT" rotation off ;;
                             5) bash "$REAL_SCRIPT" rotation portrait ;;
                             6) bash "$REAL_SCRIPT" rotation status ;;
-                            *) bash "$REAL_SCRIPT" rotation toggle ;;
+                            *) bash "$REAL_SCRIPT" rotation landscape ;;
                         esac
                         ;;
                 esac
@@ -1474,20 +1474,20 @@ dashboard() {
                 pause_dashboard ;;
             19|o|O)
                 echo "Android Screen Rotation & Forced Landscape:"
-                echo "  1) Toggle Forced Landscape (ON / OFF)"
-                echo "  2) Enable Forced Landscape (90° Locked)"
+                echo "  1) Enable Forced Landscape (90° Locked - Recommended)"
+                echo "  2) Toggle Forced Landscape (ON / OFF)"
                 echo "  3) Enable Sensor Auto-Rotation (accelerometer on)"
                 echo "  4) Lock Current Orientation (auto-rotate off)"
                 echo "  5) Lock to Portrait Mode (0°)"
                 echo "  6) Show Rotation & Orientation Status"
                 read -r -p "Select action [1-6, default: 1]: " rot_act
                 case "$rot_act" in
-                    2) bash "$REAL_SCRIPT" rotation landscape ;;
+                    2) bash "$REAL_SCRIPT" rotation toggle ;;
                     3) bash "$REAL_SCRIPT" rotation auto ;;
                     4) bash "$REAL_SCRIPT" rotation off ;;
                     5) bash "$REAL_SCRIPT" rotation portrait ;;
                     6) bash "$REAL_SCRIPT" rotation status ;;
-                    *) bash "$REAL_SCRIPT" rotation toggle ;;
+                    *) bash "$REAL_SCRIPT" rotation landscape ;;
                 esac
                 pause_dashboard ;;
             20|c|C|n|N)
