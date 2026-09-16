@@ -240,16 +240,15 @@ oracle_control() {
             oracle_status
             ;;
         stop)
-            if oracle_running; then
-                local pid
-                pid=$(cat "$ORACLE_STATE" 2>/dev/null)
-                [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || ([ -n "$ORACLE_HOST" ] && pkill -f "ssh.*-N.*${ORACLE_HOST}" 2>/dev/null) || true
-                rm -f "$ORACLE_STATE" "$ORACLE_LOG"
-                echo "[✓] Oracle VPS tunnel stopped."
-            else
-                rm -f "$ORACLE_STATE"
-                echo "[*] Oracle VPS tunnel is not running."
+            local pid
+            pid=$(cat "$ORACLE_STATE" 2>/dev/null)
+            [ -n "$pid" ] && (kill -TERM "$pid" 2>/dev/null || su -c "kill -9 $pid" 2>/dev/null || true)
+            if [ -n "$ORACLE_HOST" ]; then
+                pkill -f "ssh.*-N.*${ORACLE_HOST}" 2>/dev/null || true
+                su -c "pkill -9 -f 'ssh.*-N.*${ORACLE_HOST}'" 2>/dev/null || true
             fi
+            rm -f "$ORACLE_STATE" "$ORACLE_LOG"
+            echo "[✓] Oracle VPS tunnel stopped."
             ;;
         setup|init|wizard)
             oracle_setup_wizard

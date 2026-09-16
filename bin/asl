@@ -1655,23 +1655,49 @@ dashboard() {
                 pause_dashboard ;;
             28|b|B)
                 echo "ASL 24/7 Service Manager & Boot Autostart:"
+                echo ""
+                echo "  --- Bulk Actions ---"
                 echo "  1) Start All 24/7 Services"
                 echo "  2) Stop All Services"
                 echo "  3) Restart All Services"
-                echo "  4) Run Watchdog Service Health Check"
-                echo "  5) Start Autonomous Background Watchdog Loop (180s)"
-                echo "  6) Enable Boot Autostart (Termux:Boot & Shell Hook)"
-                echo "  7) Disable Boot Autostart"
-                echo "  8) Show 24/7 Service Status & Uptime"
-                read -r -p "Select action [1-8]: " svc_act
+                echo ""
+                echo "  --- Per-Service Stop ---"
+                echo "  4) Stop OmniRoute AI Proxy"
+                echo "  5) Stop SSH Server"
+                echo "  6) Stop All Tunnels (Serveo/Ngrok/Oracle)"
+                echo "  7) Stop Watchdog Daemon"
+                echo "  8) Release Wake-Lock"
+                echo ""
+                echo "  --- Per-Service Start ---"
+                echo "  9) Start OmniRoute AI Proxy"
+                echo " 10) Start SSH Server"
+                echo " 11) Start All Tunnels"
+                echo " 12) Start Watchdog Daemon"
+                echo " 13) Engage Wake-Lock"
+                echo ""
+                echo "  --- System ---"
+                echo " 14) Run Watchdog Health Check"
+                echo " 15) Enable Boot Autostart"
+                echo " 16) Disable Boot Autostart"
+                echo " 17) Show Service Status & Uptime"
+                read -r -p "Select action [1-17]: " svc_act
                 case "$svc_act" in
                     1) bash "$REAL_SCRIPT" service start ;;
                     2) bash "$REAL_SCRIPT" service stop ;;
                     3) bash "$REAL_SCRIPT" service restart ;;
-                    4) bash "$REAL_SCRIPT" service check ;;
-                    5) bash "$REAL_SCRIPT" service loop ;;
-                    6) bash "$REAL_SCRIPT" service enable ;;
-                    7) bash "$REAL_SCRIPT" service disable ;;
+                    4) bash "$REAL_SCRIPT" service stop omniroute ;;
+                    5) bash "$REAL_SCRIPT" service stop ssh ;;
+                    6) bash "$REAL_SCRIPT" service stop tunnels ;;
+                    7) bash "$REAL_SCRIPT" service stop watchdog ;;
+                    8) bash "$REAL_SCRIPT" service stop wakelock ;;
+                    9) bash "$REAL_SCRIPT" service start omniroute ;;
+                    10) bash "$REAL_SCRIPT" service start ssh ;;
+                    11) bash "$REAL_SCRIPT" service start tunnels ;;
+                    12) bash "$REAL_SCRIPT" service start watchdog ;;
+                    13) bash "$REAL_SCRIPT" service start wakelock ;;
+                    14) bash "$REAL_SCRIPT" service check ;;
+                    15) bash "$REAL_SCRIPT" service enable ;;
+                    16) bash "$REAL_SCRIPT" service disable ;;
                     *) bash "$REAL_SCRIPT" service status ;;
                 esac
                 pause_dashboard ;;

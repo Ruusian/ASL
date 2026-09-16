@@ -21,7 +21,7 @@ lan_control() {
             echo "    Authentication:  $auth_desc"
             ;;
         stop)
-            pkill -f "sshd" 2>/dev/null || su -c "pkill -f sshd" 2>/dev/null || asl_exec "pkill -f sshd" 2>/dev/null || true
+            pkill -x "sshd" 2>/dev/null || su -c "pkill -x sshd" 2>/dev/null || asl_exec "pkill -x sshd" 2>/dev/null || true
             echo "[✓] LAN SSH Server stopped."
             ;;
         status|"")

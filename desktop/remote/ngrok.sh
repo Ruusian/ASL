@@ -221,16 +221,13 @@ ngrok_control() {
             ngrok_status
             ;;
         stop)
-            if ngrok_running; then
-                local pid
-                pid=$(cat "$NGROK_STATE" 2>/dev/null)
-                [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || pkill -f "ngrok.*tcp" 2>/dev/null || true
-                rm -f "$NGROK_STATE" "$NGROK_LOG" "$NGROK_CURR_TOKEN"
-                echo "[✓] Ngrok tunnel stopped."
-            else
-                rm -f "$NGROK_STATE" "$NGROK_CURR_TOKEN"
-                echo "[*] Ngrok tunnel is not running."
-            fi
+            local pid
+            pid=$(cat "$NGROK_STATE" 2>/dev/null)
+            [ -n "$pid" ] && (kill -TERM "$pid" 2>/dev/null || su -c "kill -9 $pid" 2>/dev/null || true)
+            pkill -f "ngrok.*tcp" 2>/dev/null || true
+            su -c "pkill -9 -f 'ngrok.*tcp'" 2>/dev/null || true
+            rm -f "$NGROK_STATE" "$NGROK_LOG" "$NGROK_CURR_TOKEN"
+            echo "[✓] Ngrok tunnel stopped."
             ;;
         status|"")
             ngrok_status

@@ -77,7 +77,7 @@ ensure_host_sshd() {
         ssh-keygen -A >/dev/null 2>&1 || return 1
     fi
     local pass_opts="-o PasswordAuthentication=yes -o KbdInteractiveAuthentication=yes -o AllowTcpForwarding=yes -o GatewayPorts=yes"
-    if ! pgrep -x sshd >/dev/null 2>&1 && ! pgrep -f "sshd -p 8022" >/dev/null 2>&1 && ! su -c "pgrep -f sshd" >/dev/null 2>&1; then
+    if ! asl_is_sshd_running; then
         echo "[*] Starting Termux host SSH daemon on port 8022..."
         local termux_user
         termux_user=$(stat -c '%U' "$HOME" 2>/dev/null || echo "u0_a566")
@@ -87,7 +87,7 @@ ensure_host_sshd() {
             "$PREFIX/bin/sshd" -p 8022 $pass_opts 2>/dev/null || return 1
         fi
     fi
-    pgrep -x sshd >/dev/null 2>&1 || pgrep -f "sshd -p 8022" >/dev/null 2>&1 || su -c "pgrep -f 'sshd -p 8022'" >/dev/null 2>&1 || return 1
+    asl_is_sshd_running || return 1
 }
 
 password_control() {

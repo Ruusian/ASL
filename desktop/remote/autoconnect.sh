@@ -60,7 +60,7 @@ autoconnect_daemon() {
             fi
 
             # OmniRoute must run as root (netd blocks getaddrinfo for UID 10566)
-            if ([ -f "$HOME/omniroute-daemon.sh" ] || [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ] || command -v omniroute >/dev/null 2>&1) && ! pgrep -f omniroute >/dev/null 2>&1; then
+            if ([ -f "$HOME/omniroute-daemon.sh" ] || [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ] || command -v omniroute >/dev/null 2>&1) && ! asl_is_omniroute_running; then
                 echo "[Autoconnect $(date +%H:%M:%S)] OmniRoute offline. Starting as root..." >> "$AUTOCONNECT_LOG"
                 su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash /data/data/com.termux/files/home/omniroute-daemon.sh" >> "$AUTOCONNECT_LOG" 2>&1 || true
             fi
@@ -112,8 +112,12 @@ autoconnect_control() {
             fi
             ;;
         stop)
+            local pid
+            pid=$(cat "$AUTOCONNECT_PID" 2>/dev/null)
+            [ -n "$pid" ] && (kill -TERM "$pid" 2>/dev/null || su -c "kill -9 $pid" 2>/dev/null || true)
             rm -f "$AUTOCONNECT_STATE" "$AUTOCONNECT_PID"
             pkill -f "remote.sh autoconnect-daemon" 2>/dev/null || true
+            su -c "pkill -9 -f 'remote.sh autoconnect-daemon'" 2>/dev/null || true
             termux-wake-unlock 2>/dev/null || true
             echo "[✓] Auto-Connect daemon stopped."
             ;;

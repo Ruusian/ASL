@@ -189,11 +189,11 @@ asl_host_ip() {
 lan_host_ip() { asl_host_ip "$@"; }
 
 asl_is_sshd_running() {
-    pgrep -f "sshd" >/dev/null 2>&1 || su -c "pgrep -f sshd" >/dev/null 2>&1 || asl_exec "pgrep -f sshd" >/dev/null 2>&1
+    pgrep -x "sshd" >/dev/null 2>&1 || su -c "pgrep -x sshd" >/dev/null 2>&1 || asl_exec "pgrep -x sshd" >/dev/null 2>&1
 }
 
 asl_is_omniroute_running() {
-    pgrep -f "omniroute" >/dev/null 2>&1 || su -c "pgrep -f omniroute" >/dev/null 2>&1 || (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null
+    pgrep omniroute >/dev/null 2>&1 || su -c "pgrep omniroute" >/dev/null 2>&1 || (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null
 }
 
 batt_temp_c() {

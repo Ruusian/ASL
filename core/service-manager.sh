@@ -12,16 +12,92 @@ BOOT_DIR="$HOME/.termux/boot"
 BOOT_SCRIPT="$BOOT_DIR/00-asl-autostart.sh"
 BASHRC="$HOME/.bashrc"
 
+# --- Reliable process detection helpers ---
+# pgrep -f matches kernel threads (irq/*, msm_watchdog) and shell snapshots.
+# These helpers filter to real userspace processes only.
+_asl_pgrep_real() {
+    # Usage: _asl_pgrep_real "pattern" [as_root]
+    # Returns PIDs of real userspace processes matching pattern,
+    # excluding kernel threads and openclaude shell snapshots.
+    local pattern="$1" as_root="${2:-}"
+    local pids
+    if [ "$as_root" = "root" ]; then
+        pids=$(su -c "pgrep -f '$pattern'" 2>/dev/null) || true
+    else
+        pids=$(pgrep -f "$pattern" 2>/dev/null) || true
+    fi
+    local pid
+    for pid in $pids; do
+        [ "$pid" = "$$" ] && continue
+        [ "$pid" = "$PPID" ] && continue
+        # Read proc files — use su for root-owned processes
+        local cmdline comm
+        if [ "$as_root" = "root" ]; then
+            cmdline=$(su -c "cat /proc/$pid/cmdline 2>/dev/null | tr '\\0' ' '" 2>/dev/null) || continue
+            comm=$(su -c "cat /proc/$pid/comm 2>/dev/null" 2>/dev/null) || continue
+        else
+            cmdline=$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ') || continue
+            comm=$(cat "/proc/$pid/comm" 2>/dev/null) || continue
+        fi
+        # Skip empty cmdline (kernel thread)
+        [ -n "$cmdline" ] || continue
+        # Skip openclaude shell snapshots that contain the search term in their path
+        case "$cmdline" in
+            */.openclaude/shell-snapshots/*) continue ;;
+            *snapshot-*.sh*) continue ;;
+            *pgrep*|*pkill*) continue ;;
+        esac
+        # Skip kernel IRQ threads, msm_watchdog, and detection tools
+        case "$comm" in
+            irq/*|msm_watchdog*|pgrep|pkill) continue ;;
+        esac
+        echo "$pid"
+    done
+}
+
+_asl_pgrep_first() {
+    # Returns the first real PID matching pattern (checks user, falls back to root if needed)
+    local pattern="$1" as_root="${2:-}"
+    if [ "$as_root" = "root" ]; then
+        _asl_pgrep_real "$pattern" root | head -1
+    else
+        local p
+        p=$(_asl_pgrep_real "$pattern" | head -1)
+        if [ -z "$p" ] && su -c "id -u" >/dev/null 2>&1; then
+            p=$(_asl_pgrep_real "$pattern" root | head -1)
+        fi
+        echo "$p"
+    fi
+}
+
+_asl_pkill_real() {
+    # Kill real processes matching pattern, both as user and root
+    local pattern="$1"
+    local pids
+    # Kill as current user
+    pids=$(_asl_pgrep_real "$pattern")
+    for pid in $pids; do
+        kill "$pid" 2>/dev/null || true
+    done
+    # Kill as root
+    pids=$(_asl_pgrep_real "$pattern" root)
+    for pid in $pids; do
+        su -c "kill $pid" 2>/dev/null || true
+    done
+}
+
 asl_service_start() {
     echo "[*] Initializing ASL 24/7 Background Services..."
 
     # 0. Disable Android Phantom Process Killer, set OOM score adjustment, CPU affinity & tune TCP sysctl if root available
     if su -c "id -u" >/dev/null 2>&1; then
         timeout 3 su -c "device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; settings put global settings_enable_monitor_phantom_procs false 2>/dev/null; setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false 2>/dev/null; dumpsys deviceidle whitelist +com.termux 2>/dev/null; am set-standby-bucket com.termux active 2>/dev/null; cmd appops set com.termux RUN_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS allow 2>/dev/null" 2>/dev/null || true
-        for pid in $(pgrep -f "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop" 2>/dev/null); do
+        local _oom_pids
+        _oom_pids="$(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop") $(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop" root)"
+        for pid in $_oom_pids; do
             su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || true
             if command -v taskset >/dev/null 2>&1; then
-                taskset -pc 0-3 "$pid" >/dev/null 2>&1 || true
+                su -c "taskset -pc 0-3 $pid" >/dev/null 2>&1 || taskset -pc 0-3 "$pid" >/dev/null 2>&1 || true
             fi
         done
         su -c "sysctl -w net.core.rmem_max=8388608 net.core.wmem_max=8388608 net.core.rmem_default=262144 net.core.wmem_default=262144 net.ipv4.tcp_rmem=4096 87380 8388608 net.ipv4.tcp_wmem=4096 65536 8388608 net.core.netdev_max_backlog=10000 net.core.somaxconn=2048 net.ipv4.tcp_fastopen=3 net.ipv4.tcp_mtu_probing=1 net.ipv4.tcp_slow_start_after_idle=0 net.ipv4.tcp_notsent_lowat=16384 net.ipv4.tcp_window_scaling=1 net.ipv4.tcp_sack=1 2>/dev/null" 2>/dev/null || true
@@ -64,7 +140,7 @@ asl_service_start() {
         omni_bin="/data/data/com.termux/files/home/omniroute-daemon.sh"
     fi
     if [ -n "$omni_bin" ] || command -v omniroute >/dev/null 2>&1; then
-        if ! pgrep -f "omniroute" >/dev/null 2>&1 && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
+        if [ -z "$(_asl_pgrep_first "omniroute")" ] && [ -z "$(_asl_pgrep_first "omniroute" root)" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
             echo "[*] Starting Omniroute local AI proxy on port 20128..."
             if [ -n "$omni_bin" ]; then
                 su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_bin'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
@@ -80,7 +156,7 @@ asl_service_start() {
     fi
 
     # Ensure 180s background watchdog daemon is active
-    if ! pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
+    if [ -z "$(_asl_pgrep_first "asl-watchdog-loop")" ]; then
         asl_service_loop >/dev/null 2>&1 || true
     fi
 
@@ -98,8 +174,28 @@ asl_service_stop() {
         bash "$remote_script" ngrok stop >/dev/null 2>&1 || true
         bash "$remote_script" lan stop >/dev/null 2>&1 || true
     fi
-    pkill -f "asl-watchdog-loop" 2>/dev/null || true
-    pkill -f "omniroute" 2>/dev/null || true
+    _asl_pkill_real "asl-watchdog-loop"
+    _asl_pkill_real "autoconnect-daemon|asl-autoconnect"
+    _asl_pkill_real "serveo.net"
+    _asl_pkill_real "ngrok"
+    local o_host=""
+    if [ -f "$HOME/.asl/oracle_vps.conf" ]; then
+        o_host=$(grep -E '^ORACLE_HOST=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+    fi
+    if [ -n "$o_host" ]; then
+        _asl_pkill_real "ssh.*${o_host}"
+    fi
+    # Kill omniroute: match daemon script, serve subcommand, and the binary itself
+    # Skip if ASL_KEEP_OMNIROUTE=1 or if active AI session is using local OmniRoute
+    if [ "${ASL_KEEP_OMNIROUTE:-0}" != "1" ] && [ -z "${CLAUDECODE:-}" ] && [[ "${OPENAI_BASE_URL:-}" != *"20128"* ]]; then
+        _asl_pkill_real "omniroute-daemon"
+        _asl_pkill_real "omniroute serve"
+        _asl_pkill_real "omniroute"
+    else
+        echo "[!] Skipping OmniRoute stop (active AI session detected using OmniRoute on port 20128)."
+    fi
+    # Kill SSH server (runs as root)
+    _asl_pkill_real "sshd"
     if command -v termux-wake-unlock >/dev/null 2>&1; then
         termux-wake-unlock 2>/dev/null || true
     fi
@@ -147,9 +243,10 @@ if command -v su >/dev/null 2>&1 && su -c "id -u" >/dev/null 2>&1; then
     fi
 fi
 
-# Locate ASL CLI executable
-if [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ]; then
-    "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
+# Locate ASL CLI executable. The installed launcher is a shell script without
+# an Android-executable shebang, so always invoke it through Termux Bash.
+if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ]; then
+    bash "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
 elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/bin/asl" ]; then
     bash "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
 elif [ -f "$HOME/ASL/bin/asl" ]; then
@@ -165,8 +262,8 @@ BOOT_EOF
         cat << 'BASHRC_EOF' >> "$BASHRC"
 
 # ASL 24/7 Auto-Start Hook
-if [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
-    ((nohup "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start </dev/null >/dev/null 2>&1 &) &) 2>/dev/null
+if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
+    ((nohup bash "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start </dev/null >/dev/null 2>&1 &) &) 2>/dev/null
 elif [ -f "$HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
     ((nohup bash "$HOME/ASL/bin/asl" service start </dev/null >/dev/null 2>&1 &) &) 2>/dev/null
 fi
@@ -194,10 +291,10 @@ asl_service_disable() {
     echo "[*] Disabling ASL Boot Autostart..."
     rm -f "$BOOT_SCRIPT"
     if [ -f "$BASHRC" ]; then
-        sed -i '/# ASL 24\/7 Auto-Start Hook/,+3d' "$BASHRC" 2>/dev/null || true
+        sed -i '/# ASL 24\/7 Auto-Start Hook/,/fi$/d' "$BASHRC" 2>/dev/null || true
     fi
     if [ -f "$HOME/.profile" ]; then
-        sed -i '/# ASL 24\/7 Auto-Start Hook/,+3d' "$HOME/.profile" 2>/dev/null || true
+        sed -i '/# ASL 24\/7 Auto-Start Hook/,/fi$/d' "$HOME/.profile" 2>/dev/null || true
     fi
     echo "[✓] Boot autostart disabled."
 }
@@ -212,7 +309,13 @@ asl_service_status() {
 
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
     local start_file="$prefix/tmp/asl-service.start_time"
-    if ! pgrep -f "sshd|autoconnect|asl-watchdog-loop|ngrok|serveo" >/dev/null 2>&1; then
+    local _any_running=0
+    for _pat in "sshd" "autoconnect" "asl-watchdog-loop" "ngrok" "serveo"; do
+        if [ -n "$(_asl_pgrep_first "$_pat")" ] || [ -n "$(_asl_pgrep_first "$_pat" root)" ]; then
+            _any_running=1; break
+        fi
+    done
+    if [ "$_any_running" -eq 0 ]; then
         rm -f "$start_file" 2>/dev/null || true
     fi
     if [ -f "$start_file" ]; then
@@ -237,7 +340,10 @@ asl_service_status() {
 
     fmt_mem() {
         local pid="$1" rss
-        rss=$(ps -p "$pid" -o rss= 2>/dev/null | tr -d ' ')
+        rss=$(ps -p "$pid" -o rss= 2>/dev/null | tr -d '[:space:]')
+        if [ -z "$rss" ] || ! [[ "$rss" =~ ^[0-9]+$ ]] && command -v su >/dev/null 2>&1; then
+            rss=$(su -c "ps -p $pid -o rss=" 2>/dev/null | tr -d '[:space:]')
+        fi
         if [ -n "$rss" ] && [[ "$rss" =~ ^[0-9]+$ ]]; then
             if [ "$rss" -ge 1024 ]; then echo "$((rss / 1024))MB"
             elif [ "$rss" -gt 0 ]; then echo "<1MB"
@@ -246,7 +352,7 @@ asl_service_status() {
     }
 
     local ac_pid ac_mem
-    ac_pid=$(pgrep -f "autoconnect-daemon|asl-autoconnect" 2>/dev/null | head -1 || true)
+    ac_pid=$(_asl_pgrep_first "autoconnect-daemon|asl-autoconnect")
     if [ -n "$ac_pid" ]; then
         ac_mem=$(fmt_mem "$ac_pid")
         echo " Remote Daemon:  ACTIVE (Auto-Connect PID: $ac_pid, RAM: $ac_mem)"
@@ -255,10 +361,7 @@ asl_service_status() {
     fi
 
     local ssh_pid ssh_mem
-    ssh_pid=$(pgrep -f "sshd" 2>/dev/null | head -1 || true)
-    if [ -z "$ssh_pid" ] && su -c "id -u" >/dev/null 2>&1; then
-        ssh_pid=$(su -c "pgrep -f sshd 2>/dev/null | head -1" 2>/dev/null || true)
-    fi
+    ssh_pid=$(_asl_pgrep_first "sshd")
     if [ -n "$ssh_pid" ]; then
         ssh_mem=$(fmt_mem "$ssh_pid")
         echo " LAN SSH Server: ACTIVE (Port 8022, PID: $ssh_pid, RAM: $ssh_mem)"
@@ -273,7 +376,7 @@ asl_service_status() {
         o_port="${o_port:-2222}"
     fi
     if [ -n "$o_host" ]; then
-        oracle_pid=$(pgrep -f "ssh.*${o_host}" 2>/dev/null | head -1 || true)
+        oracle_pid=$(_asl_pgrep_first "ssh.*${o_host}")
     fi
     if [ -n "$oracle_pid" ]; then
         oracle_mem=$(fmt_mem "$oracle_pid")
@@ -283,7 +386,7 @@ asl_service_status() {
     fi
 
     local serveo_pid serveo_mem
-    serveo_pid=$(pgrep -f "serveo.net" 2>/dev/null | head -1 || true)
+    serveo_pid=$(_asl_pgrep_first "serveo.net")
     if [ -n "$serveo_pid" ]; then
         serveo_mem=$(fmt_mem "$serveo_pid")
         echo " Serveo Tunnel:  ACTIVE (PID: $serveo_pid, RAM: $serveo_mem)"
@@ -292,7 +395,7 @@ asl_service_status() {
     fi
 
     local ngrok_pid ngrok_mem
-    ngrok_pid=$(pgrep -f "ngrok.*tcp" 2>/dev/null | head -1 || true)
+    ngrok_pid=$(_asl_pgrep_first "ngrok.*tcp")
     if [ -n "$ngrok_pid" ]; then
         ngrok_mem=$(fmt_mem "$ngrok_pid")
         echo " Ngrok Tunnel:   ACTIVE (PID: $ngrok_pid, RAM: $ngrok_mem)"
@@ -301,17 +404,14 @@ asl_service_status() {
     fi
 
     local omni_pid omni_mem
-    omni_pid=$(pgrep -f "omniroute" 2>/dev/null | head -1 || true)
-    if [ -z "$omni_pid" ] && su -c "id -u" >/dev/null 2>&1; then
-        omni_pid=$(su -c "pgrep -f omniroute 2>/dev/null | head -1" 2>/dev/null || true)
-    fi
+    omni_pid=$(_asl_pgrep_first "omniroute")
     if [ -n "$omni_pid" ]; then
         omni_mem=$(fmt_mem "$omni_pid")
         echo " Omniroute Proxy: ACTIVE (Port 20128, PID: $omni_pid, RAM: $omni_mem)"
     fi
 
     local loop_pid loop_mem
-    loop_pid=$(pgrep -f "asl-watchdog-loop" 2>/dev/null | head -1 || true)
+    loop_pid=$(_asl_pgrep_first "asl-watchdog-loop")
     if [ -n "$loop_pid" ]; then
         loop_mem=$(fmt_mem "$loop_pid")
         echo " Watchdog Loop:  ACTIVE (PID: $loop_pid, RAM: $loop_mem, Interval: 180s)"
@@ -365,7 +465,7 @@ asl_service_check() {
     fi
 
     # 2. Auto-Connect Daemon Check (if enabled by user state)
-    if [ -f "$prefix/tmp/asl-autoconnect.state" ] && ! pgrep -f "autoconnect" >/dev/null 2>&1; then
+    if [ -f "$prefix/tmp/asl-autoconnect.state" ] && [ -z "$(_asl_pgrep_first "autoconnect")" ]; then
         echo "[!] Auto-Connect daemon state ACTIVE but process down — restoring remote Watchdog..."
         if [ -f "$remote_script" ]; then
             bash "$remote_script" autoconnect start >/dev/null 2>&1 || true
@@ -399,7 +499,7 @@ asl_service_check() {
         omni_chk="/data/data/com.termux/files/home/omniroute-daemon.sh"
     fi
     if [ -n "$omni_chk" ] || command -v omniroute >/dev/null 2>&1; then
-        if ! pgrep -f "omniroute" >/dev/null 2>&1 && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
+        if [ -z "$(_asl_pgrep_first "omniroute")" ] && [ -z "$(_asl_pgrep_first "omniroute" root)" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
             echo "[!] OmniRoute AI proxy down — starting as root..."
             if [ -n "$omni_chk" ]; then
                 su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_chk'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
@@ -440,10 +540,12 @@ asl_service_check() {
 
     # 7. Re-apply Android OOM score adjustment (-1000) & CPU affinity (cores 0-3) for background daemons
     if su -c "id -u" >/dev/null 2>&1; then
-        for pid in $(pgrep -f "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop" 2>/dev/null); do
+        local _oom_pids
+        _oom_pids="$(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop") $(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop" root)"
+        for pid in $_oom_pids; do
             su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || true
             if command -v taskset >/dev/null 2>&1; then
-                taskset -pc 0-3 "$pid" >/dev/null 2>&1 || true
+                su -c "taskset -pc 0-3 $pid" >/dev/null 2>&1 || taskset -pc 0-3 "$pid" >/dev/null 2>&1 || true
             fi
         done
     fi
@@ -502,8 +604,8 @@ asl_service_check() {
 }
 
 asl_service_loop() {
-    if pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
-        echo "[!] ASL autonomous watchdog loop is already RUNNING (PID: $(pgrep -f "asl-watchdog-loop" | head -1))."
+    if [ -n "$(_asl_pgrep_first "asl-watchdog-loop")" ]; then
+        echo "[!] ASL autonomous watchdog loop is already RUNNING (PID: $(_asl_pgrep_first "asl-watchdog-loop"))."
         return 0
     fi
     echo "[*] Starting ASL autonomous background watchdog daemon (180s interval)..."
@@ -526,19 +628,220 @@ asl_service_loop() {
     echo "[✓] Autonomous watchdog daemon ACTIVE (PID: $lpid)."
 }
 
+# --- Per-Service Granular Stop ---
+asl_service_stop_one() {
+    local svc="$1"
+    local remote_script
+    remote_script=$(asl_find_script "remote.sh")
+    case "$svc" in
+        omniroute|omni)
+            echo "[*] Stopping OmniRoute AI proxy..."
+            _asl_pkill_real "omniroute-daemon"
+            _asl_pkill_real "omniroute serve"
+            _asl_pkill_real "omniroute"
+            echo "[✓] OmniRoute stopped."
+            ;;
+        ssh|sshd)
+            echo "[*] Stopping SSH server..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" lan stop >/dev/null 2>&1 || true
+            fi
+            _asl_pkill_real "sshd"
+            echo "[✓] SSH server stopped."
+            ;;
+        tunnels|tunnel|remote)
+            echo "[*] Stopping all remote tunnels (Serveo, Ngrok, Oracle, AutoConnect)..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" autoconnect stop >/dev/null 2>&1 || true
+                bash "$remote_script" oracle stop >/dev/null 2>&1 || true
+                bash "$remote_script" serveo stop >/dev/null 2>&1 || true
+                bash "$remote_script" ngrok stop >/dev/null 2>&1 || true
+            fi
+            echo "[✓] All remote tunnels stopped."
+            ;;
+        serveo)
+            echo "[*] Stopping Serveo tunnel..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" serveo stop >/dev/null 2>&1 || true
+            fi
+            _asl_pkill_real "serveo.net"
+            echo "[✓] Serveo tunnel stopped."
+            ;;
+        ngrok)
+            echo "[*] Stopping Ngrok tunnel..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" ngrok stop >/dev/null 2>&1 || true
+            fi
+            _asl_pkill_real "ngrok"
+            echo "[✓] Ngrok tunnel stopped."
+            ;;
+        oracle|vps)
+            echo "[*] Stopping Oracle VPS tunnel..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" oracle stop >/dev/null 2>&1 || true
+            fi
+            echo "[✓] Oracle VPS tunnel stopped."
+            ;;
+        autoconnect|ac)
+            echo "[*] Stopping AutoConnect daemon..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" autoconnect stop >/dev/null 2>&1 || true
+            fi
+            echo "[✓] AutoConnect daemon stopped."
+            ;;
+        watchdog|wdog|loop)
+            echo "[*] Stopping watchdog daemon..."
+            _asl_pkill_real "asl-watchdog-loop"
+            rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-watchdog.pid" 2>/dev/null || true
+            echo "[✓] Watchdog daemon stopped."
+            ;;
+        wakelock|wake)
+            echo "[*] Releasing CPU wake-lock..."
+            if command -v termux-wake-unlock >/dev/null 2>&1; then
+                termux-wake-unlock 2>/dev/null || true
+            fi
+            echo "[✓] CPU wake-lock released."
+            ;;
+        swap)
+            echo "[*] Detaching swap pool..."
+            local swap_script
+            swap_script=$(asl_find_script "swap-manager.sh")
+            if [ -f "$swap_script" ]; then
+                bash "$swap_script" teardown >/dev/null 2>&1 || true
+            fi
+            echo "[✓] Swap pool detached."
+            ;;
+        *)
+            echo "[!] Unknown service: $svc"
+            echo "Available services: omniroute, ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
+            return 1
+            ;;
+    esac
+}
+
+# --- Per-Service Granular Start ---
+asl_service_start_one() {
+    local svc="$1"
+    local remote_script
+    remote_script=$(asl_find_script "remote.sh")
+    case "$svc" in
+        omniroute|omni)
+            echo "[*] Starting OmniRoute AI proxy..."
+            local omni_bin=""
+            if [ -f "$HOME/omniroute-daemon.sh" ]; then
+                omni_bin="$HOME/omniroute-daemon.sh"
+            elif [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ]; then
+                omni_bin="/data/data/com.termux/files/home/omniroute-daemon.sh"
+            fi
+            if [ -n "$omni_bin" ]; then
+                su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_bin'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
+                echo "[✓] OmniRoute started."
+            else
+                echo "[!] Error: omniroute-daemon.sh not found."
+            fi
+            ;;
+        ssh|sshd)
+            echo "[*] Starting SSH server..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" lan start >/dev/null 2>&1 || true
+            fi
+            echo "[✓] SSH server started."
+            ;;
+        tunnels|tunnel|remote)
+            echo "[*] Starting all remote tunnels..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" start-all || true
+            fi
+            echo "[✓] Remote tunnels started."
+            ;;
+        serveo)
+            echo "[*] Starting Serveo tunnel..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" serveo start >/dev/null 2>&1 || true
+            fi
+            echo "[✓] Serveo tunnel started."
+            ;;
+        ngrok)
+            echo "[*] Starting Ngrok tunnel..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" ngrok start >/dev/null 2>&1 || true
+            fi
+            echo "[✓] Ngrok tunnel started."
+            ;;
+        oracle|vps)
+            echo "[*] Starting Oracle VPS tunnel..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" oracle start >/dev/null 2>&1 || true
+            fi
+            echo "[✓] Oracle VPS tunnel started."
+            ;;
+        autoconnect|ac)
+            echo "[*] Starting AutoConnect daemon..."
+            if [ -f "$remote_script" ]; then
+                bash "$remote_script" autoconnect start >/dev/null 2>&1 || true
+            fi
+            echo "[✓] AutoConnect daemon started."
+            ;;
+        watchdog|wdog|loop)
+            asl_service_loop
+            ;;
+        wakelock|wake)
+            echo "[*] Engaging CPU wake-lock..."
+            if command -v termux-wake-lock >/dev/null 2>&1; then
+                termux-wake-lock 2>/dev/null || true
+            fi
+            echo "[✓] CPU wake-lock engaged."
+            ;;
+        swap)
+            echo "[*] Setting up swap pool..."
+            local swap_script
+            swap_script=$(asl_find_script "swap-manager.sh")
+            if [ -f "$swap_script" ]; then
+                bash "$swap_script" setup >/dev/null 2>&1 || true
+            fi
+            echo "[✓] Swap pool active."
+            ;;
+        *)
+            echo "[!] Unknown service: $svc"
+            echo "Available services: omniroute, ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
+            return 1
+            ;;
+    esac
+}
+
+# --- Per-Service Granular Restart ---
+asl_service_restart_one() {
+    local svc="$1"
+    asl_service_stop_one "$svc"
+    sleep 1
+    asl_service_start_one "$svc"
+}
+
 case "${1:-status}" in
     start|run)
-        asl_service_start
+        if [ -n "${2:-}" ]; then
+            asl_service_start_one "$2"
+        else
+            asl_service_start
+        fi
         ;;
     stop)
-        asl_service_stop
-        pkill -f "asl-watchdog-loop" 2>/dev/null || true
+        if [ -n "${2:-}" ]; then
+            asl_service_stop_one "$2"
+        else
+            asl_service_stop
+            _asl_pkill_real "asl-watchdog-loop"
+        fi
         ;;
     restart)
-        asl_service_stop
-        pkill -f "asl-watchdog-loop" 2>/dev/null || true
-        sleep 1
-        asl_service_start
+        if [ -n "${2:-}" ]; then
+            asl_service_restart_one "$2"
+        else
+            asl_service_stop
+            _asl_pkill_real "asl-watchdog-loop"
+            sleep 1
+            asl_service_start
+        fi
         ;;
     check|health)
         asl_service_check
@@ -552,13 +855,14 @@ case "${1:-status}" in
         asl_service_loop
         ;;
     disable)
-        pkill -f "asl-watchdog-loop" 2>/dev/null || true
+        _asl_pkill_real "asl-watchdog-loop"
         asl_service_disable
         ;;
     status|"")
         asl_service_status
         ;;
     *)
-        echo "Usage: asl service [start|stop|restart|check|loop|enable|disable|status]"
+        echo "Usage: asl service [start|stop|restart|check|loop|enable|disable|status] [service_name]"
+        echo "Per-service: asl service stop|start|restart <omniroute|ssh|tunnels|serveo|ngrok|oracle|autoconnect|watchdog|wakelock|swap>"
         ;;
 esac

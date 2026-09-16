@@ -110,16 +110,13 @@ serveo_control() {
             serveo_status
             ;;
         stop)
-            if serveo_running; then
-                local pid
-                pid=$(cat "$SERVEO_STATE" 2>/dev/null)
-                [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || pkill -f "serveo.net" 2>/dev/null || true
-                rm -f "$SERVEO_STATE" "$SERVEO_LOG"
-                echo "[✓] Serveo tunnel stopped."
-            else
-                rm -f "$SERVEO_STATE"
-                echo "[*] Serveo tunnel is not running."
-            fi
+            local pid
+            pid=$(cat "$SERVEO_STATE" 2>/dev/null)
+            [ -n "$pid" ] && (kill -TERM "$pid" 2>/dev/null || su -c "kill -9 $pid" 2>/dev/null || true)
+            pkill -f "serveo.net" 2>/dev/null || true
+            su -c "pkill -9 -f serveo.net" 2>/dev/null || true
+            rm -f "$SERVEO_STATE" "$SERVEO_LOG"
+            echo "[✓] Serveo tunnel stopped."
             ;;
         status|"")
             serveo_status
