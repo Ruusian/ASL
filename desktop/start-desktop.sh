@@ -236,18 +236,23 @@ start_desktop() {
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
         rm -f "$termux_tmp/.X11-unix/X0" "$termux_tmp/.X0-lock" 2>/dev/null || su -c "rm -f '$termux_tmp/.X11-unix/X0' '$termux_tmp/.X0-lock'" 2>/dev/null || true
         if [ -f "$xauth_file" ] && [ -s "$xauth_file" ]; then
-            termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp -auth "$xauth_file" >/dev/null 2>&1 &
+            nohup termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp -auth "$xauth_file" </dev/null >/dev/null 2>&1 &
         else
-            termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp >/dev/null 2>&1 &
+            nohup termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp </dev/null >/dev/null 2>&1 &
         fi
+        local x11_spawn_pid=$!
+        disown "$x11_spawn_pid" 2>/dev/null || true
         sleep 1
     fi
-    X11_PID=$(pgrep -n -f "termux-x11.*:0" || pgrep -f "termux-x11.*:[0-9]" | head -n1 || true)
     local _i
+    X11_PID=
     X11_START=
-    for _i in 1 2 3; do
-        [ -n "$X11_PID" ] && X11_START=$(pid_start_time "$X11_PID")
-        [ -n "$X11_START" ] && break
+    for _i in 1 2 3 4 5; do
+        X11_PID=$(pgrep -n -f "termux-x11.*:0" || pgrep -f "termux-x11.*:[0-9]" | head -n1 || true)
+        if [ -n "$X11_PID" ]; then
+            X11_START=$(pid_start_time "$X11_PID")
+            [ -n "$X11_START" ] && break
+        fi
         sleep 1
     done
     [ -n "$X11_START" ] || { echo "[!] Termux:X11 failed to start."; echo "    💡 Hint: Ensure Termux:X11 companion app is installed and open on your device."; cleanup_started; return 1; }
@@ -266,9 +271,10 @@ start_desktop() {
     done
     mkdir -p "$termux_tmp/.X11-unix"
     if [ ! -S "$termux_tmp/.X11-unix/X0" ] && command -v socat >/dev/null 2>&1; then
-        socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=777 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" >/dev/null 2>&1 &
+        nohup socat UNIX-LISTEN:"$termux_tmp/.X11-unix/X0",fork,mode=777 ABSTRACT-CONNECT:"$termux_tmp/.X11-unix/X0" </dev/null >/dev/null 2>&1 &
         SOCAT_PID=$!
         SOCAT_START=$(pid_start_time "$SOCAT_PID")
+        disown "$SOCAT_PID" 2>/dev/null || true
         protect_pid_oom "$SOCAT_PID"
     fi
     asl_gpu_apply
@@ -443,8 +449,7 @@ LAUNCHER_EOF
     asl_exec "mkdir -p '$DEBIANPATH/tmp' && cp -f '$launcher_script' '$DEBIANPATH/tmp/asl-start-xfce.sh' && chmod 755 '$DEBIANPATH/tmp/asl-start-xfce.sh'" 2>/dev/null || cp -f "$launcher_script" "$DEBIANPATH/tmp/asl-start-xfce.sh" 2>/dev/null || true
     rm -f "$launcher_script" 2>/dev/null || true
     LAUNCHER_PID=
-    asl_exec "chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c 'ulimit -n 2048 2>/dev/null || true; exec /bin/bash /tmp/asl-start-xfce.sh' >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1" &
-    LAUNCHER_PID=$!
+    asl_exec "nohup chroot '$DEBIANPATH' /usr/bin/env -i HOME=/root USER=root LOGNAME=root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp /bin/bash -c 'ulimit -n 2048 2>/dev/null || true; exec /bin/bash /tmp/asl-start-xfce.sh' >'$DEBIANPATH/tmp/asl-xfce-launch.log' 2>&1 </dev/null &"
     SESSION_PID=
     SESSION_START=
     for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do

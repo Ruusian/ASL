@@ -155,7 +155,7 @@ asl_exec "
     mkdir -p \"$DEBIANPATH/etc/security\" 2>/dev/null || true
     printf '* soft nofile 2048\n* hard nofile 2048\nroot soft nofile 2048\nroot hard nofile 2048\n' > \"$DEBIANPATH/etc/security/limits.conf\" 2>/dev/null || true
 
-    # Provision kernel close_range workaround shim to prevent Android kernel 4.14 close_range spin locks in Python 3.13 / glibc
+    # Provision kernel close_range & pidfd workaround shim to prevent Android kernel 4.14 spin locks and GLib pidfd waitid EINVAL crashes
     mkdir -p \"$DEBIANPATH/usr/local/lib\" \"$DEBIANPATH/etc\" 2>/dev/null || true
     if [ ! -f \"$DEBIANPATH/usr/local/lib/libdisable_close_range.so\" ]; then
         cc_cmd=\$(chroot \"$DEBIANPATH\" /bin/sh -c 'command -v gcc || command -v clang || command -v cc' 2>/dev/null || true)
@@ -167,13 +167,38 @@ asl_exec "
 #include <errno.h>
 #include <stdarg.h>
 #include <dlfcn.h>
+#include <signal.h>
 
+#ifndef __NR_pidfd_open
+#define __NR_pidfd_open 434
+#endif
+#ifndef __NR_pidfd_send_signal
+#define __NR_pidfd_send_signal 424
+#endif
+#ifndef __NR_pidfd_getfd
+#define __NR_pidfd_getfd 438
+#endif
 #ifndef __NR_close_range
 #define __NR_close_range 436
 #endif
 
 typedef long (*syscall_fn_t)(long number, ...);
 static syscall_fn_t real_syscall = NULL;
+
+int pidfd_open(pid_t pid, unsigned int flags) {
+    errno = ENOSYS;
+    return -1;
+}
+
+int pidfd_send_signal(int pidfd, int sig, siginfo_t *info, unsigned int flags) {
+    errno = ENOSYS;
+    return -1;
+}
+
+int pidfd_getfd(int pidfd, int targetfd, unsigned int flags) {
+    errno = ENOSYS;
+    return -1;
+}
 
 int close_range(unsigned int first, unsigned int last, int flags) {
     if (last > 2048) last = 2048;
@@ -203,6 +228,11 @@ long syscall(long number, ...) {
     long a4 = va_arg(args, long);
     long a5 = va_arg(args, long);
     va_end(args);
+
+    if (number == __NR_pidfd_open || number == __NR_pidfd_send_signal || number == __NR_pidfd_getfd) {
+        errno = ENOSYS;
+        return -1;
+    }
 
     if (number == __NR_close_range) {
         if ((unsigned long)a1 > 2048) a1 = 2048;
