@@ -44,12 +44,11 @@ bash install.sh
 
 ### Step 2: Choose Rootfs Edition
 
-During installation, you can select the Linux distribution flavor:
+During installation, you can select the Linux distribution flavor (provisioned dynamically via `proot-distro`):
 
-- **Debian Modded [RECOMMENDED]**: Turnip Mesa Vulkan, GPU Drivers, XFCE4 desktop pre-configured.
-- **Clean Debian Trixie Base**: Minimal official Debian Trixie arm64 rootfs.
+- **Debian Trixie [RECOMMENDED]**: Turnip Mesa Vulkan, GPU Drivers, Audio & XFCE4 desktop pre-configured.
 - **Ubuntu 24.04 LTS Base**: Clean Ubuntu Noble arm64 base.
-- **Arch / Kali / Alpine Base**: Alternative Linux distributions.
+- **Arch / Kali / Alpine / Fedora / Void Base**: Official Linux distribution container images.
 
 ### Step 3: Verify Installation
 

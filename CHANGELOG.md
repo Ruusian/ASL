@@ -4,6 +4,15 @@ All notable changes to the ASL (Android Subsystem for Linux) project are documen
 
 ## [Unreleased] - Development Fork
 
+- **Dynamic PRoot-Distro Subsystem Provisioning**:
+  - Replaced static prebuilt multi-part rootfs release downloads with dynamic `proot-distro` image provisioning.
+  - Added support for any official Linux distribution: Debian Trixie, Ubuntu 24.04 LTS, Arch Linux, Alpine Linux, Kali Linux, Fedora Linux, Void Linux, and custom OCI container images via `--distro=<image>`.
+  - Automated local post-provisioning for Android AID GID mappings, DNS nameservers (`1.1.1.1`, `8.8.8.8`), Turnip/Zink GPU hardware acceleration drivers, and OpenClaude AI agent environment.
+
+- **Web Terminal Mobile Accessory & Modifier Toolbar**:
+  - Injected responsive on-screen mobile accessory bar into ttyd web terminal interface with sticky modifiers (`Shift`, `Ctrl`, `Alt`), `Esc`, `Tab`, navigation arrows, and categorized tabs (`Main`, `Ctrl+`, `Sym`, `Nav`, `Cmd`).
+  - Implemented direct binary WebSocket frame injection via `window.sendTerminalInput` for seamless mobile terminal navigation.
+
 - **Codebase Hardening & Variable Safety**:
   - Resolved unbound local variable lookups and hardened variable declarations across `bin/asl`, `core/asl-conf.sh`, `core/termux-bridge.sh`, and `core/service-manager.sh`.
   - Fixed syntax and nested quoting errors in `core/gpu-profile.sh` for POSIX and shell parser compatibility.
