@@ -77,7 +77,7 @@ run_preset_workstation() {
 asl_wizard_interactive() {
     clear
     echo "============================================================"
-    echo "       🚀 ASL Guided First-Time Setup Wizard v1.0"
+    echo "       🚀 ASL Guided First-Time Setup Wizard"
     echo "============================================================"
     echo " Welcome to Android Subsystem for Linux!"
     echo " Let's configure your environment in a few quick steps."

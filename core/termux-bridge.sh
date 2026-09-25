@@ -584,7 +584,7 @@ termux_screen_rotation() {
                     echo "[*] Starting ASL Rotation Watcher daemon (auto-overriding Android auto-rotation)..."
                     local asl_bin="${PREFIX:-/data/data/com.termux/files/usr}/bin/asl"
                     [ ! -x "$asl_bin" ] && asl_bin="asl"
-                    ((nohup bash -c "while true; do $asl_bin rotation enforce >/dev/null 2>&1 || true; sleep 3; done" >/dev/null 2>&1 &) &)
+                    ( ( nohup bash -c "while true; do $asl_bin rotation enforce >/dev/null 2>&1 || true; sleep 3; done" >/dev/null 2>&1 &) &)
                     sleep 0.2
                     pgrep -f "rotation enforce" | head -1 > "$ROTATION_WATCHER_PID" 2>/dev/null || true
                     echo "[✓] Rotation watcher active."

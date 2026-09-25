@@ -158,27 +158,8 @@ is_mounted() {
     su -c "target=\$(echo $enc_target | base64 -d); awk -v target=\"\$target\" '\$2 == target \"/dev\" || \$2 == target \"/proc\" || \$2 == target {found=1; exit} END {exit !found}' /proc/mounts" 2>/dev/null
 }
 
-status_label() {
-    local state="$1"
-    case "$state" in
-        ACTIVE|RUNNING|READY|ON|ENABLED) printf '%s[%s]%s' "$C_GREEN$C_BOLD" "$state" "$C_RESET" ;;
-        INACTIVE|STOPPED|OFF|DISABLED) printf '%s[%s]%s' "$C_DIM" "$state" "$C_RESET" ;;
-        *) printf '%s[%s]%s' "$C_YELLOW$C_BOLD" "$state" "$C_RESET" ;;
-    esac
-}
-
-asl_log_info()  { printf '%s[*] %s%s\n' "$C_CYAN$C_BOLD" "$*" "$C_RESET"; }
-asl_log_ok()    { printf '%s[✓] %s%s\n' "$C_GREEN$C_BOLD" "$*" "$C_RESET"; }
-asl_log_warn()  { printf '%s[!] %s%s\n' "$C_YELLOW$C_BOLD" "$*" "$C_RESET"; }
-asl_log_error() { printf '%s[✗] %s%s\n' "$C_RED$C_BOLD" "$*" "$C_RESET" >&2; }
-asl_log_hint()  { printf '%s    💡 Hint: %s%s\n' "$C_YELLOW" "$*" "$C_RESET"; }
 
 # Auto-detect performance CPU core affinity mask (all CPU cores for maximum performance)
-asl_get_perf_cpu_mask() {
-    local ncpu
-    ncpu=$(nproc 2>/dev/null || echo 8)
-    printf '0-%d' "$((ncpu - 1))"
-}
 
 asl_host_ip() {
     local ip

@@ -1,6 +1,7 @@
 #!/bin/bash
 # ASL: 24/7 Background Service Manager & Boot Autostart Integration
 # Ensures ASL chroot mounts, host SSH server, Serveo persistent tunnel, Ngrok backup,
+TERMUX_HOME="${TERMUX_HOME:-/data/data/com.termux/files/home}"
 # auto-connect daemon, and AI proxy services start automatically on boot and stay alive 24/7.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -8,9 +9,9 @@ if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
-BOOT_DIR="$HOME/.termux/boot"
+BOOT_DIR="$TERMUX_HOME/.termux/boot"
 BOOT_SCRIPT="$BOOT_DIR/00-asl-autostart.sh"
-BASHRC="$HOME/.bashrc"
+BASHRC="$TERMUX_HOME/.bashrc"
 
 # --- Reliable process detection helpers ---
 # pgrep -f matches kernel threads (irq/*, msm_watchdog) and shell snapshots.
@@ -134,8 +135,8 @@ asl_service_start() {
 
     # 4. Check & restore Omniroute / local AI proxy on port 20128 if installed
     local omni_bin=""
-    if [ -f "$HOME/omniroute-daemon.sh" ]; then
-        omni_bin="$HOME/omniroute-daemon.sh"
+    if [ -f "$TERMUX_HOME/omniroute-daemon.sh" ]; then
+        omni_bin="$TERMUX_HOME/omniroute-daemon.sh"
     elif [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ]; then
         omni_bin="/data/data/com.termux/files/home/omniroute-daemon.sh"
     fi
@@ -144,6 +145,24 @@ asl_service_start() {
             echo "[*] Starting Omniroute local AI proxy on port 20128..."
             if [ -n "$omni_bin" ]; then
                 su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_bin'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
+            fi
+        fi
+    fi
+
+    # 4b. Check & restore Web Terminal (Termux) on port 4096 (ttyd)
+    local web_bin=""
+    if [ -f "$TERMUX_HOME/web-terminal-daemon.sh" ]; then
+        web_bin="$TERMUX_HOME/web-terminal-daemon.sh"
+    elif [ -f "/data/data/com.termux/files/home/web-terminal-daemon.sh" ]; then
+        web_bin="/data/data/com.termux/files/home/web-terminal-daemon.sh"
+    fi
+    if [ -n "$web_bin" ] || command -v ttyd >/dev/null 2>&1; then
+        if [ -z "$(_asl_pgrep_first "ttyd")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/4096') 2>/dev/null; then
+            echo "[*] Starting Web Terminal (Termux) on port 4096..."
+            if [ -n "$web_bin" ]; then
+                (cd "$TERMUX_HOME" && nohup bash "$web_bin" >> /data/data/com.termux/files/home/web-terminal.log 2>&1 &)
+            else
+                (cd "$TERMUX_HOME" && nohup ttyd -p 4096 -i 127.0.0.1 -w "$TERMUX_HOME" -W bash -l >> /data/data/com.termux/files/home/web-terminal.log 2>&1 &)
             fi
         fi
     fi
@@ -179,8 +198,8 @@ asl_service_stop() {
     _asl_pkill_real "serveo.net"
     _asl_pkill_real "ngrok"
     local o_host=""
-    if [ -f "$HOME/.asl/oracle_vps.conf" ]; then
-        o_host=$(grep -E '^ORACLE_HOST=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+    if [ -f "$TERMUX_HOME/.asl/oracle_vps.conf" ]; then
+        o_host=$(grep -E '^ORACLE_HOST=' "$TERMUX_HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
     fi
     if [ -n "$o_host" ]; then
         _asl_pkill_real "ssh.*${o_host}"
@@ -249,8 +268,8 @@ if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ]; then
     bash "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
 elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/bin/asl" ]; then
     bash "${PREFIX:-/data/data/com.termux/files/usr}/share/asl/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
-elif [ -f "$HOME/ASL/bin/asl" ]; then
-    bash "$HOME/ASL/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
+elif [ -f "$TERMUX_HOME/ASL/bin/asl" ]; then
+    bash "$TERMUX_HOME/ASL/bin/asl" service start >> /data/data/com.termux/files/usr/tmp/asl-boot.log 2>&1
 fi
 BOOT_EOF
     chmod 755 "$BOOT_SCRIPT"
@@ -263,22 +282,22 @@ BOOT_EOF
 
 # ASL 24/7 Auto-Start Hook
 if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
-    ((nohup bash "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start </dev/null >/dev/null 2>&1 &) &) 2>/dev/null
-elif [ -f "$HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
-    ((nohup bash "$HOME/ASL/bin/asl" service start </dev/null >/dev/null 2>&1 &) &) 2>/dev/null
+    ( ( nohup bash "${PREFIX:-/data/data/com.termux/files/usr}/bin/asl" service start </dev/null >/dev/null 2>&1 & ) & ) 2>/dev/null
+elif [ -f "$TERMUX_HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop\|sshd\|autoconnect" >/dev/null 2>&1; then
+    ( ( nohup bash "$TERMUX_HOME/ASL/bin/asl" service start </dev/null >/dev/null 2>&1 & ) & ) 2>/dev/null
 fi
 BASHRC_EOF
         echo "[✓] Added shell auto-start hook to $BASHRC"
     fi
 
-    PROFILE="$HOME/.profile"
+    PROFILE="$TERMUX_HOME/.profile"
     touch "$PROFILE"
     if ! grep -q "ASL 24/7 Auto-Start Hook" "$PROFILE"; then
         cat << 'PROFILE_EOF' >> "$PROFILE"
 
 # ASL 24/7 Auto-Start Hook
-if [ -f "$HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
-    nohup bash "$HOME/ASL/bin/asl" service start >/dev/null 2>&1 &
+if [ -f "$TERMUX_HOME/ASL/bin/asl" ] && ! pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
+    nohup bash "$TERMUX_HOME/ASL/bin/asl" service start >/dev/null 2>&1 &
 fi
 PROFILE_EOF
         echo "[✓] Added shell auto-start hook to $PROFILE"
@@ -293,8 +312,8 @@ asl_service_disable() {
     if [ -f "$BASHRC" ]; then
         sed -i '/# ASL 24\/7 Auto-Start Hook/,/fi$/d' "$BASHRC" 2>/dev/null || true
     fi
-    if [ -f "$HOME/.profile" ]; then
-        sed -i '/# ASL 24\/7 Auto-Start Hook/,/fi$/d' "$HOME/.profile" 2>/dev/null || true
+    if [ -f "$TERMUX_HOME/.profile" ]; then
+        sed -i '/# ASL 24\/7 Auto-Start Hook/,/fi$/d' "$TERMUX_HOME/.profile" 2>/dev/null || true
     fi
     echo "[✓] Boot autostart disabled."
 }
@@ -370,9 +389,9 @@ asl_service_status() {
     fi
 
     local oracle_pid oracle_mem o_host="" o_port="2222"
-    if [ -f "$HOME/.asl/oracle_vps.conf" ]; then
-        o_host=$(grep -E '^ORACLE_HOST=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
-        o_port=$(grep -E '^ORACLE_PORT=' "$HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+    if [ -f "$TERMUX_HOME/.asl/oracle_vps.conf" ]; then
+        o_host=$(grep -E '^ORACLE_HOST=' "$TERMUX_HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
+        o_port=$(grep -E '^ORACLE_PORT=' "$TERMUX_HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
         o_port="${o_port:-2222}"
     fi
     if [ -n "$o_host" ]; then
@@ -381,7 +400,7 @@ asl_service_status() {
     if [ -n "$oracle_pid" ]; then
         oracle_mem=$(fmt_mem "$oracle_pid")
         echo " Oracle Tunnel: ACTIVE (${o_host}:${o_port}, PID: $oracle_pid, RAM: $oracle_mem)"
-    elif [ -n "$o_host" ] && [ -f "$HOME/.ssh/oracle_vps.key" ]; then
+    elif [ -n "$o_host" ] && [ -f "$TERMUX_HOME/.ssh/oracle_vps.key" ]; then
         echo " Oracle Tunnel: STANDBY (Run 'asl remote oracle start')"
     fi
 
@@ -408,6 +427,15 @@ asl_service_status() {
     if [ -n "$omni_pid" ]; then
         omni_mem=$(fmt_mem "$omni_pid")
         echo " Omniroute Proxy: ACTIVE (Port 20128, PID: $omni_pid, RAM: $omni_mem)"
+    fi
+
+    local web_pid web_mem
+    web_pid=$(_asl_pgrep_first "ttyd")
+    if [ -n "$web_pid" ]; then
+        web_mem=$(fmt_mem "$web_pid")
+        echo " Web Terminal:   ACTIVE (Port 4096, PID: $web_pid, RAM: $web_mem)"
+    else
+        echo " Web Terminal:   INACTIVE"
     fi
 
     local loop_pid loop_mem
@@ -493,8 +521,8 @@ asl_service_check() {
 
     # 5. OmniRoute Local AI Proxy Check
     local omni_chk=""
-    if [ -f "$HOME/omniroute-daemon.sh" ]; then
-        omni_chk="$HOME/omniroute-daemon.sh"
+    if [ -f "$TERMUX_HOME/omniroute-daemon.sh" ]; then
+        omni_chk="$TERMUX_HOME/omniroute-daemon.sh"
     elif [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ]; then
         omni_chk="/data/data/com.termux/files/home/omniroute-daemon.sh"
     fi
@@ -504,6 +532,49 @@ asl_service_check() {
             if [ -n "$omni_chk" ]; then
                 su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_chk'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
             fi
+            healed=$((healed + 1))
+        fi
+    fi
+
+    # 5a. Web Terminal Dashboard Check (ttyd on port 4096)
+    local web_chk=""
+    if [ -f "$TERMUX_HOME/web-terminal-daemon.sh" ]; then
+        web_chk="$TERMUX_HOME/web-terminal-daemon.sh"
+    elif [ -f "/data/data/com.termux/files/home/web-terminal-daemon.sh" ]; then
+        web_chk="/data/data/com.termux/files/home/web-terminal-daemon.sh"
+    fi
+    if [ -n "$web_chk" ] || command -v ttyd >/dev/null 2>&1; then
+        if [ -z "$(_asl_pgrep_first "ttyd")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/4096') 2>/dev/null; then
+            echo "[!] Web Terminal daemon down — restarting on port 4096..."
+            if [ -n "$web_chk" ]; then
+                (cd "$TERMUX_HOME" && nohup bash "$web_chk" >> /data/data/com.termux/files/home/web-terminal.log 2>&1 &)
+            else
+                (cd "$TERMUX_HOME" && nohup ttyd -p 4096 -i 127.0.0.1 -w "$TERMUX_HOME" -W bash -l >> /data/data/com.termux/files/home/web-terminal.log 2>&1 &)
+            fi
+            healed=$((healed + 1))
+        fi
+    fi
+
+    # 5b. Oracle VPS 2 (144.24.122.241) AI, Web Terminal & Dashboard Tunnel Check
+    local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
+    if [ -f "$vps2_key" ]; then
+        if ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
+            echo "[!] Oracle VPS2 (144.24.122.241) reverse tunnel down — restoring..."
+            nohup ssh -i "$vps2_key" -T -N \
+                -o BatchMode=yes \
+                -o PasswordAuthentication=no \
+                -o StrictHostKeyChecking=accept-new \
+                -o UserKnownHostsFile="$TERMUX_HOME/.ssh/known_hosts" \
+                -o ServerAliveInterval=10 \
+                -o ServerAliveCountMax=3 \
+                -o ConnectTimeout=10 \
+                -o ExitOnForwardFailure=yes \
+                -R 8022:127.0.0.1:8022 \
+                -R 20128:127.0.0.1:20128 \
+                -R 4096:127.0.0.1:4096 \
+                -R 9119:127.0.0.1:9119 \
+                -R 18080:127.0.0.1:8080 \
+                ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
             healed=$((healed + 1))
         fi
     fi
@@ -641,6 +712,11 @@ asl_service_stop_one() {
             _asl_pkill_real "omniroute"
             echo "[✓] OmniRoute stopped."
             ;;
+        web|terminal|web-terminal|opencode|code)
+            echo "[*] Stopping Web Terminal daemon..."
+            _asl_pkill_real "ttyd"
+            echo "[✓] Web Terminal stopped."
+            ;;
         ssh|sshd)
             echo "[*] Stopping SSH server..."
             if [ -f "$remote_script" ]; then
@@ -713,7 +789,7 @@ asl_service_stop_one() {
             ;;
         *)
             echo "[!] Unknown service: $svc"
-            echo "Available services: omniroute, ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
+            echo "Available services: omniroute, web (terminal), ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
             return 1
             ;;
     esac
@@ -728,8 +804,8 @@ asl_service_start_one() {
         omniroute|omni)
             echo "[*] Starting OmniRoute AI proxy..."
             local omni_bin=""
-            if [ -f "$HOME/omniroute-daemon.sh" ]; then
-                omni_bin="$HOME/omniroute-daemon.sh"
+            if [ -f "$TERMUX_HOME/omniroute-daemon.sh" ]; then
+                omni_bin="$TERMUX_HOME/omniroute-daemon.sh"
             elif [ -f "/data/data/com.termux/files/home/omniroute-daemon.sh" ]; then
                 omni_bin="/data/data/com.termux/files/home/omniroute-daemon.sh"
             fi
@@ -738,6 +814,24 @@ asl_service_start_one() {
                 echo "[✓] OmniRoute started."
             else
                 echo "[!] Error: omniroute-daemon.sh not found."
+            fi
+            ;;
+        web|terminal|web-terminal|opencode|code)
+            echo "[*] Starting Web Terminal on port 4096..."
+            local web_bin=""
+            if [ -f "$TERMUX_HOME/web-terminal-daemon.sh" ]; then
+                web_bin="$TERMUX_HOME/web-terminal-daemon.sh"
+            elif [ -f "/data/data/com.termux/files/home/web-terminal-daemon.sh" ]; then
+                web_bin="/data/data/com.termux/files/home/web-terminal-daemon.sh"
+            fi
+            if [ -n "$web_bin" ]; then
+                (cd "$TERMUX_HOME" && nohup bash "$web_bin" >> /data/data/com.termux/files/home/web-terminal.log 2>&1 &)
+                echo "[✓] Web Terminal started on port 4096."
+            elif command -v ttyd >/dev/null 2>&1; then
+                (cd "$TERMUX_HOME" && nohup ttyd -p 4096 -i 127.0.0.1 -w "$TERMUX_HOME" -W bash -l >> /data/data/com.termux/files/home/web-terminal.log 2>&1 &)
+                echo "[✓] Web Terminal (ttyd) started on port 4096."
+            else
+                echo "[!] Error: ttyd / web-terminal-daemon.sh not found."
             fi
             ;;
         ssh|sshd)
@@ -803,7 +897,7 @@ asl_service_start_one() {
             ;;
         *)
             echo "[!] Unknown service: $svc"
-            echo "Available services: omniroute, ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
+            echo "Available services: omniroute, web (terminal), ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
             return 1
             ;;
     esac

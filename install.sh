@@ -137,7 +137,6 @@ if [ "$(su -c 'id -u' 2>/dev/null)" != "0" ]; then
     exit 1
 fi
 
-ACTIVE_MODE="root"
 ASL_EXEC_MODE="root"
 export ASL_EXEC_MODE
 echo -e "${GREEN}[✓] Execution Mode: ROOT (su) Kernel Chroot (Full Hardware Acceleration)${RESET}"

@@ -36,8 +36,18 @@ asl_gpu_detect() {
             case "$gpu_id" in
                 7[0-9][0-9]) ASL_GPU_MODEL="adreno7xx" ;;  # Adreno 730, 740, 750
                 8[0-9][0-9]) ASL_GPU_MODEL="adreno8xx" ;;  # Adreno 830, 840
+                660) ASL_GPU_MODEL="adreno660" ;; 
                 6[0-9][0-9]) ASL_GPU_MODEL="adreno6xx" ;;  # Adreno 610-660
                 *) ASL_GPU_MODEL="adreno-unknown" ;;
+            esac
+        fi
+
+        # Fallback if gpu_id is missing or failed (common on many Android kernels)
+        if [ "$ASL_GPU_MODEL" = "adreno-unknown" ] || [ "$ASL_GPU_MODEL" = "unknown" ]; then
+            case "$ASL_GPU_PLATFORM" in
+                taro*|cape*|kalama*|pineapple*|sun*) ASL_GPU_MODEL="adreno7xx" ;;
+                lahaina*|sm8350*) ASL_GPU_MODEL="adreno660" ;;
+                kona*|msmnile*|lito*|atoll*|sm*|sdm*) ASL_GPU_MODEL="adreno6xx" ;;
             esac
         fi
 
@@ -67,11 +77,6 @@ asl_gpu_icd_in_chroot() {
     fi
 }
 
-asl_gpu_icd_name() {
-    local icd_path
-    icd_path=$(asl_gpu_icd_in_chroot)
-    basename "$icd_path"
-}
 
 asl_gpu_apply() {
     asl_gpu_detect
@@ -89,8 +94,10 @@ asl_gpu_apply() {
             export MESA_GLES_VERSION_OVERRIDE=3.2
             local icd_chroot
             icd_chroot=$(asl_gpu_icd_in_chroot)
-            #export VK_ICD_FILENAMES="$DEBIANPATH$icd_chroot"
-            #export VK_DRIVER_FILES="$DEBIANPATH$icd_chroot"
+            if [ -n "$icd_chroot" ]; then
+                export VK_ICD_FILENAMES="$icd_chroot"
+                export VK_DRIVER_FILES="$icd_chroot"
+            fi
             export MESA_SHADER_CACHE_DIR="/tmp/.mesa_cache"
             export MESA_GL_SHADER_CACHE_DIR="/tmp/.mesa_cache"
             export MESA_VK_SHADER_CACHE_DIR="/tmp/.mesa_cache"
@@ -107,6 +114,10 @@ asl_gpu_apply() {
                     # Adreno 7xx: Optimal settings for 730/740/750
                     export TU_DEBUG="noconform"
                     export TU_PERF="batched"
+                    ;;
+                adreno660)
+                    # Adreno 660 / SDM 888: Hardware tiling bug causes crashes/glitches under full zink Vulkan load
+                    export TU_DEBUG="noconform,sysmem"
                     ;;
                 adreno6xx)
                     # Adreno 6xx: Conservative settings for older hardware
@@ -142,9 +153,8 @@ asl_gpu_env_exports() {
     res="${res}export MESA_VK_WINSYS=\"${MESA_VK_WINSYS:-x11}\"\n"
     # [ -n "${MESA_VK_WSI_DEBUG:-}" ] && res="${res}export MESA_VK_WSI_DEBUG=\"sw\"\n"
     if [ -n "$icd_path_in_chroot" ]; then
-        # res="${res}export VK_ICD_FILENAMES=\"${icd_path_in_chroot}\"\n"
-        # res="${res}export VK_DRIVER_FILES=\"${icd_path_in_chroot}\"\n"
-        :
+        res="${res}export VK_ICD_FILENAMES=\"${icd_path_in_chroot}\"\n"
+        res="${res}export VK_DRIVER_FILES=\"${icd_path_in_chroot}\"\n"
     fi
     [ -n "${TU_DEBUG:-}" ] && res="${res}export TU_DEBUG=\"${TU_DEBUG}\"\n"
     [ -n "${ZINK_DESCRIPTORS:-}" ] && res="${res}export ZINK_DESCRIPTORS=\"${ZINK_DESCRIPTORS}\"\n"
@@ -167,15 +177,6 @@ asl_gpu_env_exports() {
     printf '%b' "$res"
 }
 
-asl_gpu_apply_exports() {
-    asl_gpu_apply
-    local hud_script hud_exp
-    hud_script=$(asl_find_script "hud.sh")
-    if [ -f "$hud_script" ]; then
-        hud_exp=$("$hud_script" env 2>/dev/null || true)
-        [ -n "$hud_exp" ] && eval "$hud_exp"
-    fi
-}
 
 asl_sync_chroot_env() {
     DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"

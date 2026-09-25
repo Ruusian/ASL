@@ -10,7 +10,7 @@
   <a href="#"><img src="https://img.shields.io/badge/Execution-Root%20Kernel%20Chroot-purple.svg?style=for-the-badge" alt="Execution Modes"/></a>
   <a href="#"><img src="https://img.shields.io/badge/GPU-Mesa%20Turnip%20%7C%20Zink%20%7C%20VirGL-orange.svg?style=for-the-badge&logo=vulkan" alt="GPU Acceleration"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License"/></a>
-  <a href="#"><img src="https://img.shields.io/badge/Release-v2.5.1%20Stable-success.svg?style=for-the-badge" alt="Release"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/Release-Stable-success.svg?style=for-the-badge" alt="Release"/></a>
 </p>
 
 ---
@@ -62,13 +62,13 @@ Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or
 
 ---
 
-## 🖥️ Live Terminal TUI Console (v2.5.1)
+## 🖥️ Live Terminal TUI Console
 
 ASL features a flicker-free, 74-column DEC Mode 1049 alternate-screen buffer dashboard with live diagnostics:
 
 ```text
  ┌────────────────────────────────────────────────────────────────────────┐
- │   ASL - Android Subsystem for Linux v2.5.1                             │
+ │   ASL - Android Subsystem for Linux                                    │
  ├────────────────────────────────────────────────────────────────────────┤
  │   Host:        Linux 4.14.357 (aarch64)                                │
  │   Subsystem:   Debian 13 (Trixie) [MOUNTED]                            │

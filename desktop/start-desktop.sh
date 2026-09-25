@@ -242,6 +242,7 @@ start_desktop() {
         fi
         local x11_spawn_pid=$!
         disown "$x11_spawn_pid" 2>/dev/null || true
+        taskset -a -p F0 "$x11_spawn_pid" 2>/dev/null || true
         sleep 1
     fi
     local _i
@@ -325,11 +326,6 @@ export QT_STYLE_OVERRIDE=gtk2
 $gpu_exports
 
 mkdir -p /etc/pulse "$target_home/.config/pulse" "$target_home/Desktop" "$target_home/.config/gtk-3.0" /run/user/$target_uid /dev/shm/mesa_shader_cache 2>/dev/null
-for app_id in code chromium thunar xfce4-terminal synaptic pavucontrol; do
-    if [ -f "/usr/share/applications/\${app_id}.desktop" ] && [ ! -f "$target_home/Desktop/\${app_id}.desktop" ]; then
-        cp -f "/usr/share/applications/\${app_id}.desktop" "$target_home/Desktop/" 2>/dev/null || true
-    fi
-done
 for f in "$target_home/Desktop"/*.desktop; do
     if [ -f "\$f" ]; then
         chmod +x "\$f" 2>/dev/null || true
@@ -379,7 +375,7 @@ if ! dbus-send --address=unix:path=/run/user/$target_uid/bus --dest=org.freedesk
 fi
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
 
-rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/xfce-keepalive 2>/dev/null || true
+# rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/xfce-keepalive 2>/dev/null || true
 (
     sleep 2
     export DISPLAY=:0
@@ -397,38 +393,9 @@ rm -rf "$target_home/.cache/sessions"/* /tmp/.xfsm-ICE-* /tmp/.ICE-unix/* /tmp/x
     xrandr --addmode builtin "800x600" 2>/dev/null || true
 
     for _t in 1 2 3 4 5; do
-        if xfconf-query -c xfwm4 -p /general/use_compositing >/dev/null 2>&1; then break; fi
         sleep 1
     done
 
-    xfconf-query -c xfwm4 -p /general/titleless_fullscreen >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/titleless_fullscreen -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/borderless_maximize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/borderless_maximize -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/use_compositing >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/use_compositing -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/vblank_mode >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/vblank_mode -n -t string -s off 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/show_dock_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_dock_shadow -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/show_popup_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_popup_shadow -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/show_frame_shadow >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/show_frame_shadow -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/unredirect_overlays >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/unredirect_overlays -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/zoom_desktop >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/zoom_desktop -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/cycle_preview >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/cycle_preview -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/cycle_tabwin_mode >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/cycle_tabwin_mode -n -t int -s 1 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/move_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/move_opacity -n -t int -s 90 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/resize_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/resize_opacity -n -t int -s 90 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/popup_opacity >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/popup_opacity -n -t int -s 95 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/tile_on_move >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/tile_on_move -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/snap_to_border >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/snap_to_border -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/snap_to_windows >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/snap_to_windows -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/snap_width >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/snap_width -n -t int -s 10 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/box_move >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_move -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xfwm4 -p /general/box_resize >/dev/null 2>&1 || xfconf-query -c xfwm4 -p /general/box_resize -n -t bool -s false 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/Antialias >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/Antialias -n -t int -s 1 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/Hinting >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/Hinting -n -t int -s 1 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/HintStyle >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/HintStyle -n -t string -s hintslight 2>/dev/null || true
-    xfconf-query -c xsettings -p /Xft/RGBA >/dev/null 2>&1 || xfconf-query -c xsettings -p /Xft/RGBA -n -t string -s rgb 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/style >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/style -n -t int -s 2 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/icon-size -n -t int -s 48 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-home -n -t bool -s true 2>/dev/null || true
-    xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem >/dev/null 2>&1 || xfconf-query -c xfce4-desktop -p /desktop-icons/file-icons/show-filesystem -n -t bool -s true 2>/dev/null || true
 ) &
 
 rm -f /etc/xdg/autostart/light-locker.desktop "$target_home/.config/autostart/light-locker.desktop" 2>/dev/null || true

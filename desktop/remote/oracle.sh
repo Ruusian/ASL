@@ -209,7 +209,7 @@ oracle_control() {
                 sleep 1
                 echo "[*] Clearing stale listeners on Oracle VPS (${ORACLE_HOST}:${ORACLE_PORT})..."
                 # Kill all sshd children holding the tunnel port (not the main sshd)
-                ssh -i "$ORACLE_KEY" -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "${ORACLE_USER}@${ORACLE_HOST}" "
+                ssh -i "$ORACLE_KEY" -o ConnectTimeout=5 -o BatchMode=yes -o PasswordAuthentication=no -o StrictHostKeyChecking=accept-new "${ORACLE_USER}@${ORACLE_HOST}" "
                     for pid in \$(sudo ss -tulpn | grep ':${ORACLE_PORT} ' | grep -oP 'pid=\K[0-9]+'); do
                         ppid=\$(ps -o ppid= -p \$pid 2>/dev/null | tr -d ' ')
                         [ -n \"\$ppid\" ] && [ \"\$ppid\" != \"1\" ] && sudo kill -9 \$pid \$ppid 2>/dev/null
@@ -221,6 +221,8 @@ oracle_control() {
                 echo "[*] Launching Oracle VPS persistent SSH tunnel (${ORACLE_HOST}:${ORACLE_PORT} -> 8022)..."
                 rm -f "$ORACLE_LOG"
                 nohup ssh -i "$ORACLE_KEY" -T -N \
+                    -o BatchMode=yes \
+                    -o PasswordAuthentication=no \
                     -o StrictHostKeyChecking=accept-new \
                     -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
                     -o ServerAliveInterval=10 \

@@ -79,14 +79,14 @@ asl_swap_status() {
 }
 
 asl_swap_setup() {
-    local target_size="${1:-5G}"
+    local target_size="${1:-3G}"
     echo "[*] Setting up $target_size virtual swap pool & memory optimization..."
 
     local swapfile="/data/local/tmp/asl_swap.img"
     if [ ! -f "$swapfile" ]; then
         echo "[*] Creating $target_size swap image..."
         su -c "swapoff -a 2>/dev/null || true" 2>/dev/null || swapoff -a 2>/dev/null || true
-        su -c "fallocate -l $target_size '$swapfile' || dd if=/dev/zero of='$swapfile' bs=1M count=5120" 2>/dev/null || fallocate -l $target_size "$swapfile" 2>/dev/null || dd if=/dev/zero of="$swapfile" bs=1M count=5120 2>/dev/null || true
+        su -c "fallocate -l $target_size '$swapfile' || dd if=/dev/zero of='$swapfile' bs=1M count=3072" 2>/dev/null || fallocate -l $target_size "$swapfile" 2>/dev/null || dd if=/dev/zero of="$swapfile" bs=1M count=3072 2>/dev/null || true
         su -c "chmod 600 '$swapfile' && mkswap '$swapfile'" 2>/dev/null || (chmod 600 "$swapfile" && mkswap "$swapfile") 2>/dev/null || true
         echo "[✓] $target_size swap image created."
     fi
@@ -111,16 +111,16 @@ asl_swap_setup() {
     fi
 
     if [ "$is_active" -eq 0 ]; then
-        echo "[*] Attaching 5GB swap loop device..."
+        echo "[*] Attaching swap loop device..."
         if [ "$(id -u)" -eq 0 ]; then
             loopdev=$(losetup -f 2>/dev/null || true)
             if [ -n "$loopdev" ]; then
-                losetup "$loopdev" "$swapfile" 2>/dev/null && swapon "$loopdev" 2>/dev/null && echo "[✓] 5GB Swap enabled." || echo "[!] Swap mount skipped."
+                losetup "$loopdev" "$swapfile" 2>/dev/null && swapon "$loopdev" 2>/dev/null && echo "[✓] Swap enabled." || echo "[!] Swap mount skipped."
             else
-                swapon "$swapfile" 2>/dev/null && echo "[✓] 5GB Swap enabled." || echo "[!] Swap mount skipped."
+                swapon "$swapfile" 2>/dev/null && echo "[✓] Swap enabled." || echo "[!] Swap mount skipped."
             fi
         else
-            su -c "loopdev=\$(losetup -f) && losetup \$loopdev '$swapfile' && swapon \$loopdev" 2>/dev/null && echo "[✓] 5GB Swap enabled." || echo "[!] Swap mount skipped or active."
+            su -c "loopdev=\$(losetup -f) && losetup \$loopdev '$swapfile' && swapon \$loopdev" 2>/dev/null && echo "[✓] Swap enabled." || echo "[!] Swap mount skipped or active."
         fi
     else
         echo "[✓] Swap already active."
@@ -184,7 +184,7 @@ asl_swap_cleanup() {
             losetup -d \"\$loop\" 2>/dev/null || true
         done
         swapoff '$swapfile' 2>/dev/null || true
-        echo '[✓] 5GB swap disabled and loop devices detached'
+        echo '[✓] swap disabled and loop devices detached'
     "
 
     if [ "$(id -u)" -eq 0 ]; then
