@@ -8,7 +8,7 @@
   <a href="https://termux.dev"><img src="https://img.shields.io/badge/Platform-Android%20%7C%20Termux-brightgreen.svg?style=for-the-badge&logo=android" alt="Platform"/></a>
   <a href="#"><img src="https://img.shields.io/badge/Architecture-ARM64%20(aarch64)-blue.svg?style=for-the-badge&logo=arm" alt="Architecture"/></a>
   <a href="#"><img src="https://img.shields.io/badge/Execution-Root%20Kernel%20Chroot-purple.svg?style=for-the-badge" alt="Execution Modes"/></a>
-  <a href="#"><img src="https://img.shields.io/badge/GPU-Mesa%20Turnip%20%7C%20Zink%20%7C%20VirGL-orange.svg?style=for-the-badge&logo=vulkan" alt="GPU Acceleration"/></a>
+  <a href="#"><img src="https://img.shields.io/badge/GPU-Mesa%20Turnip%20%7C%20Zink-orange.svg?style=for-the-badge&logo=vulkan" alt="GPU Acceleration"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License"/></a>
   <a href="#"><img src="https://img.shields.io/badge/Release-Stable-success.svg?style=for-the-badge" alt="Release"/></a>
 </p>
@@ -17,7 +17,7 @@
 
 ## ⚡ Overview
 
-**Android Subsystem for Linux (ASL)** is an autonomous, high-performance Linux container engine, hardware-accelerated workstation, GTK3 desktop control center, and remote tunneling environment designed for ARM64 Android devices.
+**Android Subsystem for Linux (ASL)** is an autonomous, high-performance Linux container engine, hardware-accelerated workstation, XFCE4 desktop environment, and remote tunneling suite designed for ARM64 Android devices.
 
 Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or tablet into a native Linux workstation with zero SELinux panics or host OS crashes, running on a dedicated, high-performance root-accelerated Linux kernel chroot environment (Magisk / KernelSU / APatch).
 
@@ -31,14 +31,14 @@ Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or
  ├──────────────────────────────────────────────────────────────────────────────────┤
  │                                                                                  │
  │  ┌────────────────────────────────────────────────────────────────────────────┐  │
- │  │        Debian 13 Trixie / Multi-Distro Subsystem & Core Tooling Suite      │  │
+ │  │      Dynamic Multi-Distro Subsystem (Debian / Ubuntu / Arch / Kali)        │  │
  │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
  │  │  │  XFCE4 Desktop   │  │ GPU & Vulkan     │  │ Turnip / Zink Acceleration │  │
- │  │  │  (Termux:X11 :0) │  │ Hardware Layer   │  │ OpenGL / Vulkan Drivers  │  │  │
+ │  │  │  (Termux:X11 :0) │  │ Hardware Layer   │  │ Direct /dev/kgsl-3d0 Node│  │  │
  │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
  │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
- │  │  │ Systemd Emulation│  │ Dev & Security   │  │ OmniRoute AI Gateway     │  │  │
- │  │  │ (Python Engine)  │  │ Tooling Suites   │  │ (Port 20128 - Netd Bypass│  │  │
+ │  │  │ OpenClaude CLI   │  │ Dev & Security   │  │ OmniRoute AI Gateway     │  │  │
+ │  │  │ AI Agent Suite   │  │ Tooling Suites   │  │ (Port 20128 - Netd Bypass│  │  │
  │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
  │  └──────────────────────────────────────▲─────────────────────────────────────┘  │
  │                                         │ Direct Hardware & Bridge IPC           │
@@ -54,7 +54,7 @@ Modeled after **WSL (Windows Subsystem for Linux)**, **ASL** turns your phone or
  │  │                      Android Linux Kernel & Hardware Nodes                 │  │
  │  │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │  │
  │  │  │ Adreno GPU Node  │  │ Bluetooth / USB  │  │ Virtual Swap Pool        │  │  │
- │  │  │ (/dev/kgsl-3d0)  │  │ Evdev Gamepads   │  │ (zRAM + 4GB File Swap)   │  │  │
+ │  │  │ (/dev/kgsl-3d0)  │  │ Evdev Gamepads   │  │ (zRAM + 5GB File Swap)   │  │  │
  │  │  └──────────────────┘  └──────────────────┘  └──────────────────────────┘  │  │
  │  └────────────────────────────────────────────────────────────────────────────┘  │
  └──────────────────────────────────────────────────────────────────────────────────┘
@@ -75,7 +75,7 @@ ASL features a flicker-free, 74-column DEC Mode 1049 alternate-screen buffer das
  │   Exec Mode:   Root (su - native kernel chroot)                        │
  │   GPU Driver:  Qualcomm Adreno 6xx/7xx (Turnip Mesa Vulkan)            │
  │   Audio:       PulseAudio (127.0.0.1:4713) [ACTIVE]                    │
- │   Swap Pool:   4.0 GB Active (zRAM + File Swap)                        │
+ │   Swap Pool:   5.0 GB Active (zRAM + File Swap)                        │
  ├────────────────────────────────────────────────────────────────────────┤
  │   Remote Access Endpoints:                                             │
  │   * LAN SSH (Host):  ssh -p 8022 u0_a566@192.168.1.100                │
@@ -90,7 +90,7 @@ ASL features a flicker-free, 74-column DEC Mode 1049 alternate-screen buffer das
 
 ---
 
-## ⚡ Quick Installation
+## ⚡ Quick Installation (For Rooted Android Devices)
 
 Install or upgrade **ASL** with a single command inside Termux:
 
@@ -106,7 +106,7 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 Pass non-interactive distribution flags or select interactively during setup (provisioned dynamically via `proot-distro`):
 
 ```bash
-# Debian Trixie (Recommended - Full Turnip Mesa Vulkan, Audio & XFCE4 Desktop):
+# Debian Trixie (Recommended - Turnip Mesa Vulkan, Audio & XFCE4 Desktop pre-configured):
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --debian
 
 # Ubuntu 24.04 LTS Base:
@@ -131,21 +131,29 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --distro=ubuntu:24.04
 ```
 
-### ⚡ Root-Accelerated Kernel Architecture
-- **Root (`su`)**: Maximum performance direct kernel chroot with `/dev/kgsl-3d0` and `/dev/dri` GPU direct hardware node access.
-- **Dynamic DNS Synchronization**: Seamless network DNS updates across Wi-Fi, LTE/5G, and VPN connections (`asl dns sync`).
-- **Phantom Process Killer (PPK) Management**: Prevents Android 12+ child process limits from terminating background tasks (`asl ppk off`).
-- **High-Performance Snapshots**: Fast atomic chroot snapshots with optional zstd/gzip compression (`asl snapshot create <name> --compress`).
+### ⚡ Step-by-Step Getting Started Guide
 
-Inspect system diagnostics and environment health anytime:
-```bash
-asl doctor
-```
-
-Launch the interactive console anytime:
-```bash
-asl
-```
+1. **Verify Environment**:
+   ```bash
+   asl doctor
+   ```
+2. **Mount the Linux Subsystem**:
+   ```bash
+   asl start
+   ```
+3. **Launch the XFCE4 Hardware-Accelerated Desktop**:
+   ```bash
+   asl desktop start
+   ```
+   *(If running for the first time, ASL will automatically install and configure XFCE4, Termux:X11, D-Bus, and audio tools).*
+4. **Enter Linux Shell**:
+   ```bash
+   asl shell
+   ```
+5. **Open Interactive Management Console**:
+   ```bash
+   asl
+   ```
 
 ---
 
@@ -156,20 +164,26 @@ asl
 - **Strict Mount Isolation**: Uses `--make-rprivate` and `--make-rslave` bind mounts without mounting Android system partitions (`/system`, `/vendor`, `/apex`), eliminating SELinux deadlocks and OS kernel crashes.
 - **Automated Rollback Traps**: Catches mount errors on startup and unmounts partial paths automatically.
 
-### 🌐 2. 24/7 Remote Mesh Tunnels & Background Services
+### 🎮 2. Direct GPU Acceleration & Input Engine
+- **Turnip Mesa Vulkan & Zink**: Hardware-accelerated OpenGL/Direct3D for Qualcomm Adreno 6xx/7xx/8xx GPUs with direct `/dev/kgsl-3d0` node bindings.
+- **MangoHud Telemetry**: Real-time FPS, CPU/GPU temperature, and VRAM overlay (`asl hud on`).
+- **Bluetooth Gamepad Passthrough**: Synchronize `/dev/input/event*` wireless controllers directly into the subsystem (`asl gamepad sync`).
+
+### 🖥️ 3. Automated XFCE4 Desktop & Termux:X11 Integration
+- **Automated Bootstrapping**: One-click desktop provisioning via `asl desktop setup` or auto-prompt during `asl desktop start`.
+- **Display Server Integration**: Native integration with Termux:X11 display `:0`, PulseAudio audio forwarding, and D-Bus IPC.
+- **Resolution Control**: Configure display resolution and UI scaling on the fly (`asl resolution 1080p 1.25`).
+
+### 🌐 4. 24/7 Remote Mesh Tunnels & Background Services
 - **Oracle Cloud VPS Dedicated Relay**: Always-on persistent reverse SSH tunnel forwarding SSH (2222) to your own remote VPS (`asl remote oracle setup`).
-- **LAN SSH Server**: Termux host SSH daemon on port 8022 with password or ED25519 key authentication.
+- **LAN SSH Server**: Termux host SSH daemon on port 8022 with password authentication.
 - **Serveo & Ngrok**: Instant public jump-host and multi-token rotation tunneling on demand.
 - **24/7 Autostart & Service Watchdog**: Detached double-fork background daemon (`service-manager.sh`) with TCP throughput tuning and automatic service recovery.
 
-### 🎮 4. Direct GPU Acceleration & Input Engine
-- **Turnip Mesa Vulkan & Zink**: Hardware-accelerated OpenGL/Direct3D for Qualcomm Adreno 6xx/7xx/8xx and VirGL/Zink fallback for Mali GPUs.
-- **MangoHud Telemetry**: Real-time FPS, CPU/GPU temperature, and VRAM overlay (`asl hud on`).
-- **Bluetooth Gamepad Passthrough**: Synchronize `/dev/input/event*` wireless controllers directly into the subsystem (`asl gamepad`).
-
-### 🤖 5. OmniRoute AI Gateway Integration
+### 🤖 5. OmniRoute AI Gateway & OpenClaude Environment
 - **Local AI Proxy**: Embedded OmniRoute AI proxy running on port 20128.
 - **Android Netd Bypass**: Executes under root with explicit Termux library bindings to circumvent Android 14 UID network restrictions.
+- **OpenClaude Native CLI**: Pre-configured AI coding agent environment with memory and tools.
 
 ### 💻 6. Developer Suite & Security Auditing Suite
 - **Developer Suite**: One-click installation for Python 3, Node.js, Neovim, Go, Rust, and VS Code Server (`asl dev-suite`).
@@ -197,7 +211,7 @@ asl
 | **DNS Synchronization** | `asl dns [sync\|status]` | Synchronize active Android nameservers into chroot `/etc/resolv.conf` |
 | **Phantom Process Killer** | `asl ppk [off\|on\|status]` | Disable or inspect Android 12+ child process limits |
 | **Diagnostic Doctor** | `asl doctor` | Run non-mutating environment checks |
-| **Setup Wizard** | `asl wizard` / `asl init` | Guided first-time setup for Graphics, Dev, Security presets |
+| **Setup Wizard** | `asl wizard` / `asl init` | Guided first-time setup for Desktop, Graphics, Dev, Security presets |
 | **GPU Acceleration** | `asl gpu [profile\|apply]` | Configure Turnip/Zink GPU acceleration profiles |
 | **Turbo Governor** | `asl turbo` / `asl gpu` | Apply maximum CPU/GPU performance governor |
 | **Gamepad Passthrough**| `asl gamepad [sync\|test]` | Synchronize host Bluetooth/USB evdev gamepads into chroot |
@@ -215,7 +229,6 @@ asl
 | **Virtual Swap Pool** | `asl swap [status\|setup\|optimize\|cleanup]` | Manage virtual swap pool (5GB upper limit) |
 | **Storage Cleaner** | `asl clean [status\|all\|apt\|tmp\|cache]` | Purge package archives, `/tmp`, and shader caches |
 | **Integrity Repair** | `asl repair [all\|mounts\|permissions\|dpkg]` | Self-healing recovery for mounts, locks, and permissions |
-| **Pre-flight Doctor** | `asl doctor` | Comprehensive environment pre-flight diagnostics |
 | **Declarative Config**| `asl config [show\|init\|get\|set]` | Manage system settings in `/etc/asl.conf` |
 | **Path Translation** | `asl path [-u\|-a\|-c\|-m] <path>` | Translate paths between Android host and Linux container |
 | **Android Host Bridge**| `asl wakelock\|open\|clip\|toast\|shortcut` | WakeLock, default app opener, clipboard, notifications |
@@ -228,7 +241,7 @@ All in-depth architectural specifications, hardware tuning guides, and developer
 
 | Document | Purpose & Description |
 | :--- | :--- |
-| 🏗️ **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** | Technical subsystem architecture, 3-tier execution model, `os.posix_spawn` invariant, runtime separation. |
+| 🏗️ **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** | Technical subsystem architecture, execution model, runtime separation, container isolation. |
 | ⚡ **[`docs/PERFORMANCE_TUNING.md`](docs/PERFORMANCE_TUNING.md)** | Kernel sysctl TCP tuning, CPU governor boost, PulseAudio low-latency buffers, virtual swap management. |
 | 🛠️ **[`docs/CLI_AND_UTILITIES.md`](docs/CLI_AND_UTILITIES.md)** | Complete CLI subcommand syntax reference, helper scripts, installer flags, environment variables. |
 | 🗺️ **[`docs/ROADMAP_AND_TRACKING.md`](docs/ROADMAP_AND_TRACKING.md)** | Feature tracking, completed milestones, architectural invariants, future development roadmap. |
