@@ -68,8 +68,9 @@ YELLOW='\033[1;33m'
 RESET='\033[0m'
 
 DISTRO_TYPE="${TYPE:-auto}" # debian, ubuntu, arch, alpine, fedora, kali, void, opensuse, or auto
+INSTALL_DESKTOP="${DESKTOP:-auto}" # yes, no, auto
 
-# Parse arguments (--debian, --ubuntu, --arch, --alpine, --fedora, --kali, --void, --opensuse, --skip, --type=X, --distro=X)
+# Parse arguments (--debian, --ubuntu, --arch, --alpine, --fedora, --kali, --void, --opensuse, --skip, --desktop, --no-desktop, --type=X, --distro=X)
 while [ $# -gt 0 ]; do
     case "$1" in
         --standard|--base|--debian|--modded)
@@ -102,6 +103,14 @@ while [ $# -gt 0 ]; do
             ;;
         --opensuse|--suse)
             DISTRO_TYPE="opensuse"
+            shift
+            ;;
+        --desktop)
+            INSTALL_DESKTOP="yes"
+            shift
+            ;;
+        --no-desktop|--headless)
+            INSTALL_DESKTOP="no"
             shift
             ;;
         --skip)
@@ -386,9 +395,28 @@ if ! (
     exit 1
 fi
 
+if [ "$INSTALL_DESKTOP" != "no" ] && [ "$DISTRO_TYPE" != "skip" ]; then
+    case "$DISTRO_TYPE" in
+        debian|ubuntu|"")
+            echo -e "${GREEN}[*] Provisioning XFCE4 desktop environment & D-Bus...${RESET}"
+            if [ -f "$INSTALL_DIR/desktop/start-desktop.sh" ]; then
+                bash "$INSTALL_DIR/desktop/start-desktop.sh" setup || echo -e "${YELLOW}[!] Desktop package provisioning finished with notice.${RESET}"
+            fi
+            ;;
+    esac
+fi
+
 echo -e "${GREEN}[*] Provisioning OpenClaude AI agent environment...${RESET}"
 if [ -f "$INSTALL_DIR/core/openclaude-setup.sh" ]; then
     bash "$INSTALL_DIR/core/openclaude-setup.sh" || true
+fi
+
+# Synchronize dynamic environment
+if [ -f "$INSTALL_DIR/core/gpu-profile.sh" ]; then
+    (
+        source "$INSTALL_DIR/core/gpu-profile.sh"
+        asl_sync_chroot_env 2>/dev/null || true
+    )
 fi
 
 echo -e "${CYAN}====================================================${RESET}"

@@ -174,7 +174,8 @@ asl backup                   # Full chroot backup
 ### Desktop & Resolution
 
 ```bash
-asl desktop start      # Start XFCE + Termux:X11
+asl desktop start      # Start XFCE + Termux:X11 (auto-installs if missing)
+asl desktop setup      # Bootstrap full XFCE4 desktop bundle & D-Bus
 asl desktop stop       # Stop desktop
 asl resolution 1080p   # Set 1080p resolution
 asl remote lan start   # Start LAN SSH server

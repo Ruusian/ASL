@@ -63,10 +63,11 @@ asl init                               # Alias for asl wizard
 ```
 
 Preset options available in wizard:
-1. **GPU & Graphics Acceleration** (Turnip Mesa Vulkan, Zink, MangoHud, Gamepad)
-2. **Software Developer** (Python 3, Node.js, Neovim, Go, Rust, VS Code Server)
-3. **Security Auditing** (Nmap, Wireshark/TShark, Netcat, Socat, Hydra)
-4. **Full Workstation** (Complete desktop suite, developer tools & graphics stack)
+1. **XFCE4 Desktop** (XFCE4 window manager, D-Bus, PulseAudio, Termux:X11)
+2. **GPU & Graphics Acceleration** (Turnip Mesa Vulkan, Zink, MangoHud, Gamepad)
+3. **Software Developer** (Python 3, Node.js, Neovim, Go, Rust, VS Code Server)
+4. **Security Auditing** (Nmap, Wireshark/TShark, Netcat, Socat, Hydra)
+5. **Full Workstation** (Complete desktop suite, developer tools & graphics stack)
 
 ---
 
@@ -171,7 +172,8 @@ asl restore [path/to/backup.tar.xz] # Restore Debian rootfs from backup archive
 Manage hardware-accelerated XFCE4 desktop session on Termux:X11 (`:0`).
 
 ```bash
-asl desktop start                   # Start XFCE4 desktop session
+asl desktop start                   # Start XFCE4 desktop session (auto-prompts setup if missing)
+asl desktop setup                   # Install/bootstrap full XFCE4 desktop bundle, D-Bus, and audio
 asl desktop stop                    # Stop desktop session
 asl desktop restart                 # Restart desktop session
 asl desktop status                  # Check desktop session state

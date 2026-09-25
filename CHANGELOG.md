@@ -8,6 +8,7 @@ All notable changes to the ASL (Android Subsystem for Linux) project are documen
   - Replaced static prebuilt multi-part rootfs release downloads with dynamic `proot-distro` image provisioning.
   - Added support for any official Linux distribution: Debian Trixie, Ubuntu 24.04 LTS, Arch Linux, Alpine Linux, Kali Linux, Fedora Linux, Void Linux, and custom OCI container images via `--distro=<image>`.
   - Automated local post-provisioning for Android AID GID mappings, DNS nameservers (`1.1.1.1`, `8.8.8.8`), Turnip/Zink GPU hardware acceleration drivers, and OpenClaude AI agent environment.
+  - Implemented automated XFCE4 desktop bootstrapping (`asl desktop setup` / auto-installer in `desktop/start-desktop.sh` and `install.sh`) so new users get a complete desktop environment out-of-the-box.
 
 - **Web Terminal Mobile Accessory & Modifier Toolbar**:
   - Injected responsive on-screen mobile accessory bar into ttyd web terminal interface with sticky modifiers (`Shift`, `Ctrl`, `Alt`), `Esc`, `Tab`, navigation arrows, and categorized tabs (`Main`, `Ctrl+`, `Sym`, `Nav`, `Cmd`).

@@ -285,6 +285,7 @@ show_help() {
     echo ""
     echo "Termux Desktop & Remote Commands:"
     echo "  desktop start    Start ASL-managed XFCE4 desktop"
+    echo "  desktop setup    Install full XFCE4 desktop environment & GUI tools"
     echo "  desktop stop     Stop only the ASL-managed desktop"
     echo "  desktop status   Show desktop lifecycle status"
     echo "  desktop sync-apps Create ASL-owned Termux launchers"
@@ -1181,12 +1182,13 @@ dashboard() {
                 pause_dashboard ;;
             7|d|D) bash "$REAL_SCRIPT" desktop start; pause_dashboard ;;
             8)
-                echo "Desktop actions: 1) status  2) restart  3) stop  4) force-stop"
-                read -r -p "Select action [1-4]: " d_act
+                echo "Desktop actions: 1) status  2) restart  3) stop  4) force-stop  5) setup/install XFCE4"
+                read -r -p "Select action [1-5]: " d_act
                 case "$d_act" in
                     2) bash "$REAL_SCRIPT" desktop restart ;;
                     3) bash "$REAL_SCRIPT" desktop stop ;;
                     4) bash "$REAL_SCRIPT" desktop force-stop ;;
+                    5) bash "$REAL_SCRIPT" desktop setup ;;
                     *) bash "$REAL_SCRIPT" desktop status ;;
                 esac
                 pause_dashboard ;;
@@ -1918,8 +1920,8 @@ case "${1:-}" in
     desktop|d|gui)
         shift
         DESKTOP_ACTION="${1:-start}"
-        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|status|refresh-x11|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, status, sync-apps, launch, or refresh-x11."; exit 1 ;; esac
-        if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = restart || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]]; then
+        case "$DESKTOP_ACTION" in start|stop|force-stop|kill|restart|setup|install|status|refresh-x11|sync-apps|launch) ;; *) echo "Error: desktop accepts start, stop, force-stop, restart, setup, install, status, sync-apps, launch, or refresh-x11."; exit 1 ;; esac
+        if [[ "$DESKTOP_ACTION" = start || "$DESKTOP_ACTION" = restart || "$DESKTOP_ACTION" = setup || "$DESKTOP_ACTION" = install || "$DESKTOP_ACTION" = sync-apps || "$DESKTOP_ACTION" = launch ]]; then
             ensure_mounted
         fi
         shift || true

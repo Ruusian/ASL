@@ -11,24 +11,42 @@ fi
 
 asl_require_default_debianpath
 
+run_preset_desktop() {
+    echo ""
+    echo "[*] Setting up XFCE4 Desktop & Termux:X11 GUI environment..."
+    ensure_chroot_mounted || return 1
+    local desk_script
+    desk_script=$(asl_find_script "start-desktop.sh")
+    if [ -f "$desk_script" ]; then
+        bash "$desk_script" setup || echo "[!] Desktop setup notice."
+    fi
+    echo "[✓] XFCE4 Desktop environment setup completed!"
+}
+
 run_preset_graphics() {
     echo ""
     echo "[*] Setting up GPU & Graphics Acceleration environment..."
     ensure_chroot_mounted || return 1
     local err_count=0
 
-    echo "[1/3] Auto-detecting GPU hardware and applying acceleration..."
+    echo "[1/4] Auto-detecting GPU hardware and applying acceleration..."
     source "$SCRIPT_DIR/core/gpu-profile.sh"
+    asl_gpu_install_drivers || err_count=$((err_count + 1))
     asl_gpu_apply || err_count=$((err_count + 1))
 
-    echo "[2/3] Enabling MangoHud performance overlay..."
+    echo "[2/4] Enabling MangoHud performance overlay..."
     if [ -f "$SCRIPT_DIR/core/hud.sh" ]; then
         bash "$SCRIPT_DIR/core/hud.sh" on || err_count=$((err_count + 1))
     fi
 
-    echo "[3/3] Synchronizing Bluetooth & USB gamepad input nodes..."
+    echo "[3/4] Synchronizing Bluetooth & USB gamepad input nodes..."
     if [ -f "$SCRIPT_DIR/core/gamepad.sh" ]; then
         bash "$SCRIPT_DIR/core/gamepad.sh" sync || err_count=$((err_count + 1))
+    fi
+
+    echo "[4/4] Verifying XFCE4 Desktop environment..."
+    if ! asl_chroot_exec "test -x /usr/bin/xfwm4 -o -x /usr/bin/xfce4-session" 2>/dev/null; then
+        run_preset_desktop || err_count=$((err_count + 1))
     fi
 
     if [ "$err_count" -eq 0 ]; then
@@ -83,19 +101,21 @@ asl_wizard_interactive() {
     echo " Let's configure your environment in a few quick steps."
     echo ""
     echo " Select your primary use case:"
-    echo "   [1] 🎮 GPU & Graphics      (Turnip Vulkan, MangoHud, Gamepad)"
-    echo "   [2] 💻 Software Developer   (Python, Node.js, Neovim, Go, Rust, VS Code)"
-    echo "   [3] 🛡️ Security Auditing    (Nmap, Wireshark/TShark, Netcat, Socat)"
-    echo "   [4] 🚀 Full Workstation    (Install All Toolsuites)"
+    echo "   [1] 🖥️ XFCE4 Desktop        (XFCE4, D-Bus, PulseAudio, Termux:X11)"
+    echo "   [2] 🎮 GPU & Graphics      (Turnip Vulkan, MangoHud, Gamepad)"
+    echo "   [3] 💻 Software Developer   (Python, Node.js, Neovim, Go, Rust, VS Code)"
+    echo "   [4] 🛡️ Security Auditing    (Nmap, Wireshark/TShark, Netcat, Socat)"
+    echo "   [5] 🚀 Full Workstation    (Install All Toolsuites)"
     echo ""
-    read -p " Enter choice [1-4] (default: 4): " choice
-    choice="${choice:-4}"
+    read -p " Enter choice [1-5] (default: 5): " choice
+    choice="${choice:-5}"
 
     case "$choice" in
-        1) run_preset_graphics ;;
-        2) run_preset_dev ;;
-        3) run_preset_security ;;
-        4|*) run_preset_workstation ;;
+        1) run_preset_desktop ;;
+        2) run_preset_graphics ;;
+        3) run_preset_dev ;;
+        4) run_preset_security ;;
+        5|*) run_preset_workstation ;;
     esac
 
     echo ""
@@ -135,11 +155,12 @@ case "${1:-}" in
         shift
         preset="${1:-workstation}"
         case "$preset" in
+            desktop|xfce|gui) run_preset_desktop ;;
             gaming|graphics|gpu) run_preset_graphics ;;
             dev) run_preset_dev ;;
             security|sec) run_preset_security ;;
             workstation|full|all) run_preset_workstation ;;
-            *) echo "Unknown preset: $preset. Valid: graphics, dev, security, workstation" ;;
+            *) echo "Unknown preset: $preset. Valid: desktop, graphics, dev, security, workstation" ;;
         esac
         ;;
     *)

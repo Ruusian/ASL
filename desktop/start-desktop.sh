@@ -182,6 +182,29 @@ cleanup_started() {
     rm -f /tmp/.X11-unix/X0 /tmp/.X0-lock "$DEBIANPATH/tmp/.X11-unix/X0" "$DEBIANPATH/tmp/.X0-lock" 2>/dev/null || true
 }
 
+install_desktop_packages() {
+    echo "[*] Setting up XFCE4 desktop environment inside Linux subsystem..."
+    if ! ensure_chroot_mounted; then
+        echo "[!] Unable to mount Linux chroot for desktop setup."
+        return 1
+    fi
+    if asl_chroot_exec "test -f /etc/debian_version" 2>/dev/null; then
+        echo "[*] Installing XFCE4 desktop, terminal, D-Bus, and audio tools via APT..."
+        if ! asl_chroot_exec "export DEBIAN_FRONTEND=noninteractive PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; apt-get update -y && apt-get install -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' xfce4 xfce4-terminal xfwm4 dbus-x11 pulseaudio-utils pavucontrol x11-utils x11-xserver-utils"; then
+            echo "[!] Desktop package installation failed."
+            return 1
+        fi
+        # Initialize D-Bus machine-id
+        asl_chroot_exec "mkdir -p /etc /var/lib/dbus && if [ ! -s /etc/machine-id ]; then dbus-uuidgen --ensure=/etc/machine-id 2>/dev/null || true; cp -f /etc/machine-id /var/lib/dbus/machine-id 2>/dev/null || true; fi" 2>/dev/null || true
+        echo "[✓] XFCE4 desktop environment installed successfully."
+        return 0
+    else
+        echo "[!] Auto-installer currently supports Debian/Ubuntu APT packages."
+        echo "    Please install XFCE4 desktop packages manually using your distribution package manager."
+        return 1
+    fi
+}
+
 start_desktop() {
     ensure_state_dir || { echo "[!] Cannot create ASL state directory."; return 1; }
     if read_state; then
@@ -209,9 +232,27 @@ start_desktop() {
         missing="xfwm4/xfce4-session"
     fi
     if [ -n "$missing" ]; then
-        echo "[!] Missing Debian desktop environment packages: $missing"
-        echo "    Install inside chroot: apt install xfce4 xfce4-terminal xfwm4"
-        return 1
+        echo "[!] Missing desktop environment packages: $missing"
+        local auto_install=0
+        if [ "${AUTO_CONFIRM:-0}" = "1" ]; then
+            auto_install=1
+        elif [ -c /dev/tty ] || [ -t 0 ]; then
+            echo -n "[*] Would you like to automatically install XFCE4 desktop now? [Y/n]: "
+            read -r inst_resp < /dev/tty 2>/dev/null || read -r inst_resp || true
+            if [[ "$inst_resp" =~ ^[Nn]$ ]]; then
+                auto_install=0
+            else
+                auto_install=1
+            fi
+        fi
+        if [ "$auto_install" -eq 1 ]; then
+            if ! install_desktop_packages; then
+                return 1
+            fi
+        else
+            echo "    Install inside chroot: asl desktop setup"
+            return 1
+        fi
     fi
     start_audio 2>/dev/null || echo "[!] Notice: PulseAudio audio server disabled or not installed."
     start_gpu || true
@@ -643,10 +684,11 @@ case "${1:-start}" in
     stop) stop_desktop ;;
     force-stop|kill) force_stop_desktop ;;
     restart) force_stop_desktop && start_desktop ;;
+    setup|install) install_desktop_packages ;;
     status) status_desktop ;;
     refresh-x11) refresh_x11_state ;;
     audio) shift; audio_control "$@" ;;
     sync-apps) sync_apps ;;
     launch) shift; launch_app "$@" ;;
-    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|status|refresh-x11|audio|sync-apps|launch}"; exit 1 ;;
+    *) echo "Usage: start-desktop.sh {start|stop|force-stop|restart|setup|status|refresh-x11|audio|sync-apps|launch}"; exit 1 ;;
 esac

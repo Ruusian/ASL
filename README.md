@@ -203,7 +203,7 @@ asl
 | **Gamepad Passthrough**| `asl gamepad [sync\|test]` | Synchronize host Bluetooth/USB evdev gamepads into chroot |
 | **Performance HUD** | `asl hud [on\|off\|toggle\|status]` | Toggle MangoHud telemetry overlay |
 | **Thermal Diagnostics**| `asl thermal [watch]` | Monitor battery and CPU/GPU thermal zone sensors |
-| **Desktop Session** | `asl desktop [start\|stop\|restart]`| Start/stop hardware-accelerated XFCE4 desktop on Termux:X11 |
+| **Desktop Session** | `asl desktop [start\|stop\|setup\|restart]`| Start/stop/setup hardware-accelerated XFCE4 desktop on Termux:X11 |
 | **Remote Dispatcher** | `asl remote [status\|all\|gui]` | Inspect or start all remote access bridges |
 | **LAN SSH Server** | `asl remote lan [start\|stop]` | Control LAN SSH server (port 8022) |
 | **Oracle VPS Relay** | `asl remote oracle [setup\|start\|stop]` | Control dedicated VPS persistent reverse SSH tunnel |

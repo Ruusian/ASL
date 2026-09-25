@@ -230,6 +230,7 @@ asl_gpu_install_drivers() {
             echo "[!] GPU driver package installation failed."
             return 1
         fi
+        asl_sync_chroot_env 2>/dev/null || true
         echo "[✓] Prebuilt GPU hardware acceleration drivers installed."
     else
         echo "[*] Non-Debian rootfs detected; skipping Debian apt driver package auto-installation."

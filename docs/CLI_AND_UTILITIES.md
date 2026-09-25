@@ -10,7 +10,8 @@ The `asl` binary in `$PREFIX/bin/asl` (and `$PREFIX/share/asl/bin/asl`) serves a
 | **System Overview** | `asl overview` | Displays concise live system status and remote endpoint table. |
 | **DNS Synchronization** | `asl dns [sync\|status]` | Synchronizes active Android nameservers into chroot `/etc/resolv.conf`. |
 | **Phantom Process Killer**| `asl ppk [off\|on\|status]` | Disables or inspects Android 12+ background process limits. |
-| **Setup Wizard** | `asl wizard` or `asl init` | Guided first-time setup wizard for Graphics, Dev, Security, or Full Workstation presets. |
+| **Desktop Environment** | `asl desktop [start\|stop\|setup\|status\|restart]` | Controls XFCE4 desktop lifecycle, Termux:X11 display, and auto-bootstrap. |
+| **Setup Wizard** | `asl wizard` or `asl init` | Guided first-time setup wizard for Desktop, Graphics, Dev, Security, or Workstation presets. |
 | **GPU Acceleration** | `asl gpu [profile\|apply]` | Auto-detects and applies Turnip/Zink GPU acceleration profiles. |
 | **Turbo Governor** | `asl turbo` or `asl gpu` | Applies maximum CPU/GPU performance governor and OOM protection. |
 | **Bluetooth Gamepad** | `asl gamepad [status\|sync\|test]` | Synchronizes and tests host `/dev/input` evdev gamepads into chroot. |
