@@ -102,14 +102,11 @@ curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian/ASL@master/install.sh | bash
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash
 ```
 
-### 🐧 Distro & Image Flavors
-Pass non-interactive distribution flags or select interactively during setup:
+### 🐧 Dynamic Distro & Image Flavors
+Pass non-interactive distribution flags or select interactively during setup (provisioned dynamically via `proot-distro`):
 
 ```bash
-# ASL Modded Rootfs (Turnip Vulkan, GPU Drivers & XFCE pre-configured):
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --modded
-
-# Standard Clean Debian Trixie Base:
+# Debian Trixie (Recommended - Full Turnip Mesa Vulkan, Audio & XFCE4 Desktop):
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --debian
 
 # Ubuntu 24.04 LTS Base:
@@ -118,8 +115,20 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 # Arch Linux Base:
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --arch
 
-# Kali Linux Base:
+# Alpine Linux Base (Ultra-lightweight):
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --alpine
+
+# Kali Linux Base (Security & Auditing):
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --kali
+
+# Fedora Linux Base:
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --fedora
+
+# Void Linux Base:
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --void
+
+# Custom OCI / Docker Container Image:
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --distro=ubuntu:24.04
 ```
 
 ### ⚡ Root-Accelerated Kernel Architecture

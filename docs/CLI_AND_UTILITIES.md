@@ -38,13 +38,15 @@ The `asl` binary in `$PREFIX/bin/asl` (and `$PREFIX/share/asl/bin/asl`) serves a
 The automated installer supports non-interactive execution flags:
 
 ### Distribution Selection Flags
-- `--modded`: Installs pre-configured Debian Modded rootfs (Turnip Mesa Vulkan, GPU Drivers, XFCE).
-- `--debian` / `--standard`: Installs official Debian Trixie clean base.
+- `--debian` / `--base` / `--standard`: Installs official Debian Trixie base with Turnip Vulkan & XFCE4 desktop.
 - `--ubuntu`: Installs official Ubuntu 24.04 LTS base.
 - `--arch`: Installs official Arch Linux base.
-- `--alpine`: Installs official Alpine Linux base.
-- `--kali`: Installs official Kali Linux base.
-- `--distro=<name>` / `--type=<name>`: Specifies target distro edition explicitly.
+- `--alpine`: Installs official Alpine Linux lightweight base.
+- `--kali`: Installs official Kali Linux security auditing base.
+- `--fedora`: Installs official Fedora Linux base.
+- `--void`: Installs official Void Linux base.
+- `--skip`: Skips rootfs provisioning to keep existing chroot container.
+- `--distro=<name>` / `--type=<name>`: Specifies any custom OCI/Docker container image or proot-distro alias.
 
 ### Execution Prerequisites
 - **Root (`su`)**: ASL requires Superuser root access (Magisk, KernelSU, or APatch) to mount the Linux chroot and interface directly with Android GPU nodes.

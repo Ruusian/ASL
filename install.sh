@@ -67,16 +67,12 @@ CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 RESET='\033[0m'
 
-DISTRO_TYPE="${TYPE:-auto}" # modded, standard, ubuntu, arch, alpine, fedora, kali, or auto
+DISTRO_TYPE="${TYPE:-auto}" # debian, ubuntu, arch, alpine, fedora, kali, void, opensuse, or auto
 
-# Parse arguments (--modded, --standard, --ubuntu, --arch, --alpine, --fedora, --kali, --type=X, --distro=X)
+# Parse arguments (--debian, --ubuntu, --arch, --alpine, --fedora, --kali, --void, --opensuse, --skip, --type=X, --distro=X)
 while [ $# -gt 0 ]; do
     case "$1" in
-        --modded)
-            DISTRO_TYPE="modded"
-            shift
-            ;;
-        --standard|--base|--debian)
+        --standard|--base|--debian|--modded)
             DISTRO_TYPE="debian"
             shift
             ;;
@@ -100,6 +96,18 @@ while [ $# -gt 0 ]; do
             DISTRO_TYPE="kali"
             shift
             ;;
+        --void)
+            DISTRO_TYPE="void"
+            shift
+            ;;
+        --opensuse|--suse)
+            DISTRO_TYPE="opensuse"
+            shift
+            ;;
+        --skip)
+            DISTRO_TYPE="skip"
+            shift
+            ;;
         --root)
             shift
             ;;
@@ -114,7 +122,7 @@ while [ $# -gt 0 ]; do
 done
 
 echo -e "${CYAN}====================================================${RESET}"
-echo -e "${CYAN} 🚀 ASL Debian Snapdragon Subsystem Installer       ${RESET}"
+echo -e "${CYAN} 🚀 Android Subsystem for Linux (ASL) Installer     ${RESET}"
 echo -e "${CYAN}====================================================${RESET}"
 
 # 1. Environment & Platform Checks
@@ -143,14 +151,29 @@ echo -e "${GREEN}[✓] Execution Mode: ROOT (su) Kernel Chroot (Full Hardware Ac
 echo "root" > "$PREFIX/etc/asl_exec_mode"
 
 # 2. Package Installation
-echo -e "${GREEN}[*] Installing required Termux packages...${RESET}"
+echo -e "${GREEN}[*] Verifying required Termux packages...${RESET}"
 export DEBIAN_FRONTEND=noninteractive
-pkg install -y x11-repo 2>/dev/null || { echo -e "${RED}[!] Failed to install the Termux X11 repository.${RESET}"; exit 1; }
-pkg update -y 2>/dev/null || { echo -e "${RED}[!] Failed to update Termux packages.${RESET}"; exit 1; }
-if ! pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git pulseaudio termux-x11-nightly virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null && \
-   ! pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" git pulseaudio termux-x11 virglrenderer-android tsu socat wget unzip xz-utils proot-distro 2>/dev/null; then
-    echo -e "${RED}[!] Failed to install required Termux packages.${RESET}"
-    exit 1
+MISSING_PKGS=()
+for p in git pulseaudio tsu socat wget unzip xz proot-distro; do
+    if ! command -v "$p" >/dev/null 2>&1; then
+        if [ "$p" = "xz" ]; then
+            MISSING_PKGS+=("xz-utils")
+        else
+            MISSING_PKGS+=("$p")
+        fi
+    fi
+done
+
+if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
+    echo -e "${CYAN}[*] Installing missing dependencies: ${MISSING_PKGS[*]}...${RESET}"
+    pkg install -y x11-repo 2>/dev/null || true
+    pkg update -y 2>/dev/null || true
+    if ! pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" "${MISSING_PKGS[@]}" termux-x11-nightly virglrenderer-android 2>/dev/null && \
+       ! pkg install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" "${MISSING_PKGS[@]}" termux-x11 virglrenderer-android 2>/dev/null; then
+        echo -e "${YELLOW}[!] Note: Could not fetch packages from online mirror (offline or network policy).${RESET}"
+    fi
+else
+    echo -e "${GREEN}[✓] Required Termux packages are already installed.${RESET}"
 fi
 
 # Automated repair for broken Termux package dependencies (e.g. ncurses mismatches)
@@ -177,13 +200,13 @@ if { [ -t 0 ] || [ -c /dev/tty ]; } && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "\n${CYAN}====================================================${RESET}"
     echo -e "${CYAN} 🐧 Select Linux Subsystem Distribution / Edition:   ${RESET}"
     echo -e "${CYAN}====================================================${RESET}"
-    echo -e "  1) ${GREEN}Debian Modded Rootfs${RESET} (Pre-configured Turnip Mesa Vulkan & XFCE Desktop)"
-    echo -e "  2) ${CYAN}Debian Clean Base${RESET} (Official Debian Trixie via proot-distro)"
-    echo -e "  3) ${CYAN}Ubuntu LTS Base${RESET} (Official Ubuntu 24.04 via proot-distro)"
-    echo -e "  4) ${CYAN}Arch Linux Base${RESET} (Official Arch via proot-distro)"
-    echo -e "  5) ${CYAN}Alpine Linux Base${RESET} (Official Alpine via proot-distro)"
-    echo -e "  6) ${CYAN}Kali Linux Base${RESET} (Official Kali via proot-distro)"
-    echo -e "  7) ${CYAN}Fedora Linux Base${RESET} (Official Fedora via proot-distro)"
+    echo -e "  1) ${GREEN}Debian Trixie${RESET} (Recommended - Turnip Mesa Vulkan, Audio, and Desktop)"
+    echo -e "  2) ${CYAN}Ubuntu LTS${RESET} (Official Ubuntu 24.04 Noble via proot-distro)"
+    echo -e "  3) ${CYAN}Arch Linux${RESET} (Official Arch Rolling via proot-distro)"
+    echo -e "  4) ${CYAN}Alpine Linux${RESET} (Official Alpine Lightweight via proot-distro)"
+    echo -e "  5) ${CYAN}Kali Linux${RESET} (Official Kali Security via proot-distro)"
+    echo -e "  6) ${CYAN}Fedora Linux${RESET} (Official Fedora Workstation via proot-distro)"
+    echo -e "  7) ${CYAN}Void Linux${RESET} (Official Void Linux via proot-distro)"
     echo -e "  8) ${YELLOW}Skip rootfs setup${RESET} (Use existing rootfs at /data/local/tmp/chrootDebian)"
     echo -e ""
     distro_choice=""
@@ -193,57 +216,69 @@ if { [ -t 0 ] || [ -c /dev/tty ]; } && [ "$DISTRO_TYPE" = "auto" ]; then
         read -r -p "Select choice [1-8, default: 1]: " distro_choice || true
     fi
     case "$distro_choice" in
-        1|"") DISTRO_TYPE="modded" ;;
-        2) DISTRO_TYPE="debian" ;;
-        3) DISTRO_TYPE="ubuntu" ;;
-        4) DISTRO_TYPE="arch" ;;
-        5) DISTRO_TYPE="alpine" ;;
-        6) DISTRO_TYPE="kali" ;;
-        7) DISTRO_TYPE="fedora" ;;
+        1|"") DISTRO_TYPE="debian" ;;
+        2) DISTRO_TYPE="ubuntu" ;;
+        3) DISTRO_TYPE="arch" ;;
+        4) DISTRO_TYPE="alpine" ;;
+        5) DISTRO_TYPE="kali" ;;
+        6) DISTRO_TYPE="fedora" ;;
+        7) DISTRO_TYPE="void" ;;
         8) DISTRO_TYPE="skip" ;;
-        *) DISTRO_TYPE="modded" ;;
+        *) DISTRO_TYPE="debian" ;;
     esac
 fi
 
-[ "$DISTRO_TYPE" = "auto" ] && DISTRO_TYPE="modded"
+[ "$DISTRO_TYPE" = "auto" ] && DISTRO_TYPE="debian"
 
-IS_MODDED=false
 IMAGE_REF=""
+DISTRO_NAME=""
 
 case "$DISTRO_TYPE" in
-    modded)
-        IS_MODDED=true
+    debian|modded|standard|base|"")
         IMAGE_REF="debian:trixie"
-        ;;
-    debian|standard)
-        IMAGE_REF="debian:trixie"
+        DISTRO_NAME="Debian Trixie"
         ;;
     ubuntu)
-        IMAGE_REF="ubuntu"
+        IMAGE_REF="ubuntu:24.04"
+        DISTRO_NAME="Ubuntu 24.04 LTS"
         ;;
     arch|archlinux)
-        IMAGE_REF="archlinux"
+        IMAGE_REF="archlinux/archlinux:latest"
+        DISTRO_NAME="Arch Linux"
         ;;
     alpine)
-        IMAGE_REF="alpine"
+        IMAGE_REF="alpine:latest"
+        DISTRO_NAME="Alpine Linux"
         ;;
     fedora)
-        IMAGE_REF="fedora"
+        IMAGE_REF="fedora:latest"
+        DISTRO_NAME="Fedora Linux"
         ;;
     kali)
-        IMAGE_REF="kali"
+        IMAGE_REF="kalilinux/kali-rolling:latest"
+        DISTRO_NAME="Kali Linux"
+        ;;
+    void)
+        IMAGE_REF="ghcr.io/void-linux/void-glibc:latest"
+        DISTRO_NAME="Void Linux"
+        ;;
+    opensuse|suse)
+        IMAGE_REF="opensuse/tumbleweed:latest"
+        DISTRO_NAME="openSUSE Tumbleweed"
         ;;
     skip)
         IMAGE_REF=""
+        DISTRO_NAME="Skip"
         ;;
     *)
         IMAGE_REF="$DISTRO_TYPE"
+        DISTRO_NAME="$DISTRO_TYPE"
         ;;
 esac
 
 cleanup_installer() {
     proot-distro remove asl-temp >/dev/null 2>&1 || true
-    rm -f "$PREFIX/tmp/asl-modded-temp.tar.xz" >/dev/null 2>&1 || true
+    rm -f "$PREFIX/tmp/asl-modded-temp.tar.xz" "$PREFIX/tmp"/asl-*-temp.* >/dev/null 2>&1 || true
 }
 trap cleanup_installer EXIT
 
@@ -266,134 +301,55 @@ ensure_chroot_unmounted_for_replace() {
 }
 
 # 4. Rootfs Download & Chroot Provisioning
-if [ "$DISTRO_TYPE" != "skip" ]; then
-    echo -e "${GREEN}[*] Provisioning Debian Snapdragon rootfs (Edition: ${DISTRO_TYPE})...${RESET}"
+if [ "$DISTRO_TYPE" != "skip" ] && [ -n "$IMAGE_REF" ]; then
+    echo -e "${GREEN}[*] Provisioning Linux Subsystem Rootfs (${DISTRO_NAME})...${RESET}"
     if [ -d "$DEBIANPATH/etc" ] || asl_exec "test -d '$DEBIANPATH/etc'" 2>/dev/null; then
         echo -e "${YELLOW}[!] Existing chroot detected at $DEBIANPATH.${RESET}"
         overwrite_confirm=""
         if [ -c /dev/tty ]; then
-            read -r -p "Overwrite existing chroot with fresh Debian rootfs? [y/N]: " overwrite_confirm < /dev/tty 2>/dev/null || true
+            read -r -p "Overwrite existing chroot with fresh $DISTRO_NAME rootfs? [y/N]: " overwrite_confirm < /dev/tty 2>/dev/null || true
         elif [ -t 0 ]; then
-            read -r -p "Overwrite existing chroot with fresh Debian rootfs? [y/N]: " overwrite_confirm || true
+            read -r -p "Overwrite existing chroot with fresh $DISTRO_NAME rootfs? [y/N]: " overwrite_confirm || true
         fi
         if [[ ! "$overwrite_confirm" =~ ^[Yy]$ ]]; then
             echo -e "${GREEN}[*] Keeping existing chroot environment.${RESET}"
             DISTRO_TYPE="skip"
+            IMAGE_REF=""
         fi
     fi
 
-    if [ "$DISTRO_TYPE" != "skip" ]; then
-        if [ "$IS_MODDED" = "true" ]; then
-            echo -e "${GREEN}[*] Fetching release metadata & checksums...${RESET}"
-            SHA256SUMS_URL="https://github.com/Ruusian/ASL/releases/latest/download/SHA256SUMS"
-            TEMP_SUMS="$PREFIX/tmp/asl-modded-SHA256SUMS"
-            TEMP_TAR="$PREFIX/tmp/asl-modded-temp.tar.xz"
-            rm -f "$TEMP_TAR" "$TEMP_SUMS" "$PREFIX/tmp"/asl-debian-modded-arm64.tar.xz.part* 2>/dev/null || true
-
-            if ! (curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 -o "$TEMP_SUMS" "$SHA256SUMS_URL" || wget -q --timeout=15 --tries=2 -O "$TEMP_SUMS" "$SHA256SUMS_URL") || [ ! -s "$TEMP_SUMS" ]; then
-                echo -e "${YELLOW}[!] Could not download SHA256SUMS (HTTP rate limit or release asset unavailable). Falling back to Debian base...${RESET}"
-                rm -f "$TEMP_TAR" "$TEMP_SUMS"
-                IS_MODDED=false
-            else
-                PART_FILES=$(awk '{ if ($NF ~ /^asl-debian-modded-arm64\.tar\.xz\.part/) print $NF }' "$TEMP_SUMS" | sort -u)
-                if [ -n "$PART_FILES" ]; then
-                    echo -e "${GREEN}[*] Multi-part release detected. Downloading rootfs parts...${RESET}"
-                    DL_OK=true
-                    for pfile in $PART_FILES; do
-                        echo -e "${CYAN}    Downloading $pfile...${RESET}"
-                        P_URL="https://github.com/Ruusian/ASL/releases/latest/download/$pfile"
-                        P_DST="$PREFIX/tmp/$pfile"
-                        if ! (curl -fsSL --connect-timeout 15 --max-time 1800 --retry 3 -o "$P_DST" "$P_URL" || wget -q --timeout=30 --tries=3 -O "$P_DST" "$P_URL") || [ ! -s "$P_DST" ]; then
-                            echo -e "${YELLOW}[!] Failed to download $pfile.${RESET}"
-                            DL_OK=false
-                            break
-                        fi
-                        EXP_PSUM=$(awk -v f="$pfile" '$NF == f { sub(/^\*/, "", $1); print $1 }' "$TEMP_SUMS" | head -n 1)
-                        ACT_PSUM=$(sha256sum "$P_DST" | awk '{ print $1 }')
-                        if [ -n "$EXP_PSUM" ] && [ "$EXP_PSUM" != "$ACT_PSUM" ]; then
-                            echo -e "${YELLOW}[!] Checksum verification failed for $pfile.${RESET}"
-                            DL_OK=false
-                            break
-                        fi
-                    done
-                    if [ "$DL_OK" = "true" ]; then
-                        echo -e "${GREEN}[*] Reassembling rootfs archive from parts...${RESET}"
-                        cat "$PREFIX/tmp"/asl-debian-modded-arm64.tar.xz.part* > "$TEMP_TAR"
-                        rm -f "$PREFIX/tmp"/asl-debian-modded-arm64.tar.xz.part*
-                    else
-                        rm -f "$PREFIX/tmp"/asl-debian-modded-arm64.tar.xz.part* "$TEMP_TAR"
-                        IS_MODDED=false
-                    fi
-                else
-                    RELEASE_URL="https://github.com/Ruusian/ASL/releases/latest/download/asl-debian-modded-arm64.tar.xz"
-                    echo -e "${GREEN}[*] Downloading ASL Exclusive Debian Modded Rootfs archive...${RESET}"
-                    echo -e "${CYAN}    URL: $RELEASE_URL${RESET}"
-                    if ! (curl -fsSL --connect-timeout 15 --max-time 1800 --retry 3 -o "$TEMP_TAR" "$RELEASE_URL" || wget -q --timeout=30 --tries=3 -O "$TEMP_TAR" "$RELEASE_URL") || [ ! -s "$TEMP_TAR" ]; then
-                        echo -e "${YELLOW}[!] Modded release asset download failed. Falling back to Debian base...${RESET}"
-                        rm -f "$TEMP_TAR"
-                        IS_MODDED=false
-                    fi
-                fi
-
-                if [ "$IS_MODDED" = "true" ]; then
-                    EXPECTED=$(awk '{ h=$1; sub(/^\*/, "", h); if ($NF == "asl-debian-modded-arm64.tar.xz" && h ~ /^[[:xdigit:]]{64}$/) print h }' "$TEMP_SUMS" | head -n 1)
-                    rm -f "$TEMP_SUMS"
-                    if [ -n "$EXPECTED" ]; then
-                        echo -e "${GREEN}[*] Verifying reassembled archive checksum...${RESET}"
-                        ACTUAL=$(sha256sum "$TEMP_TAR" | awk '{ print $1 }')
-                        if [ "$ACTUAL" != "$EXPECTED" ]; then
-                            echo -e "${YELLOW}[!] Checksum verification failed for modded rootfs. Falling back to Debian base...${RESET}"
-                            rm -f "$TEMP_TAR"
-                            IS_MODDED=false
-                        else
-                            echo -e "${GREEN}[✓] Checksum verified (SHA-256: ${EXPECTED:0:16}...)${RESET}"
-                        fi
-                    fi
-                fi
-
-                if [ "$IS_MODDED" = "true" ]; then
-                    echo -e "${GREEN}[*] Extracting prebuilt modded Debian rootfs into $DEBIANPATH...${RESET}"
-                    ensure_chroot_unmounted_for_replace || exit 1
-                    if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && tar --numeric-owner -xf '$TEMP_TAR' -C '$DEBIANPATH'"; then
-                        echo -e "${YELLOW}[!] Failed to extract modded rootfs. Falling back to Debian base...${RESET}"
-                        rm -f "$TEMP_TAR"
-                        IS_MODDED=false
-                    else
-                        rm -f "$TEMP_TAR"
-                        # Configure DNS & hosts & APT performance
-                        asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
-                        asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow && chmod 640 /etc/shadow; fi' 2>/dev/null || true
-                        echo -e "${GREEN}[✓] ASL Exclusive Debian Modded Rootfs provisioned successfully!${RESET}"
-                    fi
-                fi
-            fi
+    if [ "$DISTRO_TYPE" != "skip" ] && [ -n "$IMAGE_REF" ]; then
+        echo -e "${GREEN}[*] Fetching and unpacking official $DISTRO_NAME rootfs via proot-distro ($IMAGE_REF)...${RESET}"
+        proot-distro remove asl-temp >/dev/null 2>&1 || true
+        if ! proot-distro install -n asl-temp "$IMAGE_REF"; then
+            echo -e "${RED}[!] Error: proot-distro failed to download or unpack $IMAGE_REF.${RESET}"
+            exit 1
         fi
 
-        if [ "$IS_MODDED" = "false" ] && [ -n "$IMAGE_REF" ]; then
-            echo -e "${GREEN}[*] Fetching and unpacking official Debian Trixie base via proot-distro...${RESET}"
-            proot-distro remove asl-temp >/dev/null 2>&1 || true
-            proot-distro install -n asl-temp "$IMAGE_REF" || {
-                echo -e "${RED}[!] Error: proot-distro failed to download or unpack $IMAGE_REF.${RESET}"
-                exit 1
-            }
-
+        TEMP_ROOTFS=""
+        if [ -d "$PREFIX/var/lib/proot-distro/containers/asl-temp/rootfs" ]; then
             TEMP_ROOTFS="$PREFIX/var/lib/proot-distro/containers/asl-temp/rootfs"
-            if [ -d "$TEMP_ROOTFS" ]; then
-                echo -e "${GREEN}[*] Copying Debian rootfs into chroot location ($DEBIANPATH)...${RESET}"
-                ensure_chroot_unmounted_for_replace || exit 1
-                if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && cp -af '$TEMP_ROOTFS/.' '$DEBIANPATH/'"; then
-                    echo -e "${RED}[!] Failed to copy the Debian base rootfs.${RESET}"
-                    exit 1
-                fi
-                proot-distro remove asl-temp >/dev/null 2>&1 || true
+        elif [ -d "$PREFIX/var/lib/proot-distro/installed-rootfs/asl-temp" ]; then
+            TEMP_ROOTFS="$PREFIX/var/lib/proot-distro/installed-rootfs/asl-temp"
+        fi
 
-                # Configure DNS & hosts & APT performance
-                asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts && mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip' 2>/dev/null || true
-                echo -e "${GREEN}[✓] Debian base rootfs provisioned successfully.${RESET}"
-            else
-                echo -e "${RED}[!] Error: Failed to locate extracted rootfs for $IMAGE_REF.${RESET}"
+        if [ -n "$TEMP_ROOTFS" ] && [ -d "$TEMP_ROOTFS" ]; then
+            echo -e "${GREEN}[*] Copying $DISTRO_NAME rootfs into chroot location ($DEBIANPATH)...${RESET}"
+            ensure_chroot_unmounted_for_replace || exit 1
+            if ! asl_exec "rm -rf '$DEBIANPATH' && mkdir -p '$DEBIANPATH' && cp -af '$TEMP_ROOTFS/.' '$DEBIANPATH/'"; then
+                echo -e "${RED}[!] Failed to copy the rootfs into $DEBIANPATH.${RESET}"
                 exit 1
             fi
+            proot-distro remove asl-temp >/dev/null 2>&1 || true
+
+            # Configure DNS & hosts & APT performance
+            asl_chroot_exec 'mkdir -p /etc && echo "nameserver 1.1.1.1" > /etc/resolv.conf && echo "nameserver 8.8.8.8" >> /etc/resolv.conf && echo "127.0.0.1 localhost" > /etc/hosts' 2>/dev/null || true
+            asl_chroot_exec 'if [ -d /etc/apt ]; then mkdir -p /etc/apt/apt.conf.d && echo "Acquire::GzipIndexes \"true\";" > /etc/apt/apt.conf.d/99gzip; fi' 2>/dev/null || true
+            asl_chroot_exec 'if [ ! -f /etc/shadow ]; then touch /etc/shadow && chown root:shadow /etc/shadow 2>/dev/null || true; chmod 640 /etc/shadow 2>/dev/null || true; fi' 2>/dev/null || true
+            echo -e "${GREEN}[✓] $DISTRO_NAME rootfs provisioned successfully!${RESET}"
+        else
+            echo -e "${RED}[!] Error: Failed to locate extracted rootfs for $IMAGE_REF.${RESET}"
+            exit 1
         fi
     fi
 fi
