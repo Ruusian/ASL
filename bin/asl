@@ -265,6 +265,7 @@ show_help() {
     echo "AI & 24/7 Service Hub:"
     echo "  service [act]    24/7 Service Manager & Boot Autostart (start|stop|restart|check|loop|enable|disable|status)"
     echo "  omniroute [act]  OmniRoute Local Multi-Model AI Proxy (start|stop|restart|logs|status)"
+    echo "  dsh [act]        DeepSeek Harness Browser UI & Engine (start|stop|restart|logs|token|status)"
     echo "  openclaude       Setup & configure OpenClaude agentic environment with memory & web search"
     echo "  ps, top          Interactive Process & Resource Manager"
     echo ""
@@ -1915,6 +1916,81 @@ case "${1:-}" in
                     echo " Status:   INACTIVE"
                     echo " Endpoint: http://127.0.0.1:20128 (Down)"
                 fi
+                ;;
+        esac
+        ;;
+    dsh|deepseek)
+        shift
+        DSH_ACTION="${1:-status}"
+        case "$DSH_ACTION" in
+            start)
+                if [ -x "/data/data/com.termux/files/home/dsh-daemon.sh" ]; then
+                    echo "[*] Starting DeepSeek Harness Web UI daemon on port 3080..."
+                    (cd "$TERMUX_HOME" && nohup bash /data/data/com.termux/files/home/dsh-daemon.sh >> /data/data/com.termux/files/home/dsh-web.log 2>&1 &)
+                    sleep 2
+                    echo "[✓] DeepSeek Harness daemon started."
+                else
+                    echo "[!] Error: /data/data/com.termux/files/home/dsh-daemon.sh not found."
+                fi
+                ;;
+            stop)
+                echo "[*] Stopping DeepSeek Harness..."
+                pkill -f "dsh-daemon" 2>/dev/null || true
+                asl_exec "su -c 'pkill -f apps/cli/src/bin.ts'" 2>/dev/null || true
+                asl_exec "su -c 'pkill -f dsh'" 2>/dev/null || true
+                echo "[✓] DeepSeek Harness stopped."
+                ;;
+            restart)
+                pkill -f "dsh-daemon" 2>/dev/null || true
+                asl_exec "su -c 'pkill -f apps/cli/src/bin.ts'" 2>/dev/null || true
+                asl_exec "su -c 'pkill -f dsh'" 2>/dev/null || true
+                sleep 1
+                if [ -x "/data/data/com.termux/files/home/dsh-daemon.sh" ]; then
+                    (cd "$TERMUX_HOME" && nohup bash /data/data/com.termux/files/home/dsh-daemon.sh >> /data/data/com.termux/files/home/dsh-web.log 2>&1 &)
+                    echo "[✓] DeepSeek Harness restarted."
+                fi
+                ;;
+            logs|log)
+                if [ -f /data/data/com.termux/files/home/dsh-web.log ]; then
+                    tail -n 50 /data/data/com.termux/files/home/dsh-web.log
+                else
+                    echo "[!] No log file found at /data/data/com.termux/files/home/dsh-web.log"
+                fi
+                ;;
+            token)
+                if [ -f /data/data/com.termux/files/home/dsh-web.log ]; then
+                    echo "=== DeepSeek Harness Launch Tokens & URLs ==="
+                    grep -E 'token=|http://|https://' /data/data/com.termux/files/home/dsh-web.log | tail -n 10
+                else
+                    echo "[!] No log file found at /data/data/com.termux/files/home/dsh-web.log"
+                fi
+                ;;
+            status|"")
+                echo "=== DeepSeek Harness Status ==="
+                if (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/3080') 2>/dev/null; then
+                    echo " Status:   ACTIVE"
+                    echo " Local:    http://127.0.0.1:3080"
+                    echo " Public:   https://dsh.144.24.122.241.sslip.io"
+                    dpid=$(asl_exec "su -c 'pgrep -f apps/cli/src/bin.ts 2>/dev/null | head -n 1'" 2>/dev/null || true)
+                    echo " PID:      ${dpid:-active}"
+                else
+                    echo " Status:   INACTIVE"
+                    echo " Port:     3080 (Down)"
+                fi
+                ;;
+            help|--help|-h)
+                echo "Usage: asl dsh <command>"
+                echo ""
+                echo "Commands:"
+                echo "  start       Start DeepSeek Harness web daemon on port 3080"
+                echo "  stop        Stop DeepSeek Harness web daemon"
+                echo "  restart     Restart DeepSeek Harness web daemon"
+                echo "  status      Check DSH process and port 3080 status"
+                echo "  token       Show latest browser login token and access URL"
+                echo "  logs        Show recent log entries from dsh-web.log"
+                ;;
+            *)
+                echo "Usage: asl dsh [start|stop|restart|status|token|logs|help]"
                 ;;
         esac
         ;;

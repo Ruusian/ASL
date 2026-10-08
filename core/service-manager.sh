@@ -94,7 +94,7 @@ asl_service_start() {
     if su -c "id -u" >/dev/null 2>&1; then
         timeout 3 su -c "device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null; settings put global settings_enable_monitor_phantom_procs false 2>/dev/null; setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false 2>/dev/null; dumpsys deviceidle whitelist +com.termux 2>/dev/null; am set-standby-bucket com.termux active 2>/dev/null; cmd appops set com.termux RUN_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>/dev/null; cmd appops set com.termux SYSTEM_EXEMPT_FROM_POWER_RESTRICTIONS allow 2>/dev/null" 2>/dev/null || true
         local _oom_pids
-        _oom_pids="$(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop") $(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop" root)"
+        _oom_pids="$(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|dsh|asl-service|asl-watchdog-loop") $(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|dsh|asl-service|asl-watchdog-loop" root)"
         for pid in $_oom_pids; do
             su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || true
             if command -v taskset >/dev/null 2>&1; then
@@ -167,6 +167,44 @@ asl_service_start() {
         fi
     fi
 
+    # 4c. Check & restore DeepSeek Harness (dsh) on port 3080
+    local dsh_bin=""
+    if [ -f "$TERMUX_HOME/dsh-daemon.sh" ]; then
+        dsh_bin="$TERMUX_HOME/dsh-daemon.sh"
+    elif [ -f "/data/data/com.termux/files/home/dsh-daemon.sh" ]; then
+        dsh_bin="/data/data/com.termux/files/home/dsh-daemon.sh"
+    fi
+    if [ -n "$dsh_bin" ]; then
+        if [ -z "$(_asl_pgrep_first "apps/cli/src/bin.ts")" ] && [ -z "$(_asl_pgrep_first "dsh-daemon")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/3080') 2>/dev/null; then
+            echo "[*] Starting DeepSeek Harness (dsh) on port 3080..."
+            (cd "$TERMUX_HOME" && nohup bash "$dsh_bin" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 &)
+        fi
+    fi
+
+    # 4d. Oracle VPS 2 (144.24.122.241) AI, Web Terminal & Dashboard Tunnel
+    local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
+    if [ -f "$vps2_key" ]; then
+        if ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
+            echo "[*] Starting Oracle VPS2 (144.24.122.241) reverse tunnel..."
+            nohup ssh -i "$vps2_key" -T -N \
+                -o BatchMode=yes \
+                -o PasswordAuthentication=no \
+                -o StrictHostKeyChecking=accept-new \
+                -o UserKnownHostsFile="$TERMUX_HOME/.ssh/known_hosts" \
+                -o ServerAliveInterval=10 \
+                -o ServerAliveCountMax=3 \
+                -o ConnectTimeout=10 \
+                -o ExitOnForwardFailure=yes \
+                -R 8022:127.0.0.1:8022 \
+                -R 20128:127.0.0.1:20128 \
+                -R 4096:127.0.0.1:4096 \
+                -R 9119:127.0.0.1:9119 \
+                -R 18080:127.0.0.1:8080 \
+                -R 3080:127.0.0.1:3080 \
+                ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
+        fi
+    fi
+
     # Record service start timestamp for uptime tracking (only if not already set)
     local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
     mkdir -p "$prefix/tmp" 2>/dev/null || true
@@ -204,6 +242,7 @@ asl_service_stop() {
     if [ -n "$o_host" ]; then
         _asl_pkill_real "ssh.*${o_host}"
     fi
+    _asl_pkill_real "ssh.*144\.24\.122\.241"
     # Kill omniroute: match daemon script, serve subcommand, and the binary itself
     # Skip if ASL_KEEP_OMNIROUTE=1 or if active AI session is using local OmniRoute
     if [ "${ASL_KEEP_OMNIROUTE:-0}" != "1" ] && [ -z "${CLAUDECODE:-}" ] && [[ "${OPENAI_BASE_URL:-}" != *"20128"* ]]; then
@@ -213,6 +252,10 @@ asl_service_stop() {
     else
         echo "[!] Skipping OmniRoute stop (active AI session detected using OmniRoute on port 20128)."
     fi
+    # Kill DeepSeek Harness (dsh)
+    _asl_pkill_real "dsh-daemon"
+    _asl_pkill_real "apps/cli/src/bin.ts"
+    _asl_pkill_real "dsh"
     # Kill SSH server (runs as root)
     _asl_pkill_real "sshd"
     if command -v termux-wake-unlock >/dev/null 2>&1; then
@@ -404,6 +447,15 @@ asl_service_status() {
         echo " Oracle Tunnel: STANDBY (Run 'asl remote oracle start')"
     fi
 
+    local vps2_pid vps2_mem
+    vps2_pid=$(_asl_pgrep_first "ssh.*144\.24\.122\.241")
+    if [ -n "$vps2_pid" ]; then
+        vps2_mem=$(fmt_mem "$vps2_pid")
+        echo " Oracle VPS2 Tunnel: ACTIVE (144.24.122.241 -> Ports 8022,20128,4096,9119,18080,3080, PID: $vps2_pid, RAM: $vps2_mem)"
+    elif [ -f "$TERMUX_HOME/.ssh/oracle_vps2.key" ]; then
+        echo " Oracle VPS2 Tunnel: STANDBY"
+    fi
+
     local serveo_pid serveo_mem
     serveo_pid=$(_asl_pgrep_first "serveo.net")
     if [ -n "$serveo_pid" ]; then
@@ -436,6 +488,18 @@ asl_service_status() {
         echo " Web Terminal:   ACTIVE (Port 4096, PID: $web_pid, RAM: $web_mem)"
     else
         echo " Web Terminal:   INACTIVE"
+    fi
+
+    local dsh_pid dsh_mem
+    dsh_pid=$(_asl_pgrep_first "apps/cli/src/bin.ts")
+    [ -z "$dsh_pid" ] && dsh_pid=$(_asl_pgrep_first "apps/cli/src/bin.ts" root)
+    if [ -n "$dsh_pid" ]; then
+        dsh_mem=$(fmt_mem "$dsh_pid")
+        echo " DeepSeek Harness: ACTIVE (Port 3080, PID: $dsh_pid, RAM: $dsh_mem)"
+    elif (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/3080') 2>/dev/null; then
+        echo " DeepSeek Harness: ACTIVE (Port 3080)"
+    else
+        echo " DeepSeek Harness: INACTIVE"
     fi
 
     local loop_pid loop_mem
@@ -555,6 +619,21 @@ asl_service_check() {
         fi
     fi
 
+    # 5aa. DeepSeek Harness (dsh) Check (port 3080)
+    local dsh_chk=""
+    if [ -f "$TERMUX_HOME/dsh-daemon.sh" ]; then
+        dsh_chk="$TERMUX_HOME/dsh-daemon.sh"
+    elif [ -f "/data/data/com.termux/files/home/dsh-daemon.sh" ]; then
+        dsh_chk="/data/data/com.termux/files/home/dsh-daemon.sh"
+    fi
+    if [ -n "$dsh_chk" ]; then
+        if [ -z "$(_asl_pgrep_first "apps/cli/src/bin.ts")" ] && [ -z "$(_asl_pgrep_first "apps/cli/src/bin.ts" root)" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/3080') 2>/dev/null; then
+            echo "[!] DeepSeek Harness daemon down — restarting on port 3080..."
+            (cd "$TERMUX_HOME" && nohup bash "$dsh_chk" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 &)
+            healed=$((healed + 1))
+        fi
+    fi
+
     # 5b. Oracle VPS 2 (144.24.122.241) AI, Web Terminal & Dashboard Tunnel Check
     local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
     if [ -f "$vps2_key" ]; then
@@ -574,6 +653,7 @@ asl_service_check() {
                 -R 4096:127.0.0.1:4096 \
                 -R 9119:127.0.0.1:9119 \
                 -R 18080:127.0.0.1:8080 \
+                -R 3080:127.0.0.1:3080 \
                 ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
             healed=$((healed + 1))
         fi
@@ -612,7 +692,7 @@ asl_service_check() {
     # 7. Re-apply Android OOM score adjustment (-1000) & CPU affinity (cores 0-3) for background daemons
     if su -c "id -u" >/dev/null 2>&1; then
         local _oom_pids
-        _oom_pids="$(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop") $(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|asl-service|asl-watchdog-loop" root)"
+        _oom_pids="$(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|dsh|asl-service|asl-watchdog-loop") $(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|dsh|asl-service|asl-watchdog-loop" root)"
         for pid in $_oom_pids; do
             su -c "echo -1000 > /proc/$pid/oom_score_adj" 2>/dev/null || true
             if command -v taskset >/dev/null 2>&1; then
@@ -705,6 +785,13 @@ asl_service_stop_one() {
     local remote_script
     remote_script=$(asl_find_script "remote.sh")
     case "$svc" in
+        dsh|deepseek|deepseek-harness)
+            echo "[*] Stopping DeepSeek Harness daemon..."
+            _asl_pkill_real "dsh-daemon"
+            _asl_pkill_real "apps/cli/src/bin.ts"
+            _asl_pkill_real "dsh"
+            echo "[✓] DeepSeek Harness stopped."
+            ;;
         omniroute|omni)
             echo "[*] Stopping OmniRoute AI proxy..."
             _asl_pkill_real "omniroute-daemon"
@@ -789,7 +876,7 @@ asl_service_stop_one() {
             ;;
         *)
             echo "[!] Unknown service: $svc"
-            echo "Available services: omniroute, web (terminal), ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
+            echo "Available services: dsh, omniroute, web (terminal), ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
             return 1
             ;;
     esac
@@ -801,6 +888,21 @@ asl_service_start_one() {
     local remote_script
     remote_script=$(asl_find_script "remote.sh")
     case "$svc" in
+        dsh|deepseek|deepseek-harness)
+            echo "[*] Starting DeepSeek Harness on port 3080..."
+            local dsh_bin=""
+            if [ -f "$TERMUX_HOME/dsh-daemon.sh" ]; then
+                dsh_bin="$TERMUX_HOME/dsh-daemon.sh"
+            elif [ -f "/data/data/com.termux/files/home/dsh-daemon.sh" ]; then
+                dsh_bin="/data/data/com.termux/files/home/dsh-daemon.sh"
+            fi
+            if [ -n "$dsh_bin" ]; then
+                (cd "$TERMUX_HOME" && nohup bash "$dsh_bin" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 &)
+                echo "[✓] DeepSeek Harness started on port 3080."
+            else
+                echo "[!] Error: dsh-daemon.sh not found."
+            fi
+            ;;
         omniroute|omni)
             echo "[*] Starting OmniRoute AI proxy..."
             local omni_bin=""
@@ -897,7 +999,7 @@ asl_service_start_one() {
             ;;
         *)
             echo "[!] Unknown service: $svc"
-            echo "Available services: omniroute, web (terminal), ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
+            echo "Available services: dsh, omniroute, web (terminal), ssh, tunnels, serveo, ngrok, oracle, autoconnect, watchdog, wakelock, swap"
             return 1
             ;;
     esac
@@ -957,6 +1059,6 @@ case "${1:-status}" in
         ;;
     *)
         echo "Usage: asl service [start|stop|restart|check|loop|enable|disable|status] [service_name]"
-        echo "Per-service: asl service stop|start|restart <omniroute|ssh|tunnels|serveo|ngrok|oracle|autoconnect|watchdog|wakelock|swap>"
+        echo "Per-service: asl service stop|start|restart <dsh|omniroute|ssh|tunnels|serveo|ngrok|oracle|autoconnect|watchdog|wakelock|swap>"
         ;;
 esac
