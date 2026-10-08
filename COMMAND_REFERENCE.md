@@ -382,6 +382,18 @@ asl aid status                      # Verify AID mapping status
 
 ---
 
+### `asl keyboard-bar [hide|show|toggle|status]`
+Android keyboard bottom bar & IME navigation spacing control (via native Runtime Resource Overlay `config_imeDrawsImeNavBar=false`). Maximizes vertical terminal and desktop screen space by removing the gesture navigation bar gap under the keyboard.
+
+```bash
+asl keyboard-bar hide               # Eliminate bottom keyboard spacing & restart SystemUI
+asl keyboard-bar show               # Restore default Android system keyboard bottom bar
+asl keyboard-bar toggle             # Toggle keyboard bar visibility ON/OFF
+asl keyboard-bar status             # Inspect overlay status and effective configuration
+```
+
+---
+
 ### `asl wakelock [on|off|status]`
 CPU wake lock control.
 

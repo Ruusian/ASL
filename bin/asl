@@ -294,6 +294,7 @@ show_help() {
     echo "  audio [start|stop|test|volume <level>] Manage PulseAudio sound server"
     echo ""
     echo "Termux & Android Bridge Commands:"
+    echo "  keyboard-bar [act] Hide/show Android keyboard bottom bar / spacing (hide|show|toggle|status)"
     echo "  screen-res [res] Toggle/set Android screen resolution & saved DPI (toggle|reset|1080p|720p|set <WxH> [DPI])"
     echo "  rotation [mode]  Manage Android orientation & forced landscape (landscape|auto|off|portrait|toggle)"
     echo "  open <target>    Open file or URL in default Android host application"
@@ -2067,6 +2068,10 @@ case "${1:-}" in
     restore)
         shift
         asl_with_lock asl_restore "$@"
+        ;;
+    keyboard-bar|ime-bar|keyboard-space|ime-space|hide-keyboard-bar|ime)
+        shift
+        bash "$ASL_DIR/core/termux-bridge.sh" keyboard-bar "$@"
         ;;
     screen-res|screen-resolution|host-resolution|resolution-host|host-res|screen-density|rotation|rotate|orientation|screen-rotation|forced-landscape|landscape|wakelock|wake|open|clip|clipboard|shortcut|app-shortcut|clip-sync|clipdaemon|toast|notify|notification|storage)
         bash "$ASL_DIR/core/termux-bridge.sh" "$@"

@@ -633,7 +633,106 @@ termux_screen_rotation() {
     esac
 }
 
+termux_keyboard_bar() {
+    local action="${1:-status}"
+    shift || true
+
+    if ! command -v su >/dev/null 2>&1 && [ ! -e /proc/1/ns/mnt ]; then
+        echo "[!] Root access (su) is required to manage Android keyboard navbar overlays."
+        return 1
+    fi
+
+    local overlay_pkg="com.android.shell:HideKeyboardBar"
+
+    case "$action" in
+        status|"")
+            local is_enabled=0
+            local overlay_line lookup_val
+            overlay_line=$(_asl_host_su "cmd overlay list 2>/dev/null | grep -i 'HideKeyboardBar'" || true)
+            lookup_val=$(_asl_host_su "cmd overlay lookup android android:bool/config_imeDrawsImeNavBar 2>/dev/null" || true)
+            lookup_val=$(echo "$lookup_val" | tr -d '[:space:]')
+
+            echo "=== Android Keyboard Bottom Bar / IME Spacing ==="
+            if echo "$overlay_line" | grep -q "\[x\]"; then
+                is_enabled=1
+            fi
+
+            if [ "$lookup_val" = "false" ] || [ "$is_enabled" -eq 1 ]; then
+                echo " State:                 HIDDEN (config_imeDrawsImeNavBar=false)"
+                echo " Overlay:               ENABLED ($overlay_pkg)"
+                echo " Usable Screen Height:  MAXIMIZED (Bottom keyboard gap eliminated)"
+            else
+                echo " State:                 VISIBLE (config_imeDrawsImeNavBar=true / default)"
+                echo " Overlay:               DISABLED / INACTIVE"
+                echo " Usable Screen Height:  DEFAULT (System nav bar spacing drawn under IME)"
+            fi
+            echo " Effective Lookup:      ${lookup_val:-unknown}"
+            echo ""
+            echo "Usage: asl keyboard-bar [hide | show | toggle | status]"
+            ;;
+        hide|off|disable)
+            echo "[*] Hiding Android keyboard bottom bar / spacing..."
+            local exists
+            exists=$(_asl_host_su "cmd overlay list 2>/dev/null | grep -i 'HideKeyboardBar'" || true)
+            if [ -z "$exists" ]; then
+                echo "[*] Fabricating Android runtime overlay (android:bool/config_imeDrawsImeNavBar=false)..."
+                _asl_host_su "cmd overlay fabricate --target android --name HideKeyboardBar android:bool/config_imeDrawsImeNavBar 0x12 0x0 2>/dev/null" || true
+            fi
+            _asl_host_su "cmd overlay enable --user 0 '$overlay_pkg' 2>/dev/null" || true
+
+            # Restart SystemUI and active keyboards to apply overlay instantly
+            echo "[*] Restarting SystemUI and keyboard services to apply changes..."
+            _asl_host_su "am force-stop com.android.inputmethod.latin 2>/dev/null; am force-stop com.google.android.inputmethod.latin 2>/dev/null; pkill -9 -f com.android.systemui 2>/dev/null || killall -9 com.android.systemui 2>/dev/null" || true
+            sleep 0.5
+
+            local new_val
+            new_val=$(_asl_host_su "cmd overlay lookup android android:bool/config_imeDrawsImeNavBar 2>/dev/null" | tr -d '[:space:]')
+            if [ "$new_val" = "false" ]; then
+                echo "[✓] Android keyboard bottom bar HIDDEN (config_imeDrawsImeNavBar=false)."
+                echo "    Keyboard gap eliminated across Termux, X11, and Android applications."
+            else
+                echo "[!] Overlay enabled, but lookup returned: ${new_val:-unknown}. Check root permissions."
+            fi
+            ;;
+        show|on|enable|restore|reset)
+            echo "[*] Restoring Android keyboard bottom bar / spacing..."
+            _asl_host_su "cmd overlay disable --user 0 '$overlay_pkg' 2>/dev/null" || true
+
+            # Restart SystemUI and active keyboards to apply overlay instantly
+            echo "[*] Restarting SystemUI and keyboard services to apply changes..."
+            _asl_host_su "am force-stop com.android.inputmethod.latin 2>/dev/null; am force-stop com.google.android.inputmethod.latin 2>/dev/null; pkill -9 -f com.android.systemui 2>/dev/null || killall -9 com.android.systemui 2>/dev/null" || true
+            sleep 0.5
+
+            local new_val
+            new_val=$(_asl_host_su "cmd overlay lookup android android:bool/config_imeDrawsImeNavBar 2>/dev/null" | tr -d '[:space:]')
+            echo "[✓] Android keyboard bottom bar RESTORED (default system spacing active)."
+            ;;
+        toggle|switch)
+            local lookup_val
+            lookup_val=$(_asl_host_su "cmd overlay lookup android android:bool/config_imeDrawsImeNavBar 2>/dev/null" | tr -d '[:space:]')
+            lookup_val=$(echo "$lookup_val" | tr -d '[:space:]')
+            if [ "$lookup_val" = "false" ]; then
+                termux_keyboard_bar show
+            else
+                termux_keyboard_bar hide
+            fi
+            ;;
+        *)
+            echo "Usage: asl keyboard-bar [hide | show | toggle | status]"
+            echo "       asl keyboard-bar hide    - Eliminate bottom keyboard spacing (config_imeDrawsImeNavBar=false)"
+            echo "       asl keyboard-bar show    - Restore default Android keyboard bottom bar spacing"
+            echo "       asl keyboard-bar toggle  - Toggle bottom keyboard bar ON / OFF"
+            echo "       asl keyboard-bar status  - Check current keyboard overlay status"
+            return 1
+            ;;
+    esac
+}
+
 case "${1:-}" in
+    keyboard-bar|ime-bar|keyboard-space|ime-space|hide-keyboard-bar|ime)
+        shift
+        termux_keyboard_bar "$@"
+        ;;
     wakelock|wake)
         shift
         termux_wakelock "$@"
@@ -675,7 +774,7 @@ case "${1:-}" in
         ;;
     *)
         echo "ASL Termux & Android Host Bridge"
-        echo "Usage: asl [screen-res|rotation|wakelock|open|clip|shortcut|clip-sync|toast|notify|storage]"
+        echo "Usage: asl [keyboard-bar|screen-res|rotation|wakelock|open|clip|shortcut|clip-sync|toast|notify|storage]"
         ;;
 esac
 

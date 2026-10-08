@@ -231,7 +231,7 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 | **Integrity Repair** | `asl repair [all\|mounts\|permissions\|dpkg]` | Self-healing recovery for mounts, locks, and permissions |
 | **Declarative Config**| `asl config [show\|init\|get\|set]` | Manage system settings in `/etc/asl.conf` |
 | **Path Translation** | `asl path [-u\|-a\|-c\|-m] <path>` | Translate paths between Android host and Linux container |
-| **Android Host Bridge**| `asl wakelock\|open\|clip\|toast\|shortcut` | WakeLock, default app opener, clipboard, notifications |
+| **Android Host Bridge**| `asl keyboard-bar\|wakelock\|open\|clip\|toast\|shortcut` | Keyboard bottom bar remover, WakeLock, clipboard, notifications |
 
 ---
 

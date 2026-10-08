@@ -72,6 +72,16 @@ else
     fi
 fi
 
+# Android Keyboard Bottom Bar (config_imeDrawsImeNavBar) check
+if [ "$sdk_ver" -ge 29 ] && [ "$(su -c 'id -u' 2>/dev/null)" = 0 ]; then
+    ime_nav=$(su -c "cmd overlay lookup android android:bool/config_imeDrawsImeNavBar 2>/dev/null" | tr -d '[:space:]')
+    if [ "$ime_nav" = "false" ]; then
+        check keyboard-bar optional "keyboard bottom bar gap hidden (config_imeDrawsImeNavBar=false)" PASS
+    else
+        check keyboard-bar optional "standard keyboard spacing active (hide with: asl keyboard-bar hide)" INFO
+    fi
+fi
+
 # Clipboard bridge tool check
 if command -v termux-clipboard-get >/dev/null 2>&1; then
     check clipboard optional "Termux API clipboard bridge available" PASS
