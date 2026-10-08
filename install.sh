@@ -7,9 +7,43 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="$HOME/ASL"
 
-# 1. Repository Setup & Common Functions Loading
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+RESET='\033[0m'
+
+echo -e "${CYAN}====================================================${RESET}"
+echo -e "${CYAN} 🚀 Android Subsystem for Linux (ASL) Installer     ${RESET}"
+echo -e "${CYAN}====================================================${RESET}"
+
+# 0. Early Platform Check
+export DEBIAN_FRONTEND=noninteractive
+export PIP_NO_INPUT=1
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+export PIP_DEFAULT_TIMEOUT=15
+
+if [ -z "$PREFIX" ] || [[ "$PREFIX" != *"/com.termux/"* ]]; then
+    echo -e "${RED}[!] Error: ASL must be run inside Termux on Android.${RESET}"
+    exit 1
+fi
+
+mkdir -p "$PREFIX/etc" "$PREFIX/tmp"
+
+# 1. Install Git FIRST (before any clone attempts)
+echo -e "${GREEN}[*] Ensuring git is installed...${RESET}"
+if ! command -v git >/dev/null 2>&1; then
+    echo -e "${CYAN}[*] Installing git...${RESET}"
+    pkg update -y 2>/dev/null || true
+    pkg install -y git 2>/dev/null || {
+        echo -e "${RED}[!] Failed to install git. Check your internet connection.${RESET}"
+        exit 1
+    }
+fi
+
+# 2. Repository Setup & Common Functions Loading
 if [ -d "$TARGET_DIR/.git" ]; then
-    echo -e "\033[0;32m[*] Updating ASL repository at $TARGET_DIR...\033[0m"
+    echo -e "${GREEN}[*] Updating ASL repository at $TARGET_DIR...${RESET}"
     cd "$TARGET_DIR"
     # Verify the configured origin is the official ASL repo before updating
     # to avoid pulling code from a hijacked or mistyped remote.
@@ -19,15 +53,17 @@ if [ -d "$TARGET_DIR/.git" ]; then
             git pull origin master 2>/dev/null || true
             ;;
         *)
-            echo -e "\033[0;33m[!] Skipping auto-update: origin remote is not the official ASL repo (got: ${origin_url:-none}).${RESET}"
+            echo -e "${YELLOW}[!] Skipping auto-update: origin remote is not the official ASL repo (got: ${origin_url:-none}).${RESET}"
             ;;
     esac
 else
-    echo -e "\033[0;32m[*] Cloning ASL repository to $TARGET_DIR...\033[0m"
-    if ! git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null && \
-       ! git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null; then
-        echo -e "\033[0;31m[!] Failed to clone ASL repository. Check your internet connection.\033[0m"
-        exit 1
+    echo -e "${GREEN}[*] Cloning ASL repository to $TARGET_DIR...${RESET}"
+    if ! git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null; then
+        echo -e "${YELLOW}[!] First clone attempt failed, retrying...${RESET}"
+        if ! git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null; then
+            echo -e "${RED}[!] Failed to clone ASL repository. Check your internet connection.${RESET}"
+            exit 1
+        fi
     fi
     cd "$TARGET_DIR"
 fi
@@ -47,25 +83,19 @@ asl_validate_debianpath() {
     local p="$1"
     case "$p" in
         /|/data|/data/|/sdcard|/sdcard/|/system|/system/|/vendor|/vendor/)
-            echo -e "\033[0;31m[!] Refusing unsafe DEBIANPATH: $p${RESET}" >&2
+            echo -e "${RED}[!] Refusing unsafe DEBIANPATH: $p${RESET}" >&2
             return 1
             ;;
     esac
     case "$p" in
         /*) return 0 ;;
-        *) echo -e "\033[0;31m[!] DEBIANPATH must be an absolute path: $p${RESET}" >&2; return 1 ;;
+        *) echo -e "${RED}[!] DEBIANPATH must be an absolute path: $p${RESET}" >&2; return 1 ;;
     esac
 }
 if ! asl_validate_debianpath "$DEBIANPATH"; then
-    echo -e "\033[0;31m[!] Aborting installation due to unsafe DEBIANPATH.${RESET}"
+    echo -e "${RED}[!] Aborting installation due to unsafe DEBIANPATH.${RESET}"
     exit 1
 fi
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[1;33m'
-RESET='\033[0m'
 
 DISTRO_TYPE="${TYPE:-auto}" # debian, ubuntu, arch, alpine, fedora, kali, void, opensuse, or auto
 INSTALL_DESKTOP="${DESKTOP:-auto}" # yes, no, auto
@@ -130,23 +160,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-echo -e "${CYAN}====================================================${RESET}"
-echo -e "${CYAN} 🚀 Android Subsystem for Linux (ASL) Installer     ${RESET}"
-echo -e "${CYAN}====================================================${RESET}"
-
-# 1. Environment & Platform Checks
-export DEBIAN_FRONTEND=noninteractive
-export PIP_NO_INPUT=1
-export PIP_DISABLE_PIP_VERSION_CHECK=1
-export PIP_DEFAULT_TIMEOUT=15
-
-if [ -z "$PREFIX" ] || [[ "$PREFIX" != *"/com.termux/"* ]]; then
-    echo -e "${RED}[!] Error: ASL must be run inside Termux on Android.${RESET}"
-    exit 1
-fi
-
-mkdir -p "$PREFIX/etc" "$PREFIX/tmp"
-
+# 3. Root Access Verification
 echo -e "${GREEN}[*] Verifying Superuser root access (su)...${RESET}"
 if [ "$(su -c 'id -u' 2>/dev/null)" != "0" ]; then
     echo -e "${RED}[!] Error: ASL requires Superuser root access (Magisk / KernelSU / APatch).${RESET}"
@@ -159,7 +173,7 @@ export ASL_EXEC_MODE
 echo -e "${GREEN}[✓] Execution Mode: ROOT (su) Kernel Chroot (Full Hardware Acceleration)${RESET}"
 echo "root" > "$PREFIX/etc/asl_exec_mode"
 
-# 2. Package Installation
+# 4. Package Installation
 echo -e "${GREEN}[*] Verifying required Termux packages...${RESET}"
 export DEBIAN_FRONTEND=noninteractive
 MISSING_PKGS=()
@@ -194,17 +208,7 @@ if ! command -v proot-distro >/dev/null 2>&1; then
     }
 fi
 
-# Re-verify Repository Clone now that git is installed
-if [ ! -d "$TARGET_DIR/.git" ]; then
-    echo -e "${GREEN}[*] Provisioning ASL repository to $TARGET_DIR...${RESET}"
-    (git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null || git clone https://github.com/Ruusian/ASL.git "$TARGET_DIR" 2>/dev/null) || {
-        echo -e "${RED}[!] Failed to clone the ASL repository.${RESET}"
-        exit 1
-    }
-    cd "$TARGET_DIR"
-fi
-
-# 3. Interactive Distro Edition Selection
+# 5. Interactive Distro Edition Selection
 if { [ -t 0 ] || [ -c /dev/tty ]; } && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "\n${CYAN}====================================================${RESET}"
     echo -e "${CYAN} 🐧 Select Linux Subsystem Distribution / Edition:   ${RESET}"
@@ -309,7 +313,7 @@ ensure_chroot_unmounted_for_replace() {
     fi
 }
 
-# 4. Rootfs Download & Chroot Provisioning
+# 6. Rootfs Download & Chroot Provisioning
 if [ "$DISTRO_TYPE" != "skip" ] && [ -n "$IMAGE_REF" ]; then
     echo -e "${GREEN}[*] Provisioning Linux Subsystem Rootfs (${DISTRO_NAME})...${RESET}"
     if [ -d "$DEBIANPATH/etc" ] || asl_exec "test -d '$DEBIANPATH/etc'" 2>/dev/null; then
@@ -363,7 +367,7 @@ if [ "$DISTRO_TYPE" != "skip" ] && [ -n "$IMAGE_REF" ]; then
     fi
 fi
 
-# 5. Global Binary Linking & Android AID setup
+# 7. Global Binary Linking & Android AID setup
 echo -e "${GREEN}[*] Installing ASL system runtime to ${PREFIX:-/data/data/com.termux/files/usr}/share/asl...${RESET}"
 INSTALL_DIR="${PREFIX:-/data/data/com.termux/files/usr}/share/asl"
 mkdir -p "$INSTALL_DIR"
