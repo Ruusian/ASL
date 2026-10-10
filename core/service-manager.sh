@@ -529,7 +529,7 @@ asl_service_status() {
         echo " Chroot Mounts:  INACTIVE"
     fi
 
-    if (timeout 1 dumpsys power 2>/dev/null || timeout 1 su -c "dumpsys power" 2>/dev/null) | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
+    if (timeout 1 su -c "dumpsys power" 2>/dev/null || timeout 1 dumpsys power 2>/dev/null) | grep -q "termux:service-wakelock" || pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         echo " Wake-Lock:      ENGAGED (Android Sleep Prevented)"
     else
         echo " Wake-Lock:      DISABLED"
@@ -699,7 +699,7 @@ asl_service_check() {
     fi
 
     # 7. CPU Wake-Lock Protection (prevents Android sleep dropouts)
-    if ! (timeout 1 dumpsys power 2>/dev/null || timeout 1 su -c "dumpsys power" 2>/dev/null) | grep -q "termux:service-wakelock" && ! pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
+    if ! (timeout 1 su -c "dumpsys power" 2>/dev/null || timeout 1 dumpsys power 2>/dev/null) | grep -q "termux:service-wakelock" && ! pgrep -f "termux-wake-lock" >/dev/null 2>&1; then
         if command -v termux-wake-lock >/dev/null 2>&1; then
             termux-wake-lock 2>/dev/null || true
             echo "[*] Re-engaged CPU Wake-Lock to prevent Android sleep..."
