@@ -349,6 +349,20 @@ EOFSHIM
     cp -f \"$DEBIANPATH/usr/local/bin/pkg\" \"$DEBIANPATH/bin/pkg\" 2>/dev/null || true
     chmod +x \"$DEBIANPATH/bin/pkg\" 2>/dev/null || true
 
+    # Provision termux-shell bridge inside Debian chroot
+    if [ -f /data/data/com.termux/files/usr/bin/termux-bridge-runner ]; then
+        ln -sfn /usr/local/bin/termux-shell \"$DEBIANPATH/usr/local/bin/termux-exec\" 2>/dev/null || true
+        ln -sfn /usr/local/bin/termux-shell \"$DEBIANPATH/usr/local/bin/termux-su\" 2>/dev/null || true
+        ln -sfn /usr/local/bin/termux-shell \"$DEBIANPATH/usr/bin/termux-shell\" 2>/dev/null || true
+        ln -sfn /usr/local/bin/termux-shell \"$DEBIANPATH/usr/bin/termux-exec\" 2>/dev/null || true
+        ln -sfn /usr/local/bin/termux-shell \"$DEBIANPATH/usr/bin/termux-su\" 2>/dev/null || true
+        for tool in /data/data/com.termux/files/usr/bin/termux-*; do
+            [ -f \"\$tool\" ] || continue
+            tname=\$(basename \"\$tool\")
+            ln -sfn /usr/local/bin/termux-shell \"$DEBIANPATH/usr/local/bin/\$tname\" 2>/dev/null || true
+        done
+    fi
+
     trap - ERR
 " || {
     echo "[!] Chroot mount failed during initialization."
@@ -366,8 +380,8 @@ if ! is_mounted "$DEBIANPATH/proc"; then
     exit 1
 fi
 
-# Ensure 5GB virtual swap pool is active
-if [ -f "$SCRIPT_DIR/core/swap-manager.sh" ]; then
+# Ensure 4GB virtual swap pool is active (user cap; was 5GB, ASL file swap removed 2026-10-10)
+if [ "${ASL_NO_FILE_SWAP:-0}" != "1" ] && [ -f "$SCRIPT_DIR/core/swap-manager.sh" ]; then
     bash "$SCRIPT_DIR/core/swap-manager.sh" setup >/dev/null 2>&1 || true
 fi
 

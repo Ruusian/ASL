@@ -123,10 +123,9 @@ start_audio() {
     rm -rf "${PREFIX:-/data/data/com.termux/files/usr}/tmp"/pulse-* "$HOME"/.config/pulse/*-runtime 2>/dev/null || true
     (
         unset PULSE_SERVER
-        pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --load="module-sles-source" 2>/dev/null || \
-        pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-aaudio-sink" 2>/dev/null || \
-        pulseaudio -D --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --load="module-sles-source" --exit-idle-time=-1 2>/dev/null || \
-        nohup pulseaudio --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" --load="module-sles-sink" --load="module-sles-source" --exit-idle-time=-1 >/dev/null 2>&1 &
+        pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 tsched=0" 2>/dev/null || \
+        pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" 2>/dev/null || \
+        nohup pulseaudio --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" --exit-idle-time=-1 >/dev/null 2>&1 &
     )
     sleep 1
     export PULSE_SERVER="127.0.0.1:4713"
@@ -151,23 +150,27 @@ start_gpu() {
     VIRGL_OWNED=0 VIRGL_PID='' VIRGL_START=''
     asl_gpu_detect
     if [ "$ASL_GPU_PROFILE" = "adreno-turnip-zink" ]; then
+        unset VIRGL_TEST_PATH VIRGL_SOCKET_PATH
         echo "[*] Direct Adreno Turnip + Zink Vulkan acceleration active; VirGL server not needed."
         return 0
     fi
+    # SELinux denies virgl_test_server_android access to /tmp; bind inside Termux TMPDIR
+    VIRGL_SOCKET_PATH="${VIRGL_SOCKET_PATH:-${TMPDIR:-$PREFIX/tmp}/.virgl_test}"
+    export VIRGL_TEST_PATH="$VIRGL_SOCKET_PATH"
     if pgrep -x virgl_test_server_android >/dev/null || pgrep -f virgl_test_server >/dev/null; then
         echo "[*] Reusing active VirGL GPU hardware acceleration server."
-        [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
+        [ -S "$VIRGL_SOCKET_PATH" ] && chmod 700 "$VIRGL_SOCKET_PATH" 2>/dev/null || true
         return 0
     fi
     if command -v virgl_test_server_android >/dev/null; then
         echo "[*] Initializing VirGL GPU hardware acceleration server (ANGLE)..."
-        virgl_test_server_android --angle-gl >/dev/null 2>&1 &
+        virgl_test_server_android --angle-vulkan --socket-path "$VIRGL_SOCKET_PATH" >/dev/null 2>&1 &
         VIRGL_PID=$!
         VIRGL_START=$(pid_start_time "$VIRGL_PID")
         VIRGL_OWNED=1
         protect_pid_oom "$VIRGL_PID"
         sleep 1
-        [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
+        [ -S "$VIRGL_SOCKET_PATH" ] && chmod 700 "$VIRGL_SOCKET_PATH" 2>/dev/null || true
         echo "[✓] VirGL GPU hardware acceleration active."
     fi
 }
@@ -277,9 +280,9 @@ start_desktop() {
     if ! pgrep -f "termux-x11.*:[0-9]" >/dev/null; then
         rm -f "$termux_tmp/.X11-unix/X0" "$termux_tmp/.X0-lock" 2>/dev/null || su -c "rm -f '$termux_tmp/.X11-unix/X0' '$termux_tmp/.X0-lock'" 2>/dev/null || true
         if [ -f "$xauth_file" ] && [ -s "$xauth_file" ]; then
-            nohup termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp -auth "$xauth_file" </dev/null >/dev/null 2>&1 &
+            nohup termux-x11 "$DISPLAY_ID" -legacy-drawing -ac +iglx -nolisten tcp -auth "$xauth_file" </dev/null >"$termux_tmp/x11.log" 2>&1 &
         else
-            nohup termux-x11 "$DISPLAY_ID" +iglx -nolisten tcp </dev/null >/dev/null 2>&1 &
+            nohup termux-x11 "$DISPLAY_ID" -legacy-drawing -ac +iglx -nolisten tcp </dev/null >"$termux_tmp/x11.log" 2>&1 &
         fi
         local x11_spawn_pid=$!
         disown "$x11_spawn_pid" 2>/dev/null || true
@@ -323,7 +326,7 @@ start_desktop() {
     asl_sync_chroot_env 2>/dev/null || true
     echo "[*] Launching XFCE4 Desktop inside chroot (hardware acceleration)..."
     chroot_pkill 9 '(^|[^A-Za-z0-9_])(xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfce4-session|xfconfd|light-locker)([^A-Za-z0-9_]|$)'
-    [ -S /tmp/.virgl_test ] && chmod 700 /tmp/.virgl_test 2>/dev/null || true
+    [ -S "$VIRGL_SOCKET_PATH" ] && chmod 700 "$VIRGL_SOCKET_PATH" 2>/dev/null || true
     local target_home="/root"
     local target_uid=0
     local asl_target_user="root"
@@ -422,22 +425,30 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
     export DISPLAY=:0
     export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
     xhost + 2>/dev/null || true
+    x_out="screen"
+    xrandr 2>/dev/null | grep -q "builtin connected" && x_out="builtin"
     xrandr --newmode "1280x720" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
-    xrandr --addmode builtin "1280x720" 2>/dev/null || true
+    xrandr --addmode "$x_out" "1280x720" 2>/dev/null || xrandr --addmode screen "1280x720" 2>/dev/null || xrandr --addmode builtin "1280x720" 2>/dev/null || true
     xrandr --newmode "1600x900" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true
-    xrandr --addmode builtin "1600x900" 2>/dev/null || true
+    xrandr --addmode "$x_out" "1600x900" 2>/dev/null || xrandr --addmode screen "1600x900" 2>/dev/null || xrandr --addmode builtin "1600x900" 2>/dev/null || true
     xrandr --newmode "1366x768" 85.50 1366 1436 1579 1792 768 771 774 798 -hsync +vsync 2>/dev/null || true
-    xrandr --addmode builtin "1366x768" 2>/dev/null || true
+    xrandr --addmode "$x_out" "1366x768" 2>/dev/null || xrandr --addmode screen "1366x768" 2>/dev/null || xrandr --addmode builtin "1366x768" 2>/dev/null || true
     xrandr --newmode "1024x768" 65.00 1024 1048 1184 1344 768 771 777 806 -hsync +vsync 2>/dev/null || true
-    xrandr --addmode builtin "1024x768" 2>/dev/null || true
+    xrandr --addmode "$x_out" "1024x768" 2>/dev/null || xrandr --addmode screen "1024x768" 2>/dev/null || xrandr --addmode builtin "1024x768" 2>/dev/null || true
     xrandr --newmode "800x600" 40.00 800 840 920 1056 600 601 605 628 +hsync +vsync 2>/dev/null || true
-    xrandr --addmode builtin "800x600" 2>/dev/null || true
+    xrandr --addmode "$x_out" "800x600" 2>/dev/null || xrandr --addmode screen "800x600" 2>/dev/null || xrandr --addmode builtin "800x600" 2>/dev/null || true
 
     for _t in 1 2 3 4 5; do
         sleep 1
     done
 
 ) &
+
+# Enforce XFWM4 compositor settings per user preference: use_compositing=true, vblank_mode=off
+mkdir -p "$target_home/.config/xfce4/xfconf/xfce-perchannel-xml" 2>/dev/null || true
+xfconf-query -c xfwm4 -p /general/use_compositing -s true --create -t bool 2>/dev/null || true
+xfconf-query -c xfwm4 -p /general/vblank_mode -s off --create -t string 2>/dev/null || true
+export vblank_mode=0
 
 rm -f /etc/xdg/autostart/light-locker.desktop "$target_home/.config/autostart/light-locker.desktop" 2>/dev/null || true
 
@@ -518,8 +529,10 @@ stop_desktop() {
     rm -rf "$termux_tmp/.X0-lock" "$termux_tmp/.X11-unix"/X* "$DEBIANPATH/tmp/.X0-lock" "$DEBIANPATH/tmp/xfce-keepalive" "$DEBIANPATH/run/dbus/system_bus_socket" "$DEBIANPATH/tmp/.X11-vnc" "$DEBIANPATH/tmp/.vnc"/*.pid 2>/dev/null || true
     if [ "$failed" -ne 0 ]; then echo "[!] Desktop shutdown was incomplete."; return 1; fi
     rm -f "$STATE_FILE"
-    if command -v termux-wake-unlock >/dev/null 2>&1; then
-        termux-wake-unlock 2>/dev/null || true
+    if ! pgrep -f "asl-watchdog-loop" >/dev/null 2>&1; then
+        if command -v termux-wake-unlock >/dev/null 2>&1; then
+            termux-wake-unlock 2>/dev/null || true
+        fi
     fi
     echo "[✓] ASL-managed desktop stopped."
 }

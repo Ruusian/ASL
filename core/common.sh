@@ -198,7 +198,7 @@ asl_cpu_temp_c() {
             ASL_CPU_ZONES=$(cat "$cache_f" 2>/dev/null)
         fi
         if [ -z "${ASL_CPU_ZONES:-}" ]; then
-            ASL_CPU_ZONES=$(grep -l -i -E "cpu|soc|tsens|ap-thermal|mtk|exynos|qcom" /sys/class/thermal/thermal_zone*/type 2>/dev/null | sed "s/type$/temp/" | tr "\n" " ")
+            ASL_CPU_ZONES=$(grep -l -i -E "cpu|tsens|ap-thermal|mtk|exynos" /sys/class/thermal/thermal_zone*/type 2>/dev/null | sed "s/type$/temp/" | tr "\n" " ")
             [ -n "$ASL_CPU_ZONES" ] && printf "%s" "$ASL_CPU_ZONES" > "$cache_f" 2>/dev/null || true
         fi
     fi

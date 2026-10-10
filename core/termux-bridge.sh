@@ -529,6 +529,9 @@ termux_screen_rotation() {
             echo "[*] Enabling Forced Landscape mode (Locking screen to 90° Landscape & Overriding Auto-Rotate)..."
             _asl_host_su "settings put system accelerometer_rotation 0; settings put system user_rotation 1" 2>/dev/null
             _asl_save_rotation_state "1" "landscape" "1"
+            local rot_guard
+            rot_guard=$(asl_find_script "rotation-guard.sh")
+            [ -n "$rot_guard" ] && [ -f "$rot_guard" ] && bash "$rot_guard" start >/dev/null 2>&1 || true
             echo "[✓] Forced Landscape mode ENABLED (Native Auto-Rotate overridden, 90° orientation active)."
             ;;
         rev-landscape|reverse-landscape|270)
@@ -575,38 +578,13 @@ termux_screen_rotation() {
             ;;
         watch|watcher|daemon)
             local sub_act="${1:-status}"
-            case "$sub_act" in
-                start)
-                    if [ -f "$ROTATION_WATCHER_PID" ] && kill -0 "$(cat "$ROTATION_WATCHER_PID" 2>/dev/null)" 2>/dev/null; then
-                        echo "[*] Rotation watcher daemon is already running (PID: $(cat "$ROTATION_WATCHER_PID"))."
-                        return 0
-                    fi
-                    echo "[*] Starting ASL Rotation Watcher daemon (auto-overriding Android auto-rotation)..."
-                    local asl_bin="${PREFIX:-/data/data/com.termux/files/usr}/bin/asl"
-                    [ ! -x "$asl_bin" ] && asl_bin="asl"
-                    ( ( nohup bash -c "while true; do $asl_bin rotation enforce >/dev/null 2>&1 || true; sleep 3; done" >/dev/null 2>&1 &) &)
-                    sleep 0.2
-                    pgrep -f "rotation enforce" | head -1 > "$ROTATION_WATCHER_PID" 2>/dev/null || true
-                    echo "[✓] Rotation watcher active."
-                    ;;
-                stop)
-                    if [ -f "$ROTATION_WATCHER_PID" ]; then
-                        local w_pid
-                        w_pid=$(cat "$ROTATION_WATCHER_PID" 2>/dev/null)
-                        [ -n "$w_pid" ] && kill "$w_pid" 2>/dev/null || true
-                        rm -f "$ROTATION_WATCHER_PID" 2>/dev/null || true
-                    fi
-                    pkill -f "rotation enforce" 2>/dev/null || true
-                    echo "[✓] Rotation watcher stopped."
-                    ;;
-                status|*)
-                    if [ -f "$ROTATION_WATCHER_PID" ] && kill -0 "$(cat "$ROTATION_WATCHER_PID" 2>/dev/null)" 2>/dev/null; then
-                        echo " Rotation Watcher: ACTIVE (PID: $(cat "$ROTATION_WATCHER_PID"))"
-                    else
-                        echo " Rotation Watcher: INACTIVE (Integrated with ASL Service Watchdog)"
-                    fi
-                    ;;
-            esac
+            local rot_guard
+            rot_guard=$(asl_find_script "rotation-guard.sh")
+            if [ -n "$rot_guard" ] && [ -f "$rot_guard" ]; then
+                bash "$rot_guard" "$sub_act"
+            else
+                echo "[!] Rotation guard script not found."
+            fi
             ;;
         toggle|switch|toggle-landscape)
             _asl_load_rotation_state

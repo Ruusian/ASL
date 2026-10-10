@@ -217,6 +217,13 @@ asl_service_start() {
         asl_service_loop >/dev/null 2>&1 || true
     fi
 
+    # Ensure fast 0.2s rotation guard daemon is active for forced landscape
+    local rot_guard_script
+    rot_guard_script=$(asl_find_script "rotation-guard.sh")
+    if [ -n "$rot_guard_script" ] && [ -f "$rot_guard_script" ]; then
+        bash "$rot_guard_script" start >/dev/null 2>&1 || true
+    fi
+
     echo "[✓] All ASL 24/7 background services are ACTIVE."
 }
 
@@ -235,6 +242,11 @@ asl_service_stop() {
     _asl_pkill_real "autoconnect-daemon|asl-autoconnect"
     _asl_pkill_real "serveo.net"
     _asl_pkill_real "ngrok"
+    local rot_guard_script
+    rot_guard_script=$(asl_find_script "rotation-guard.sh")
+    if [ -n "$rot_guard_script" ] && [ -f "$rot_guard_script" ]; then
+        bash "$rot_guard_script" stop >/dev/null 2>&1 || true
+    fi
     local o_host=""
     if [ -f "$TERMUX_HOME/.asl/oracle_vps.conf" ]; then
         o_host=$(grep -E '^ORACLE_HOST=' "$TERMUX_HOME/.asl/oracle_vps.conf" 2>/dev/null | cut -d'=' -f2-)
@@ -523,6 +535,12 @@ asl_service_status() {
         echo " Wake-Lock:      DISABLED"
     fi
 
+    local rot_guard_script
+    rot_guard_script=$(asl_find_script "rotation-guard.sh")
+    if [ -n "$rot_guard_script" ] && [ -f "$rot_guard_script" ]; then
+        bash "$rot_guard_script" status
+    fi
+
     local boot_log="${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-boot.log"
     if [ -f "$boot_log" ] && [ -s "$boot_log" ]; then
         echo " Boot Log:       $boot_log ($(tail -n 1 "$boot_log" 2>/dev/null))"
@@ -736,14 +754,36 @@ asl_service_check() {
         target_rot=$(grep -E '^USER_ROTATION=' "$rot_state" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
     fi
     target_rot="${target_rot:-1}"
-    if [ "$is_forced_rot" = "1" ] && command -v su >/dev/null 2>&1; then
-        local cur_accel cur_u_rot
-        cur_accel=$(su -c "settings get system accelerometer_rotation" 2>/dev/null | tr -d '[:space:]')
-        cur_u_rot=$(su -c "settings get system user_rotation" 2>/dev/null | tr -d '[:space:]')
-        if [ "$cur_accel" = "1" ] || [ "$cur_u_rot" != "$target_rot" ]; then
-            echo "[!] Native Android auto-rotation active while Forced Landscape is configured — enforcing 90° Landscape override..."
-            su -c "settings put system accelerometer_rotation 0; settings put system user_rotation $target_rot" 2>/dev/null || true
-            healed=$((healed + 1))
+    if [ "$is_forced_rot" = "1" ]; then
+        local rot_guard_script
+        rot_guard_script=$(asl_find_script "rotation-guard.sh")
+        if [ -n "$rot_guard_script" ] && [ -f "$rot_guard_script" ]; then
+            if ! bash "$rot_guard_script" status >/dev/null 2>&1; then
+                echo "[!] Fast 0.2s Rotation Guard daemon inactive — reviving Forced Landscape guard..."
+                bash "$rot_guard_script" start >/dev/null 2>&1 || true
+                healed=$((healed + 1))
+            fi
+        fi
+        if command -v su >/dev/null 2>&1 || [ -e /proc/1/ns/mnt ]; then
+            local cur_accel cur_u_rot
+            if [ -f /etc/debian_version ] && [ -e /proc/1/ns/mnt ] && command -v nsenter >/dev/null 2>&1; then
+                cur_accel=$(nsenter --mount=/proc/1/ns/mnt /system/bin/settings get system accelerometer_rotation 2>/dev/null | tr -d '[:space:]')
+                cur_u_rot=$(nsenter --mount=/proc/1/ns/mnt /system/bin/settings get system user_rotation 2>/dev/null | tr -d '[:space:]')
+                if [ "$cur_accel" = "1" ] || [ "$cur_u_rot" != "$target_rot" ]; then
+                    echo "[!] Native Android auto-rotation active while Forced Landscape is configured — enforcing 90° Landscape override..."
+                    nsenter --mount=/proc/1/ns/mnt /system/bin/settings put system accelerometer_rotation 0 2>/dev/null || true
+                    nsenter --mount=/proc/1/ns/mnt /system/bin/settings put system user_rotation "$target_rot" 2>/dev/null || true
+                    healed=$((healed + 1))
+                fi
+            else
+                cur_accel=$(su -c "settings get system accelerometer_rotation" 2>/dev/null | tr -d '[:space:]')
+                cur_u_rot=$(su -c "settings get system user_rotation" 2>/dev/null | tr -d '[:space:]')
+                if [ "$cur_accel" = "1" ] || [ "$cur_u_rot" != "$target_rot" ]; then
+                    echo "[!] Native Android auto-rotation active while Forced Landscape is configured — enforcing 90° Landscape override..."
+                    su -c "settings put system accelerometer_rotation 0; settings put system user_rotation $target_rot" 2>/dev/null || true
+                    healed=$((healed + 1))
+                fi
+            fi
         fi
     fi
 

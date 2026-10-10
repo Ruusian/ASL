@@ -79,7 +79,8 @@ asl_swap_status() {
 }
 
 asl_swap_setup() {
-    local target_size="${1:-3G}"
+    # User cap: 4GB max total swap (2026-10-10). Override with ASL_SWAP_SIZE.
+    local target_size="${1:-${ASL_SWAP_SIZE:-4G}}"
     echo "[*] Setting up $target_size virtual swap pool & memory optimization..."
 
     local swapfile="/data/local/tmp/asl_swap.img"

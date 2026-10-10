@@ -10,6 +10,23 @@ elif [ -f "$HOME/ASL/core/common.sh" ]; then
     source "$HOME/ASL/core/common.sh"
 fi
 
+asl_gpu_turnip_usable() {
+    # Return 0 only when a real hardware Adreno Vulkan device is present.
+    # A software device (llvmpipe/lavapipe) means turnip is NOT usable.
+    DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
+    [ -d "$DEBIANPATH" ] || return 1
+    local out
+    out=$(asl_chroot_exec 'command -v vulkaninfo >/dev/null 2>&1 || exit 1
+for icd in /usr/share/vulkan/icd.d/*freedreno*.json /usr/share/vulkan/icd.d/*turnip*.json; do
+    [ -e "$icd" ] || continue
+    info=$(VK_DRIVER_FILES="$icd" VK_ICD_FILENAMES="$icd" timeout 25 vulkaninfo --summary 2>/dev/null)
+    echo "$info" | grep -q "deviceType.*INTEGRATED\|deviceType.*DISCRETE" && { echo "$info"; exit 0; }
+    echo "$info" | grep -q "Adreno\|Turnip\|freedreno" && { echo "$info"; exit 0; }
+done
+exit 1' 2>/dev/null) || return 1
+    [ -n "$out" ]
+}
+
 asl_gpu_detect() {
     ASL_GPU_PLATFORM=$(getprop ro.board.platform 2>/dev/null || true)
     ASL_GPU_PLATFORM=$(printf '%s' "$ASL_GPU_PLATFORM" | tr '[:upper:]' '[:lower:]')
@@ -29,16 +46,27 @@ asl_gpu_detect() {
     esac
 
     if [ "$is_adreno" -eq 1 ]; then
-        # Detect Adreno GPU generation for optimal TU_DEBUG settings
+        # Detect Adreno GPU generation for optimal driver tuning.
+        # Many Android kernels do not expose /sys/class/kgsl/kgsl-3d0/gpu_id,
+        # so also read the human-readable gpu_model ("Adreno640v2") when present.
         if [ -d /sys/class/kgsl/kgsl-3d0 ]; then
-            local gpu_id
+            local gpu_id gpu_model
             gpu_id=$(cat /sys/class/kgsl/kgsl-3d0/gpu_id 2>/dev/null || true)
+            gpu_model=$(cat /sys/class/kgsl/kgsl-3d0/gpu_model 2>/dev/null || true)
             case "$gpu_id" in
                 7[0-9][0-9]) ASL_GPU_MODEL="adreno7xx" ;;  # Adreno 730, 740, 750
                 8[0-9][0-9]) ASL_GPU_MODEL="adreno8xx" ;;  # Adreno 830, 840
-                660) ASL_GPU_MODEL="adreno660" ;; 
+                660) ASL_GPU_MODEL="adreno660" ;;
                 6[0-9][0-9]) ASL_GPU_MODEL="adreno6xx" ;;  # Adreno 610-660
-                *) ASL_GPU_MODEL="adreno-unknown" ;;
+                *)
+                    case "$gpu_model" in
+                        *Adreno8*|*adreno8*) ASL_GPU_MODEL="adreno8xx" ;;
+                        *Adreno7*|*adreno7*) ASL_GPU_MODEL="adreno7xx" ;;
+                        *Adreno660*|*adreno660*) ASL_GPU_MODEL="adreno660" ;;
+                        *Adreno6*|*adreno6*) ASL_GPU_MODEL="adreno6xx" ;;
+                        *) ASL_GPU_MODEL="adreno-unknown" ;;
+                    esac
+                    ;;
             esac
         fi
 
@@ -52,7 +80,13 @@ asl_gpu_detect() {
         fi
 
         DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-        if [ -d "$DEBIANPATH" ] && asl_chroot_exec "compgen -G /usr/lib/*/dri/zink_dri.so >/dev/null || compgen -G /usr/share/vulkan/icd.d/*freedreno*.json >/dev/null || compgen -G /usr/share/vulkan/icd.d/*turnip*.json >/dev/null || compgen -G /usr/local/share/vulkan/icd.d/*.json >/dev/null" 2>/dev/null; then
+        # File presence is NOT proof the driver works. Debian's mesa-vulkan-drivers is
+        # frequently built WITHOUT the KGSL/turnip winsys, in which case
+        # vkEnumeratePhysicalDevices fails and zink cannot create any GL context.
+        # Only select turnip+zink when a real hardware Vulkan device is actually
+        # enumerated; otherwise fall back to virglrenderer + ANGLE, which is the
+        # accelerated path that does work on Android KGSL hardware.
+        if [ -d "$DEBIANPATH" ] && asl_gpu_turnip_usable; then
             ASL_GPU_PROFILE="adreno-turnip-zink"
         else
             ASL_GPU_PROFILE="generic-virgl"
@@ -67,7 +101,7 @@ asl_gpu_detect() {
 asl_gpu_icd_in_chroot() {
     DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
     local found=""
-    found=$(asl_chroot_exec "find /usr/share/vulkan/icd.d /usr/local/share/vulkan/icd.d /etc/vulkan/icd.d -type f \( -name '*freedreno*.json' -o -name '*turnip*.json' \) 2>/dev/null | head -n1" 2>/dev/null || true)
+    found=$(asl_chroot_exec "find /usr/share/vulkan/icd.d /usr/local/share/vulkan/icd.d /etc/vulkan/icd.d -type f \( -name '*freedreno*aarch64*.json' -o -name '*turnip*aarch64*.json' \) 2>/dev/null | head -n1" 2>/dev/null || true)
     if [ -n "$found" ]; then
         printf '%s' "$found"
     elif [ -f "$DEBIANPATH/usr/share/vulkan/icd.d/freedreno_icd.json" ]; then
@@ -90,8 +124,10 @@ asl_gpu_apply() {
             ##export MESA_VK_WSI_DEBUG="sw" # DISABLED FOR HERMES
             export ZINK_DESCRIPTORS=lazy
             export MESA_NO_ERROR=1
-            export MESA_GL_VERSION_OVERRIDE=4.3COMPAT
-            export MESA_GLES_VERSION_OVERRIDE=3.2
+            # Do NOT force MESA_GL_VERSION_OVERRIDE / MESA_GLES_VERSION_OVERRIDE.
+            # The container Mesa (Mesa 26.x turnip/KGSL) already advertises GL 4.6 /
+            # GLES 3.2 from the real device; advertising anything else makes Mesa
+            # reject its own shader version query and breaks app feature detection.
             local icd_chroot
             icd_chroot=$(asl_gpu_icd_in_chroot)
             if [ -n "$icd_chroot" ]; then
@@ -131,8 +167,24 @@ asl_gpu_apply() {
             ;;
         mali-virgl|generic-virgl|*)
             export GALLIUM_DRIVER=virpipe
-            export MESA_GL_VERSION_OVERRIDE=4.0
+            export LIBGL_ALWAYS_SOFTWARE=0
+            # virgl_test_server_android cannot bind /tmp under Termux SELinux,
+            # so it runs with an explicit socket path inside Termux TMPDIR.
+            export VIRGL_TEST_PATH="${VIRGL_TEST_PATH:-${TMPDIR:-/data/data/com.termux/files/usr/tmp}/.virgl_test}"
+            # Do NOT force MESA_GL_VERSION_OVERRIDE: advertising a GL version the
+            # virgl/ANGLE stack cannot actually back makes Mesa reject its own
+            # shading_language_version() and breaks app-side GL feature detection.
             export MESA_VK_WINSYS=x11
+            # Vulkan: prefer the Android KGSL turnip build exposed from Termux when it
+            # enumerates a real GPU; otherwise fall back to lavapipe software Vulkan.
+            local _vk_icd=""
+            if [ -n "${VK_ICD_FILENAMES:-}" ] && [ -e "${VK_ICD_FILENAMES}" ]; then
+                _vk_icd="$VK_ICD_FILENAMES"
+            else
+                _vk_icd="/usr/share/vulkan/icd.d/lvp_icd.json"
+            fi
+            export VK_ICD_FILENAMES="$_vk_icd"
+            export VK_DRIVER_FILES="$_vk_icd"
             export MESA_SHADER_CACHE_DIR="/tmp/.mesa_cache"
             export MESA_GL_SHADER_CACHE_DIR="/tmp/.mesa_cache"
             export MESA_VK_SHADER_CACHE_DIR="/tmp/.mesa_cache"
@@ -150,13 +202,23 @@ asl_gpu_env_exports() {
     local res=""
     [ -n "${GALLIUM_DRIVER:-}" ] && res="${res}export GALLIUM_DRIVER=\"${GALLIUM_DRIVER}\"\n"
     [ -n "${MESA_LOADER_DRIVER_OVERRIDE:-}" ] && res="${res}export MESA_LOADER_DRIVER_OVERRIDE=\"${MESA_LOADER_DRIVER_OVERRIDE}\"\n"
+    [ -n "${LIBGL_ALWAYS_SOFTWARE:-}" ] && res="${res}export LIBGL_ALWAYS_SOFTWARE=\"${LIBGL_ALWAYS_SOFTWARE}\"\n"
+    # VIRGL_TEST_PATH is only meaningful for the virpipe profile. Emitting it while
+    # running turnip/zink only confuses users into thinking virgl is in the path.
+    if [ "$ASL_GPU_PROFILE" != "adreno-turnip-zink" ]; then
+        [ -n "${VIRGL_TEST_PATH:-}" ] && res="${res}export VIRGL_TEST_PATH=\"${VIRGL_TEST_PATH}\"\n"
+    fi
     res="${res}export MESA_VK_WINSYS=\"${MESA_VK_WINSYS:-x11}\"\n"
     # [ -n "${MESA_VK_WSI_DEBUG:-}" ] && res="${res}export MESA_VK_WSI_DEBUG=\"sw\"\n"
     if [ -n "$icd_path_in_chroot" ]; then
         res="${res}export VK_ICD_FILENAMES=\"${icd_path_in_chroot}\"\n"
         res="${res}export VK_DRIVER_FILES=\"${icd_path_in_chroot}\"\n"
+    elif [ -n "${VK_ICD_FILENAMES:-}" ]; then
+        res="${res}export VK_ICD_FILENAMES=\"${VK_ICD_FILENAMES}\"\n"
+        res="${res}export VK_DRIVER_FILES=\"${VK_DRIVER_FILES:-${VK_ICD_FILENAMES}}\"\n"
     fi
     [ -n "${TU_DEBUG:-}" ] && res="${res}export TU_DEBUG=\"${TU_DEBUG}\"\n"
+    [ -n "${TU_PERF:-}" ] && res="${res}export TU_PERF=\"${TU_PERF}\"\n"
     [ -n "${ZINK_DESCRIPTORS:-}" ] && res="${res}export ZINK_DESCRIPTORS=\"${ZINK_DESCRIPTORS}\"\n"
     [ -n "${MESA_NO_ERROR:-}" ] && res="${res}export MESA_NO_ERROR=\"${MESA_NO_ERROR}\"\n"
     res="${res}export MESA_SHADER_CACHE_DIR=\"${MESA_SHADER_CACHE_DIR:-/tmp/.mesa_cache}\"\n"
@@ -165,6 +227,12 @@ asl_gpu_env_exports() {
     res="${res}export MESA_SHADER_CACHE_MAX_SIZE=\"${MESA_SHADER_CACHE_MAX_SIZE:-1G}\"\n"
     [ -n "${MESA_GL_VERSION_OVERRIDE:-}" ] && res="${res}export MESA_GL_VERSION_OVERRIDE=\"${MESA_GL_VERSION_OVERRIDE}\"\n"
     [ -n "${MESA_GLES_VERSION_OVERRIDE:-}" ] && res="${res}export MESA_GLES_VERSION_OVERRIDE=\"${MESA_GLES_VERSION_OVERRIDE}\"\n"
+    # Hardware rendering is mandatory. Mesa honours LIBGL_ALWAYS_SOFTWARE ahead of
+    # every driver setting, so an inherited value from a parent shell, a wrapper
+    # script or an application launcher silently switches the whole session to
+    # llvmpipe. Clear it here so the GPU path below is always the one in effect.
+    res="${res}unset LIBGL_ALWAYS_SOFTWARE\n"
+    res="${res}unset MESA_LOADER_DRIVER_OVERRIDE_SW MESA_GL_VERSION_OVERRIDE_SW\n"
 
     local hud_script
     hud_script=$(asl_find_script "hud.sh")
