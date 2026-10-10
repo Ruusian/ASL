@@ -79,6 +79,29 @@ asl_swap_status() {
 }
 
 asl_swap_setup() {
+    # Check total active swap space across all swap devices
+    local cur_total_kb=0
+    if [ -f /proc/meminfo ]; then
+        cur_total_kb=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+    elif [ -f /proc/swaps ]; then
+        cur_total_kb=$(awk 'NR>1 {sum += $3} END {print sum}' /proc/swaps 2>/dev/null || echo 0)
+    fi
+
+    # Strict user limit: 5GB max total swap pool (5,242,880 KB)
+    local max_swap_kb=5242880
+
+    # If active swap is already at or above the 5GB cap (e.g. native zRAM),
+    # strictly avoid creating or mounting any file swap image.
+    if [ "$cur_total_kb" -ge "$max_swap_kb" ]; then
+        echo "[✓] Total swap pool already satisfies 5GB limit ($((cur_total_kb / 1024))MB active). No file swap needed."
+        # If an unnecessary loop/file swap device is active alongside zRAM, clean it up
+        if grep -q "asl_swap\|/data/local/tmp" /proc/swaps 2>/dev/null || su -c "cat /proc/swaps" 2>/dev/null | grep -q "asl_swap\|/data/local/tmp"; then
+            echo "[*] Cleaning up redundant file swap to strictly adhere to 5GB limit..."
+            asl_swap_cleanup >/dev/null 2>&1 || true
+        fi
+        return 0
+    fi
+
     # User cap: 4GB max total swap (2026-10-10). Override with ASL_SWAP_SIZE.
     local target_size="${1:-${ASL_SWAP_SIZE:-4G}}"
     echo "[*] Setting up $target_size virtual swap pool & memory optimization..."
