@@ -28,7 +28,6 @@ filter_orphans() {
 }
 
 asl_orphan_kill() {
-    local force_reboot="${1:-}"
     echo "[*] Running ASL Orphan Process Scan & Cleanup..."
     local rogue_pids=()
 

@@ -494,8 +494,38 @@ asl omniroute status                # Check proxy health and endpoint
 asl omniroute start                 # Start OmniRoute daemon as root
 asl omniroute stop                  # Stop OmniRoute daemon
 asl omniroute restart               # Restart OmniRoute daemon
+asl omniroute update                # Update to the latest npm release
 asl omniroute logs                  # Tail recent OmniRoute proxy logs
 ```
+
+---
+
+### `asl openclaude`
+Set up and maintain the OpenClaude coding agent (config, turn limit, memory plugin, web search).
+
+```bash
+asl openclaude setup                 # Install/upgrade CLI and write ~/.openclaude/settings.json
+asl openclaude update                # Update to the latest npm release
+asl openclaude status                # Show installed version and config path
+```
+
+---
+
+### `asl ai-update`
+Auto-update the AI CLIs (OmniRoute + OpenClaude) against their npm registries. Upgrades only when a
+newer version exists, and re-runs configuration after an OpenClaude upgrade.
+
+```bash
+asl ai-update status                 # Show installed vs latest for both tools
+asl ai-update check                  # Check-only (default when no action given)
+asl ai-update omniroute              # Check/update OmniRoute only
+asl ai-update openclaude             # Check/update OpenClaude only
+asl ai-update all                    # Check/update both
+asl ai-update watchdog               # Interval-gated entry point used by `asl service check`
+```
+
+The watchdog runs `asl ai-update watchdog` during every service health check; it self-gates on a
+12-hour stamp and executes detached, so npm lookups never block the health check.
 
 ---
 

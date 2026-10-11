@@ -11,6 +11,10 @@ DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
 CONF_FILE="$DEBIANPATH/etc/asl.conf"
 HOST_CONF_FILE="${PREFIX:-/data/data/com.termux/files/usr}/etc/asl.conf"
 
+# The optional target argument is unused by current callers (all three call
+# this with no argument and rely on the $CONF_FILE default). It is kept so a
+# future caller can seed an alternate config path, hence the SC2120 suppression.
+# shellcheck disable=SC2120
 init_default_config() {
     local target="${1:-$CONF_FILE}"
     if [ ! -d "$(dirname "$target")" ]; then

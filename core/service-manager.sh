@@ -710,7 +710,7 @@ asl_service_check() {
         fi
     fi
 
-    # 7. Re-apply Android OOM score adjustment (-1000) & CPU affinity (cores 0-3) for background daemons
+    # 8. Re-apply Android OOM score adjustment (-1000) & CPU affinity (cores 0-3) for background daemons
     if su -c "id -u" >/dev/null 2>&1; then
         local _oom_pids
         _oom_pids="$(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|dsh|asl-service|asl-watchdog-loop") $(_asl_pgrep_real "sshd|ngrok|serveo|autoconnect|omniroute|dsh|asl-service|asl-watchdog-loop" root)"
@@ -722,7 +722,7 @@ asl_service_check() {
         done
     fi
 
-    # 8. Log rotation check (keep logs under 500KB)
+    # 9. Log rotation check (keep logs under 500KB)
     local boot_log="$prefix/tmp/asl-boot.log"
     local service_log="$prefix/tmp/asl-service.log"
     local wdog_log="$prefix/tmp/asl-watchdog.log"
@@ -737,7 +737,7 @@ asl_service_check() {
         fi
     done
 
-    # 9. Low Storage Space Warning Guardrail (< 1GB free)
+    # 10. Low Storage Space Warning Guardrail (< 1GB free)
     local free_kb
     free_kb=$(df -k /data 2>/dev/null | awk 'NR==2 {print $4}')
     if [ -n "$free_kb" ] && [ "$free_kb" -lt 1048576 ]; then
@@ -745,7 +745,7 @@ asl_service_check() {
         echo "[!] LOW STORAGE WARNING: Only ${free_mb}MB free on /data partition! Run 'asl clean' to free up space."
     fi
 
-    # 10. Forced Landscape Orientation & Auto-Rotation Override Enforcement
+    # 11. Forced Landscape Orientation & Auto-Rotation Override Enforcement
     local rot_conf="${HOME:-/data/data/com.termux/files/home}/.config/asl/rotation.conf"
     local rot_state="${prefix}/tmp/.asl_rotation_state"
     local is_forced_rot=0 target_rot=1
@@ -791,7 +791,7 @@ asl_service_check() {
         fi
     fi
 
-    # 11. Android Keyboard Bottom Bar / Spacing Watchdog Guard
+    # 12. Android Keyboard Bottom Bar / Spacing Watchdog Guard
     local kbd_conf="${HOME:-/data/data/com.termux/files/home}/.config/asl/rotation.conf"
     local want_hide_kbd=1
     if [ -f "$kbd_conf" ]; then
@@ -819,7 +819,7 @@ asl_service_check() {
         fi
     fi
 
-    # 12. AI CLI auto-update (OmniRoute / OpenClaude) -- delegated to ai-updater.sh,
+    # 13. AI CLI auto-update (OmniRoute / OpenClaude) -- delegated to ai-updater.sh,
     # which self-gates on a 12h stamp and runs detached so npm never blocks the check.
     local ai_upd_bin="${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/ai-updater.sh"
     [ -f "$ai_upd_bin" ] || ai_upd_bin="${HOME:-/data/data/com.termux/files/home}/ASL/core/ai-updater.sh"
@@ -832,6 +832,9 @@ asl_service_check() {
     else
         echo "[✓] Service health watchdog auto-healed $healed background daemon(s)."
     fi
+    # Always succeed: a non-zero exit here propagates to `set -e` callers and
+    # would make the 180s watchdog loop treat a routine check as a fatal error.
+    return 0
 }
 
 asl_service_loop() {
@@ -849,7 +852,7 @@ asl_service_loop() {
         exec -a "asl-watchdog-loop" bash -c "
             while true; do
                 echo \"[\$(date +\"%Y-%m-%d %H:%M:%S\")] Watchdog health check...\"
-                bash \"'"$mgr_path"'\" check 2>&1
+                bash \"'"$mgr_path"'\" check 2>&1 || echo \"[!] Watchdog check returned non-zero; continuing.\"
                 sleep 180
             done
         "

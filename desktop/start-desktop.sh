@@ -1,5 +1,11 @@
 #!/bin/bash
 # ASL: managed Termux:X11, PulseAudio, and XFCE lifecycle.
+#
+# SC2154 is suppressed for this file: x_out is assigned at the top of the
+# backgrounded "( ... ) &" display-setup subshell and consumed by the xrandr
+# --addmode calls in that same block. ShellCheck cannot follow the assignment
+# across the subshell boundary, but the block analyses clean when extracted.
+# shellcheck disable=SC2154
 
 export PATH="/data/data/com.termux/files/usr/bin:/data/data/com.termux/files/usr/bin/applets:/system/bin:/system/xbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
@@ -425,8 +431,12 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
     export DISPLAY=:0
     export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
     xhost + 2>/dev/null || true
+    # NOTE: no "local" here -- this block is a subshell, not a function body,
+    # so "local" would be invalid and the value would not be scoped as intended.
     x_out="screen"
-    xrandr 2>/dev/null | grep -q "builtin connected" && x_out="builtin"
+    if xrandr 2>/dev/null | grep -q "builtin connected"; then
+        x_out="builtin"
+    fi
     xrandr --newmode "1280x720" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
     xrandr --addmode "$x_out" "1280x720" 2>/dev/null || xrandr --addmode screen "1280x720" 2>/dev/null || xrandr --addmode builtin "1280x720" 2>/dev/null || true
     xrandr --newmode "1600x900" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true

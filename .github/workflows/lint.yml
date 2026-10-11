@@ -25,44 +25,22 @@ jobs:
         find . -type f \( -name "*.sh" -o -path "*/bin/*" \) ! -path "./.git/*" ! -path "./.venv/*" -print0 | \
         xargs -0 -r shellcheck --severity=warning
     
-    - name: Verify syntax of bin/asl
+    - name: Verify syntax of all shell scripts
       run: |
-        bash -n bin/asl
-    
-    - name: Verify syntax of core scripts
-      run: |
-        for script in core/*.sh; do
+        # shopt -s nullglob so a directory with no .sh files yields an empty
+        # list instead of the literal glob (which made `bash -n` exit 127).
+        shopt -s nullglob
+        count=0
+        for script in bin/asl $(find . -type f -name '*.sh' ! -path './.git/*' ! -path './.venv/*' | sort); do
           echo "Syntax check: $script"
           bash -n "$script"
+          count=$((count + 1))
         done
-    
-    - name: Verify syntax of desktop scripts
-      run: |
-        for script in desktop/*.sh; do
-          echo "Syntax check: $script"
-          bash -n "$script"
-        done
-
-    - name: Verify syntax of desktop/remote modules
-      run: |
-        for script in desktop/remote/*.sh; do
-          echo "Syntax check: $script"
-          bash -n "$script"
-        done
-    
-    - name: Verify syntax of gaming scripts
-      run: |
-        for script in gaming/*.sh; do
-          echo "Syntax check: $script"
-          bash -n "$script"
-        done
-    
-    - name: Verify syntax of tools scripts
-      run: |
-        for script in tools/*.sh; do
-          echo "Syntax check: $script"
-          bash -n "$script"
-        done
+        echo "Checked $count shell scripts."
+        if [ "$count" -eq 0 ]; then
+          echo "ERROR: no shell scripts found to check!"
+          exit 1
+        fi
 
   markdown-lint:
     runs-on: ubuntu-latest

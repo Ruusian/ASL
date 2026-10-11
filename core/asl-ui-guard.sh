@@ -9,7 +9,6 @@ PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 PID_FILE="${PREFIX}/tmp/.asl_ui_guard.pid"
 LOG_FILE="${PREFIX}/tmp/asl-ui-guard.log"
 CONF_FILE="${TERMUX_HOME}/.config/asl/rotation.conf"
-STATE_FILE="${PREFIX}/tmp/.asl_rotation_state"
 
 _host_cmd() {
     if [ -f /etc/debian_version ] && [ -e /proc/1/ns/mnt ] && command -v nsenter >/dev/null 2>&1; then

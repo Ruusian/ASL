@@ -256,12 +256,10 @@ if [ -f /etc/debian_version ] && [ ! -d "/data/local/tmp/chrootDebian" ]; then
     SCREEN_STATE_FILE="/tmp/.asl_screen_state"
     ROTATION_STATE_FILE="/tmp/.asl_rotation_state"
     ROTATION_CONF_FILE="/etc/asl_rotation.conf"
-    ROTATION_WATCHER_PID="/tmp/.asl_rotation_watcher.pid"
 else
     SCREEN_STATE_FILE="${TMPDIR:-/data/data/com.termux/files/usr/tmp}/.asl_screen_state"
     ROTATION_STATE_FILE="${TMPDIR:-/data/data/com.termux/files/usr/tmp}/.asl_rotation_state"
     ROTATION_CONF_FILE="${HOME:-/data/data/com.termux/files/home}/.config/asl/rotation.conf"
-    ROTATION_WATCHER_PID="${TMPDIR:-/data/data/com.termux/files/usr/tmp}/.asl_rotation_watcher.pid"
 fi
 
 _asl_save_rotation_state() {

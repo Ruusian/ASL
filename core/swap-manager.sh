@@ -225,7 +225,11 @@ case "${1:-status}" in
         asl_swap_status
         ;;
     setup|init)
-        asl_swap_setup
+        # Forward an optional size argument, e.g. `asl swap setup 8G`.
+        # Without this the documented size argument was silently dropped and
+        # every setup call fell back to ${ASL_SWAP_SIZE:-4G}.
+        shift
+        asl_swap_setup "$@"
         ;;
     optimize|clean)
         asl_swap_optimize
