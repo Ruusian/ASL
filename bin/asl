@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 # Android Subsystem for Linux (ASL): Unified CLI Management Console
 
 TERMUX_HOME="${TERMUX_HOME:-/data/data/com.termux/files/home}"
