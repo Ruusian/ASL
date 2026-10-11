@@ -268,6 +268,11 @@ _asl_save_rotation_state() {
     local forced="$1"
     local mode="$2"
     local rot_val="$3"
+    local prev_kbd="1"
+    if [ -f "$ROTATION_CONF_FILE" ]; then
+        prev_kbd=$(grep -E "^HIDE_KEYBOARD_BAR=" "$ROTATION_CONF_FILE" 2>/dev/null | cut -d= -f2 | tr -d "[:space:]")
+        [ -z "$prev_kbd" ] && prev_kbd="1"
+    fi
     local c_dir
     c_dir=$(dirname "$ROTATION_CONF_FILE")
     mkdir -p "$c_dir" 2>/dev/null || true
@@ -279,6 +284,7 @@ _asl_save_rotation_state() {
 ROTATION_MODE=${mode}
 USER_ROTATION=${rot_val}
 OVERRIDE_NATIVE_AUTOROTATE=${forced}
+HIDE_KEYBOARD_BAR=${prev_kbd}
 LAST_UPDATED=$(date '+%Y-%m-%d %H:%M:%S')"
     printf '%s\n' "$content" > "$ROTATION_CONF_FILE" 2>/dev/null || _asl_host_su "printf '%s\n' \"$content\" > '$ROTATION_CONF_FILE'" 2>/dev/null || true
     printf '%s\n' "$content" > "$ROTATION_STATE_FILE" 2>/dev/null || _asl_host_su "printf '%s\n' \"$content\" > '$ROTATION_STATE_FILE'" 2>/dev/null || true
@@ -671,6 +677,13 @@ termux_keyboard_bar() {
             else
                 echo "[!] Overlay enabled, but lookup returned: ${new_val:-unknown}. Check root permissions."
             fi
+            # Save persistent state and ensure UI guard daemon is active
+            if [ -f "$ROTATION_CONF_FILE" ]; then
+                grep -q "^HIDE_KEYBOARD_BAR=" "$ROTATION_CONF_FILE" 2>/dev/null && sed -i 's/^HIDE_KEYBOARD_BAR=.*/HIDE_KEYBOARD_BAR=1/' "$ROTATION_CONF_FILE" || echo "HIDE_KEYBOARD_BAR=1" >> "$ROTATION_CONF_FILE"
+            fi
+            local ui_guard
+            ui_guard=$(asl_find_script "asl-ui-guard.sh")
+            [ -n "$ui_guard" ] && [ -f "$ui_guard" ] && bash "$ui_guard" start >/dev/null 2>&1 || true
             ;;
         show|on|enable|restore|reset)
             echo "[*] Restoring Android keyboard bottom bar / spacing..."
@@ -684,6 +697,9 @@ termux_keyboard_bar() {
             local new_val
             new_val=$(_asl_host_su "cmd overlay lookup android android:bool/config_imeDrawsImeNavBar 2>/dev/null" | tr -d '[:space:]')
             echo "[✓] Android keyboard bottom bar RESTORED (default system spacing active)."
+            if [ -f "$ROTATION_CONF_FILE" ]; then
+                grep -q "^HIDE_KEYBOARD_BAR=" "$ROTATION_CONF_FILE" 2>/dev/null && sed -i 's/^HIDE_KEYBOARD_BAR=.*/HIDE_KEYBOARD_BAR=0/' "$ROTATION_CONF_FILE" || echo "HIDE_KEYBOARD_BAR=0" >> "$ROTATION_CONF_FILE"
+            fi
             ;;
         toggle|switch)
             local lookup_val

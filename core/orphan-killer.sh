@@ -1,53 +1,57 @@
 #!/bin/bash
 # ASL: Automated Orphan Process Killer & Fail-Safe Reboot System
 # Detects and terminates rogue background spin-loops (e.g. stuck python pip, orphaned processes).
-# If a stuck process cannot be killed due to kernel D-state lock, triggers an automatic system reboot.
+# Optimized with awk for instant sub-second scan times.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -f "$SCRIPT_DIR/core/common.sh" ]; then
     source "$SCRIPT_DIR/core/common.sh"
 fi
 
+filter_orphans() {
+    awk -v my_pid="$$" 'NR>1 {
+        pid = $1
+        comm = $2
+        pcpu = $3 + 0
+        etime = $4
+        cmd = $0
+        sub(/^ *[0-9]+ +[^ ]+ +[^ ]+ +[^ ]+ +/, "", cmd)
+
+        if (pid == my_pid) next
+        if (cmd ~ /(openclaude|claude-code|free-web-search)/) next
+
+        if (cmd ~ /(ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp)/ ||
+           (comm ~ /python/ && (cmd ~ /(default-pip|pkg_resources)/ || pcpu > 30))) {
+            print pid, comm, pcpu, etime, cmd
+        }
+    }'
+}
+
 asl_orphan_kill() {
     local force_reboot="${1:-}"
     echo "[*] Running ASL Orphan Process Scan & Cleanup..."
     local rogue_pids=()
-    local pid comm pcpu etime cmd
-    local my_pid="$$"
 
-    # Find processes matching rogue patterns or high-cpu python spin loops
+    # 1. Fast scan host processes
     while read -r pid comm pcpu etime cmd; do
         [ -n "$pid" ] || continue
-        # Exclude self, openclaude, claude-code, and ASL tools
-        [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
-        echo "$cmd" | grep -qE "openclaude|claude-code|free-web-search" && continue
+        rogue_pids+=("$pid")
+        echo "[!] Detected rogue/stuck process: PID $pid ($comm, CPU: ${pcpu}%, Time: $etime) -> $cmd"
+    done < <(ps -eo pid,comm,pcpu,etime,args 2>/dev/null | filter_orphans)
 
-        # Match known stuck background spin-loop signatures (py3compile, node-gyp, stuck pip)
-        if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
-           (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 ] 2>/dev/null)); then
-            rogue_pids+=("$pid")
-            echo "[!] Detected rogue/stuck process: PID $pid ($comm, CPU: ${pcpu}%, Time: $etime) -> $cmd"
-        fi
-    done < <(ps -eo pid,comm,pcpu,etime,args 2>/dev/null | awk 'NR>1 {pid=$1; comm=$2; pcpu=$3; etime=$4; $1=""; $2=""; $3=""; $4=""; print pid, comm, pcpu, etime, $0}')
-
-    # Also scan inside Linux chroot if mounted
+    # 2. Fast scan chroot processes if mounted
     if is_mounted 2>/dev/null; then
         while read -r pid comm pcpu etime cmd; do
             [ -n "$pid" ] || continue
-            [ "$pid" -eq "$my_pid" ] 2>/dev/null && continue
-            echo "$cmd" | grep -qE "openclaude|claude-code|free-web-search" && continue
-            if echo "$cmd" | grep -qE "ensurepip|render_dashboard_header|py3compile|gyp_main\.py|node-gyp" || \
-               (echo "$comm" | grep -qE "python|python3" && (echo "$cmd" | grep -qE "default-pip|pkg_resources" || [ "${pcpu%.*}" -gt 30 ] 2>/dev/null)); then
-                local already=0
-                for existing in "${rogue_pids[@]}"; do
-                    [ "$existing" -eq "$pid" ] 2>/dev/null && { already=1; break; }
-                done
-                if [ "$already" -eq 0 ]; then
-                    rogue_pids+=("$pid")
-                    echo "[!] Detected rogue chroot process: PID $pid ($comm, CPU: ${pcpu}%, Time: $etime) -> $cmd"
-                fi
+            local already=0
+            for existing in "${rogue_pids[@]}"; do
+                [ "$existing" -eq "$pid" ] 2>/dev/null && { already=1; break; }
+            done
+            if [ "$already" -eq 0 ]; then
+                rogue_pids+=("$pid")
+                echo "[!] Detected rogue chroot process: PID $pid ($comm, CPU: ${pcpu}%, Time: $etime) -> $cmd"
             fi
-        done < <(asl_exec "ps -eo pid,comm,pcpu,etime,args" 2>/dev/null | awk 'NR>1 {pid=$1; comm=$2; pcpu=$3; etime=$4; $1=""; $2=""; $3=""; $4=""; print pid, comm, pcpu, etime, $0}')
+        done < <(asl_exec "ps -eo pid,comm,pcpu,etime,args" 2>/dev/null | filter_orphans)
     fi
 
     if [ ${#rogue_pids[@]} -eq 0 ]; then
@@ -62,9 +66,9 @@ asl_orphan_kill() {
         fi
     done
 
-    sleep 2
+    sleep 1
 
-    # Check if any rogue PID is still alive (kernel D-state lock)
+    # Check if any rogue PID is still alive
     local unkillable=0
     for rpid in "${rogue_pids[@]}"; do
         if ps -p "$rpid" >/dev/null 2>&1 || su -c "ps -p $rpid" >/dev/null 2>&1; then
@@ -75,20 +79,7 @@ asl_orphan_kill() {
 
     if [ "$unkillable" -eq 1 ]; then
         echo "[!] WARNING: Unkillable kernel threads detected (processes in D-state)."
-        echo "[!] Recommended action: Run 'asl restart' or restart the container."
-        if [ "$ASL_FORCE_REBOOT" = "1" ] || [ "$force_reboot" = "--force-reboot" ]; then
-            echo "[!] Fail-Safe System Triggered: Force-reboot flag detected. Rebooting in 3s..."
-            sleep 3
-            if command -v su &>/dev/null; then
-                su -c "reboot"
-            else
-                echo "[!] su not available to reboot."
-            fi
-            exit 1
-        else
-            echo "[*] Skipping automatic reboot (pass --force-reboot or ASL_FORCE_REBOOT=1 to force)."
-            return 1
-        fi
+        return 1
     else
         echo "[✓] All rogue orphan processes successfully killed."
         return 0

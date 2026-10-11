@@ -217,11 +217,12 @@ asl_service_start() {
         asl_service_loop >/dev/null 2>&1 || true
     fi
 
-    # Ensure fast 0.2s rotation guard daemon is active for forced landscape
-    local rot_guard_script
-    rot_guard_script=$(asl_find_script "rotation-guard.sh")
-    if [ -n "$rot_guard_script" ] && [ -f "$rot_guard_script" ]; then
-        bash "$rot_guard_script" start >/dev/null 2>&1 || true
+    # Ensure fast 0.2s UI guard daemon is active for forced landscape & zero keyboard gap
+    local ui_guard_script
+    ui_guard_script=$(asl_find_script "asl-ui-guard.sh")
+    [ -z "$ui_guard_script" ] && ui_guard_script=$(asl_find_script "rotation-guard.sh")
+    if [ -n "$ui_guard_script" ] && [ -f "$ui_guard_script" ]; then
+        bash "$ui_guard_script" start >/dev/null 2>&1 || true
     fi
 
     echo "[✓] All ASL 24/7 background services are ACTIVE."
@@ -242,10 +243,11 @@ asl_service_stop() {
     _asl_pkill_real "autoconnect-daemon|asl-autoconnect"
     _asl_pkill_real "serveo.net"
     _asl_pkill_real "ngrok"
-    local rot_guard_script
-    rot_guard_script=$(asl_find_script "rotation-guard.sh")
-    if [ -n "$rot_guard_script" ] && [ -f "$rot_guard_script" ]; then
-        bash "$rot_guard_script" stop >/dev/null 2>&1 || true
+    local ui_guard_script
+    ui_guard_script=$(asl_find_script "asl-ui-guard.sh")
+    [ -z "$ui_guard_script" ] && ui_guard_script=$(asl_find_script "rotation-guard.sh")
+    if [ -n "$ui_guard_script" ] && [ -f "$ui_guard_script" ]; then
+        bash "$ui_guard_script" stop >/dev/null 2>&1 || true
     fi
     local o_host=""
     if [ -f "$TERMUX_HOME/.asl/oracle_vps.conf" ]; then
@@ -535,10 +537,11 @@ asl_service_status() {
         echo " Wake-Lock:      DISABLED"
     fi
 
-    local rot_guard_script
-    rot_guard_script=$(asl_find_script "rotation-guard.sh")
-    if [ -n "$rot_guard_script" ] && [ -f "$rot_guard_script" ]; then
-        bash "$rot_guard_script" status
+    local ui_guard_script
+    ui_guard_script=$(asl_find_script "asl-ui-guard.sh")
+    [ -z "$ui_guard_script" ] && ui_guard_script=$(asl_find_script "rotation-guard.sh")
+    if [ -n "$ui_guard_script" ] && [ -f "$ui_guard_script" ]; then
+        bash "$ui_guard_script" status
     fi
 
     local boot_log="${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-boot.log"
@@ -755,12 +758,13 @@ asl_service_check() {
     fi
     target_rot="${target_rot:-1}"
     if [ "$is_forced_rot" = "1" ]; then
-        local rot_guard_script
-        rot_guard_script=$(asl_find_script "rotation-guard.sh")
-        if [ -n "$rot_guard_script" ] && [ -f "$rot_guard_script" ]; then
-            if ! bash "$rot_guard_script" status >/dev/null 2>&1; then
-                echo "[!] Fast 0.2s Rotation Guard daemon inactive — reviving Forced Landscape guard..."
-                bash "$rot_guard_script" start >/dev/null 2>&1 || true
+        local ui_guard_script
+        ui_guard_script=$(asl_find_script "asl-ui-guard.sh")
+        [ -z "$ui_guard_script" ] && ui_guard_script=$(asl_find_script "rotation-guard.sh")
+        if [ -n "$ui_guard_script" ] && [ -f "$ui_guard_script" ]; then
+            if ! bash "$ui_guard_script" status >/dev/null 2>&1; then
+                echo "[!] Autonomous UI Guard daemon inactive — reviving Forced Landscape & Keyboard lock..."
+                bash "$ui_guard_script" start >/dev/null 2>&1 || true
                 healed=$((healed + 1))
             fi
         fi
