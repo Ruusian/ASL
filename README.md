@@ -95,41 +95,10 @@ ASL features a flicker-free, 74-column DEC Mode 1049 alternate-screen buffer das
 Install or upgrade **ASL** with a single command inside Termux:
 
 ```bash
-# Recommended Fast CDN Mirror (bypasses GitHub raw 429 rate limits):
-curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian/ASL@master/install.sh | bash
-
-# Alternative direct GitHub link:
 curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash
 ```
 
-### 🐧 Dynamic Distro & Image Flavors
-Pass non-interactive distribution flags or select interactively during setup (provisioned dynamically via `proot-distro`):
-
-```bash
-# Debian Trixie (Recommended - Turnip Mesa Vulkan, Audio & XFCE4 Desktop pre-configured):
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --debian
-
-# Ubuntu 24.04 LTS Base:
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --ubuntu
-
-# Arch Linux Base:
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --arch
-
-# Alpine Linux Base (Ultra-lightweight):
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --alpine
-
-# Kali Linux Base (Security & Auditing):
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --kali
-
-# Fedora Linux Base:
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --fedora
-
-# Void Linux Base:
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --void
-
-# Custom OCI / Docker Container Image:
-curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash -s -- --distro=ubuntu:24.04
-```
+> **Note**: Automatically installs dependencies, provisions root-accelerated hardware GPU drivers (Turnip / Zink), configures Termux:Boot autostart, and sets up your Linux subsystem (Debian Trixie recommended, or select Ubuntu, Arch, Alpine, Kali, Fedora, Void during setup).
 
 ### ⚡ Step-by-Step Getting Started Guide
 

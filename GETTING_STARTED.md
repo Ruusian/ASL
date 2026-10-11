@@ -27,11 +27,10 @@ which termux-setup-storage
 
 ### Step 1: Install ASL
 
-Open **Termux** and run:
+Open **Termux** and run the one-line installer:
 
 ```bash
-# Recommended CDN Mirror (bypasses raw GitHub HTTP 429 rate limits):
-curl -fsSL https://cdn.jsdelivr.net/gh/Ruusian/ASL@master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bash
 ```
 
 Or install via Git clone:
