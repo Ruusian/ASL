@@ -791,6 +791,34 @@ asl_service_check() {
         fi
     fi
 
+    # 11. Android Keyboard Bottom Bar / Spacing Watchdog Guard
+    local kbd_conf="${HOME:-/data/data/com.termux/files/home}/.config/asl/rotation.conf"
+    local want_hide_kbd=1
+    if [ -f "$kbd_conf" ]; then
+        local hk_val
+        hk_val=$(grep -E '^HIDE_KEYBOARD_BAR=' "$kbd_conf" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+        [ -n "$hk_val" ] && want_hide_kbd="$hk_val"
+    fi
+    if [ "$want_hide_kbd" = "1" ] && { command -v su >/dev/null 2>&1 || [ -e /proc/1/ns/mnt ]; }; then
+        local cur_kbd_val=""
+        if [ -f /etc/debian_version ] && [ -e /proc/1/ns/mnt ] && command -v nsenter >/dev/null 2>&1; then
+            cur_kbd_val=$(nsenter --mount=/proc/1/ns/mnt /system/bin/cmd overlay lookup android android:bool/config_imeDrawsImeNavBar 2>/dev/null | tr -d '[:space:]')
+            if [ "$cur_kbd_val" != "false" ]; then
+                echo "[!] Keyboard bar spacing active — re-enforcing zero-gap HideKeyboardBar overlay..."
+                nsenter --mount=/proc/1/ns/mnt /system/bin/cmd overlay fabricate --target android --name HideKeyboardBar android:bool/config_imeDrawsImeNavBar 0x12 0x0 2>/dev/null || true
+                nsenter --mount=/proc/1/ns/mnt /system/bin/cmd overlay enable --user 0 com.android.shell:HideKeyboardBar 2>/dev/null || true
+                healed=$((healed + 1))
+            fi
+        else
+            cur_kbd_val=$(su -c "cmd overlay lookup android android:bool/config_imeDrawsImeNavBar" 2>/dev/null | tr -d '[:space:]')
+            if [ "$cur_kbd_val" != "false" ]; then
+                echo "[!] Keyboard bar spacing active — re-enforcing zero-gap HideKeyboardBar overlay..."
+                su -c "cmd overlay fabricate --target android --name HideKeyboardBar android:bool/config_imeDrawsImeNavBar 0x12 0x0 2>/dev/null; cmd overlay enable --user 0 com.android.shell:HideKeyboardBar 2>/dev/null" 2>/dev/null || true
+                healed=$((healed + 1))
+            fi
+        fi
+    fi
+
     if [ "$healed" -eq 0 ]; then
         echo "[✓] All 24/7 background services are healthy and running."
     else

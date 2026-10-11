@@ -96,7 +96,7 @@ asl_exec "
     fi
 
     if [ \"${ASL_MOUNT_SDCARD:-1}\" = \"1\" ]; then
-        local sd_src=\"/data/media/0\"
+        sd_src=\"/data/media/0\"
         if [ ! -d \"\$sd_src\" ]; then
             sd_src=\"/mnt/pass_through/0/emulated/0\"
         fi
