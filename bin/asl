@@ -2101,7 +2101,7 @@ case "${1:-}" in
             status|"")
                 bash "$ASL_DIR/core/termux-bridge.sh" screen-res status 2>/dev/null || true
                 echo ""
-                cur_res=$(ps aux | grep -i termux-x11 | grep -v grep | grep -oE '\-geometry [0-9]+x[0-9]+' || echo "native / default")
+                cur_res=$(ps aux | grep -i termux-x11 | grep -v grep | grep -oE -- '-geometry [0-9]+x[0-9]+' || echo "native / default")
                 echo "Current Termux:X11 Resolution: ${cur_res#-geometry }"
                 echo "Usage: asl screen-res [toggle|reset|1080p|720p|set <WxH> [DPI]|save|status]"
                 echo "       asl resolution [720p|1080p|native] [scale]"
