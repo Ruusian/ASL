@@ -13,16 +13,20 @@ This guide covers common issues, diagnostic steps, and solutions for ASL (Androi
 **Causes & Solutions**:
 
 1. **Root access not granted**
+
    ```bash
    su -c "id"  # Test if root works
    ```
+
    - Grant Superuser permission to Termux in your root manager (Magisk, KernelSU, or APatch).
    - Ensure `su` binary is accessible in your standard PATH.
 
 2. **SELinux restrictions**
+
    ```bash
    su -c "getenforce"
    ```
+
    - ASL uses strict private bind mounts (`--make-rprivate` / `--make-rslave`) to run seamlessly under SELinux Enforcing.
 
 ---
@@ -112,11 +116,13 @@ asl mode balanced
 **Diagnostic & Solutions**:
 
 1. **Verify PulseAudio on host**:
+
    ```bash
    asl doctor
    ```
 
 2. **Restart desktop audio**:
+
    ```bash
    asl desktop stop
    asl desktop start
@@ -154,22 +160,26 @@ asl desktop start
 **Optimization Steps**:
 
 1. **Apply GPU Hardware Profile**:
+
    ```bash
    asl gpu apply
    ```
 
 2. **Verify GPU Hardware Node & Vulkan ICD**:
+
    ```bash
    asl doctor
    asl gpu profile
    ```
 
 3. **Enable Performance Turbo Mode**:
+
    ```bash
    asl turbo
    ```
 
 4. **Toggle MangoHud Telemetry Overlay**:
+
    ```bash
    asl hud on
    ```
@@ -230,10 +240,11 @@ asl clean all           # Purge APT caches, /tmp, and shader caches
 If you encounter an issue not covered in this guide:
 
 1. **Check pre-flight diagnostics**:
+
    ```bash
    asl doctor
    ```
 
 2. **Submit a Bug Report**:
-   - Go to: https://github.com/Ruusian/ASL/issues
+   - Go to: <https://github.com/Ruusian/ASL/issues>
    - Include: `asl doctor` output, device model, and reproduction steps.

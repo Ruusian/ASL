@@ -103,23 +103,32 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 ### ⚡ Step-by-Step Getting Started Guide
 
 1. **Verify Environment**:
+
    ```bash
    asl doctor
    ```
+
 2. **Mount the Linux Subsystem**:
+
    ```bash
    asl start
    ```
+
 3. **Launch the XFCE4 Hardware-Accelerated Desktop**:
+
    ```bash
    asl desktop start
    ```
+
    *(If running for the first time, ASL will automatically install and configure XFCE4, Termux:X11, D-Bus, and audio tools).*
 4. **Enter Linux Shell**:
+
    ```bash
    asl shell
    ```
+
 5. **Open Interactive Management Console**:
+
    ```bash
    asl
    ```
@@ -129,36 +138,43 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 ## 🔥 Key Features & Capabilities
 
 ### 🛡️ 1. Zero-Crash Isolated Subsystem Core
+
 - **100% Native Kernel Performance**: Direct kernel chroot mounting with zero translation overhead.
 - **Strict Mount Isolation**: Uses `--make-rprivate` and `--make-rslave` bind mounts without mounting Android system partitions (`/system`, `/vendor`, `/apex`), eliminating SELinux deadlocks and OS kernel crashes.
 - **Automated Rollback Traps**: Catches mount errors on startup and unmounts partial paths automatically.
 
 ### 🎮 2. Direct GPU Acceleration & Input Engine
+
 - **Turnip Mesa Vulkan & Zink**: Hardware-accelerated OpenGL/Direct3D for Qualcomm Adreno 6xx/7xx/8xx GPUs with direct `/dev/kgsl-3d0` node bindings.
 - **MangoHud Telemetry**: Real-time FPS, CPU/GPU temperature, and VRAM overlay (`asl hud on`).
 - **Bluetooth Gamepad Passthrough**: Synchronize `/dev/input/event*` wireless controllers directly into the subsystem (`asl gamepad sync`).
 
 ### 🖥️ 3. Automated XFCE4 Desktop & Termux:X11 Integration
+
 - **Automated Bootstrapping**: One-click desktop provisioning via `asl desktop setup` or auto-prompt during `asl desktop start`.
 - **Display Server Integration**: Native integration with Termux:X11 display `:0`, PulseAudio audio forwarding, and D-Bus IPC.
 - **Resolution Control**: Configure display resolution and UI scaling on the fly (`asl resolution 1080p 1.25`).
 
 ### 🌐 4. 24/7 Remote Mesh Tunnels & Background Services
+
 - **Oracle Cloud VPS Dedicated Relay**: Always-on persistent reverse SSH tunnel forwarding SSH (2222) to your own remote VPS (`asl remote oracle setup`).
 - **LAN SSH Server**: Termux host SSH daemon on port 8022 with password authentication.
 - **Serveo & Ngrok**: Instant public jump-host and multi-token rotation tunneling on demand.
 - **24/7 Autostart & Service Watchdog**: Detached double-fork background daemon (`service-manager.sh`) with TCP throughput tuning and automatic service recovery.
 
 ### 🤖 5. OmniRoute AI Gateway & OpenClaude Environment
+
 - **Local AI Proxy**: Embedded OmniRoute AI proxy running on port 20128.
 - **Android Netd Bypass**: Executes under root with explicit Termux library bindings to circumvent Android 14 UID network restrictions.
 - **OpenClaude Native CLI**: Pre-configured AI coding agent environment with memory and tools.
 
 ### 💻 6. Developer Suite & Security Auditing Suite
+
 - **Developer Suite**: One-click installation for Python 3, Node.js, Neovim, Go, Rust, and VS Code Server (`asl dev-suite`).
 - **Containerized Security Suite**: Defensive network auditing tools including Nmap, Wireshark/TShark, Netcat, Socat, and Hydra (`asl security-suite`).
 
 ### 🧹 7. Storage Cleaner & Automated Integrity Repair
+
 - **Storage Cleaner**: Purges APT package archives, temporary `/tmp` files, and Mesa shader caches (`asl clean`).
 - **Automated Integrity Repair**: Self-healing recovery for stale mount points, permission errors, and DPKG lock states (`asl repair`).
 
@@ -183,24 +199,24 @@ curl -fsSL https://raw.githubusercontent.com/Ruusian/ASL/master/install.sh | bas
 | **Setup Wizard** | `asl wizard` / `asl init` | Guided first-time setup for Desktop, Graphics, Dev, Security presets |
 | **GPU Acceleration** | `asl gpu [profile\|apply]` | Configure Turnip/Zink GPU acceleration profiles |
 | **Turbo Governor** | `asl turbo` / `asl gpu` | Apply maximum CPU/GPU performance governor |
-| **Gamepad Passthrough**| `asl gamepad [sync\|test]` | Synchronize host Bluetooth/USB evdev gamepads into chroot |
+| **Gamepad Passthrough** | `asl gamepad [sync\|test]` | Synchronize host Bluetooth/USB evdev gamepads into chroot |
 | **Performance HUD** | `asl hud [on\|off\|toggle\|status]` | Toggle MangoHud telemetry overlay |
-| **Thermal Diagnostics**| `asl thermal [watch]` | Monitor battery and CPU/GPU thermal zone sensors |
-| **Desktop Session** | `asl desktop [start\|stop\|setup\|restart]`| Start/stop/setup hardware-accelerated XFCE4 desktop on Termux:X11 |
+| **Thermal Diagnostics** | `asl thermal [watch]` | Monitor battery and CPU/GPU thermal zone sensors |
+| **Desktop Session** | `asl desktop [start\|stop\|setup\|restart]` | Start/stop/setup hardware-accelerated XFCE4 desktop on Termux:X11 |
 | **Remote Dispatcher** | `asl remote [status\|all\|gui]` | Inspect or start all remote access bridges |
 | **LAN SSH Server** | `asl remote lan [start\|stop]` | Control LAN SSH server (port 8022) |
 | **Oracle VPS Relay** | `asl remote oracle [setup\|start\|stop]` | Control dedicated VPS persistent reverse SSH tunnel |
 | **Serveo Tunnel** | `asl remote serveo [start\|stop]` | Control Serveo jump-host reverse tunnel |
 | **Ngrok Tunnel** | `asl remote ngrok [start\|stop]` | Control Ngrok multi-token tunnel |
 | **24/7 Autoconnect** | `asl remote autoconnect` | Manage background auto-reconnect tunnel daemon |
-| **Service Watchdog** | `asl service [start\|stop\|status]`| Manage 24/7 background service manager and TCP tuning |
-| **OmniRoute Gateway** | `asl omniroute [start\|stop\|status]`| Manage root-isolated OmniRoute AI gateway (port 20128) |
+| **Service Watchdog** | `asl service [start\|stop\|status]` | Manage 24/7 background service manager and TCP tuning |
+| **OmniRoute Gateway** | `asl omniroute [start\|stop\|status]` | Manage root-isolated OmniRoute AI gateway (port 20128) |
 | **Virtual Swap Pool** | `asl swap [status\|setup\|optimize\|cleanup]` | Manage virtual swap pool (5GB upper limit) |
 | **Storage Cleaner** | `asl clean [status\|all\|apt\|tmp\|cache]` | Purge package archives, `/tmp`, and shader caches |
 | **Integrity Repair** | `asl repair [all\|mounts\|permissions\|dpkg]` | Self-healing recovery for mounts, locks, and permissions |
-| **Declarative Config**| `asl config [show\|init\|get\|set]` | Manage system settings in `/etc/asl.conf` |
+| **Declarative Config** | `asl config [show\|init\|get\|set]` | Manage system settings in `/etc/asl.conf` |
 | **Path Translation** | `asl path [-u\|-a\|-c\|-m] <path>` | Translate paths between Android host and Linux container |
-| **Android Host Bridge**| `asl keyboard-bar\|wakelock\|open\|clip\|toast\|shortcut` | Keyboard bottom bar remover, WakeLock, clipboard, notifications |
+| **Android Host Bridge** | `asl keyboard-bar\|wakelock\|open\|clip\|toast\|shortcut` | Keyboard bottom bar remover, WakeLock, clipboard, notifications |
 
 ---
 
@@ -224,6 +240,7 @@ All in-depth architectural specifications, hardware tuning guides, and developer
 Standard chroot scripts often execute `mount --bind / /chroot` or bind Android system folders (`/system`, `/vendor`, `/apex`). On Android 10 through 15+, this causes SELinux violations, mount deadlocks, broken camera/audio daemons, and kernel panics.
 
 **Android Subsystem for Linux (ASL)** enforces strict isolation invariants:
+
 - Shared access is restricted to user storage (`/sdcard`), device nodes (`/dev`, restricted to 0660/input-group), and IPC sockets (`/tmp`).
 - Mount points use `--make-rprivate` and `--make-rslave` flags to prevent mount events from leaking into the host Android OS.
 - Zero host system partitions (`/system`, `/vendor`, `/apex`) are mounted into the subsystem.

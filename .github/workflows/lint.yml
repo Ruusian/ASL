@@ -50,10 +50,15 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Lint Markdown files
-      uses: nostalgia-squirrel/markdown-linter@v1
+      # Replaces nostalgia-squirrel/markdown-linter, whose repository has been
+      # deleted (GitHub returns 404), which failed this job at "Set up job"
+      # before any linting could run. Rules are configured in
+      # .markdownlint-cli2.jsonc.
+      uses: DavidAnson/markdownlint-cli2-action@v24
       with:
-        files: .
-        ignore: node_modules
+        globs: |
+          "**/*.md"
+          "!node_modules"
 
   readme-check:
     runs-on: ubuntu-latest

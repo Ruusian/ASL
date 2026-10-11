@@ -3,15 +3,18 @@
 ## Critical Bugs
 
 ### 1. **Unquoted Variable Expansion in Test Conditions** ⚠️ HIGH
+
 **File**: `core/mount-chroot.sh`  
 **Lines**: 81, 85, 86, 90-91, 93, 95-96
 
 **Issue**: Variables are used without quotes in test conditions and redirections, which can cause:
+
 - Word splitting if paths contain spaces (though unlikely in this case)
 - Globbing expansion issues
 - Potential command injection vulnerabilities
 
 **Examples**:
+
 ```bash
 # Line 81 - BUGGY
 if [ -d $DEBIANPATH/var ] && [ ! -L $DEBIANPATH/var/lock ]; then
@@ -25,6 +28,7 @@ printf 'nameserver %s\n' "$dns1" > $DEBIANPATH/etc/resolv.conf
 ```
 
 **Fix**: Quote all variable expansions:
+
 ```bash
 # FIXED
 if [ -d "$DEBIANPATH/var" ] && [ ! -L "$DEBIANPATH/var/lock" ]; then
@@ -41,12 +45,14 @@ fi
 ---
 
 ### 2. **Race Condition in Process Manager** ⚠️ MEDIUM
+
 **File**: `bin/asl`  
 **Function**: `process_manager()` (lines ~350-400)
 
 **Issue**: A PID obtained from `ps` output might not exist by the time `kill` is called, or could have been reassigned to a different process. This can result in killing an unintended process.
 
 **Example**:
+
 ```bash
 read -r -p "Enter PID to terminate: " target_pid
 if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
@@ -56,6 +62,7 @@ if [[ "$target_pid" =~ ^[0-9]+$ ]]; then
 ```
 
 **Fix**: Check if process still exists and hasn't been reassigned:
+
 ```bash
 if kill -0 "$target_pid" 2>/dev/null; then
     # Process exists and is still accessible
@@ -68,12 +75,14 @@ fi
 ---
 
 ### 3. **Insufficient Base64 Encoding Validation** ⚠️ MEDIUM  
+
 **File**: `bin/asl`  
 **Function**: `run_in_chroot()` (lines 48-51)
 
 **Issue**: Very long commands could fail silently or be truncated if they exceed shell argument limits during base64 encoding/decoding pipeline.
 
 **Current Code**:
+
 ```bash
 run_in_chroot() {
     local command_text="$*"
@@ -90,12 +99,14 @@ run_in_chroot() {
 ## Medium Priority Bugs
 
 ### 4. **Incomplete Shell Option Handling in mount-chroot.sh** ⚠️ MEDIUM
+
 **File**: `core/mount-chroot.sh`  
 **Line**: 17
 
 **Issue**: Uses `set -e` inside a subshell with `su -c`, but doesn't properly handle failures in multi-line statements. If one mount fails, subsequent operations may still proceed.
 
 **Example**:
+
 ```bash
 su -c "
     set -e
@@ -107,6 +118,7 @@ su -c "
 ```
 
 **Better Approach**: Use explicit error checking:
+
 ```bash
 mount --make-rprivate "$DEBIANPATH" 2>/dev/null || {
     echo "[!] Failed to make private: $DEBIANPATH"
@@ -117,6 +129,7 @@ mount --make-rprivate "$DEBIANPATH" 2>/dev/null || {
 ---
 
 ### 5. **Missing Validation in snapshot.sh** ⚠️ MEDIUM
+
 **File**: `core/snapshot.sh`
 
 **Issue**: The `safe_name` function (mentioned but not shown in code review) should be validated to ensure snapshot names don't contain path traversal sequences like `../` or absolute paths.
@@ -126,6 +139,7 @@ mount --make-rprivate "$DEBIANPATH" 2>/dev/null || {
 ---
 
 ### 6. **Potential File Descriptor Leak in read_state()** ⚠️ LOW
+
 **File**: `desktop/start-desktop.sh`  
 **Function**: `read_state()` (lines 108-125)
 
@@ -143,6 +157,7 @@ done < "$STATE_FILE"
 ```
 
 **Fix**: Use explicit file descriptor management:
+
 ```bash
 while IFS='=' read -r -u 3 key value; do
     # ... validation ...
@@ -152,6 +167,7 @@ done 3< "$STATE_FILE"
 ---
 
 ### 7. **Regex Pattern Bypass in asl Script** ⚠️ LOW
+
 **File**: `bin/asl`  
 **Line**: Various package validation
 
@@ -173,6 +189,7 @@ done
 ## Low Priority / Design Issues
 
 ### 8. **Hardcoded Path Validation** ℹ️ LOW
+
 **File**: Multiple files (mount-chroot.sh, android-aid.sh, etc.)
 
 **Issue**: Path is hardcoded and validated to be exactly `/data/local/tmp/chrootDebian`, but this creates inflexibility:
@@ -189,6 +206,7 @@ fi
 ---
 
 ### 9. **Missing Error Messages in Critical Paths** ℹ️ LOW
+
 **File**: `core/snapshot.sh`, `core/stop-chroot.sh`
 
 **Issue**: Some commands fail silently (via `2>/dev/null || true`), making debugging difficult if the operation fails unexpectedly.
@@ -198,7 +216,7 @@ fi
 ## Summary
 
 | Severity | Count | Issues |
-|----------|-------|--------|
+| ---------- | ------- | -------- |
 | 🔴 Critical/High | 2 | Unquoted variables, potential injection |
 | 🟠 Medium | 3 | Race conditions, encoding limits, validation ✅ |
 | 🟡 Low | 2 | FD management, regex patterns ✅ |

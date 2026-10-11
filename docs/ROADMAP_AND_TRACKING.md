@@ -1,6 +1,7 @@
 # ASL Feature Roadmap & Tracking
 
 ## Completed Features
+
 - [x] **Root-Accelerated Subsystem Engine** (Native kernel chroot with direct GPU node access)
 - [x] **Multi-Distro Subsystem Provisioner** (Debian Modded, Debian Trixie Base, Ubuntu 24.04 LTS, Arch Linux, Alpine, Kali)
 - [x] **Dynamic Android Network DNS Sync & Phantom Process Killer Watchdog** (`asl dns` & `asl ppk`)
@@ -30,9 +31,11 @@
 - [x] **Kernel Sysctl TCP Network Throughput Tuning** (`99-asl-tcp-tuning.conf`)
 
 ## Planned Enhancements & Roadmap
+
 - [ ] **Wayland Native compositor backend (When Termux:X11 Wayland DRI3 stabilizes)**
 
 ## Known Architecture Invariants to Maintain
+
 1. **Always sanitize file paths** with `tr -d '\r\n'` to prevent Windows CRLF file issues.
-3. **Ensure `export PATH` is explicit** across all utility scripts called inside minimal chroot subshells.
-4. **Use `core/common.sh` abstractions (`asl_exec`, `asl_chroot_exec`)** for all host/chroot execution paths.
+2. **Ensure `export PATH` is explicit** across all utility scripts called inside minimal chroot subshells.
+3. **Use `core/common.sh` abstractions (`asl_exec`, `asl_chroot_exec`)** for all host/chroot execution paths.

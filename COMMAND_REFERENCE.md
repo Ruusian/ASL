@@ -7,6 +7,7 @@ Complete reference for all ASL commands and their real-world usage.
 ## 🎯 Dashboard & Navigation
 
 ### `asl`
+
 Launch interactive 74-column DEC Mode 1049 alternate-screen buffer dashboard.
 
 ```bash
@@ -16,6 +17,7 @@ asl menu            # Alias for dashboard
 ```
 
 **Interactive Hotkeys**:
+
 - `s` - Start / mount subsystem
 - `x` - Stop / unmount subsystem
 - `d` - Start desktop session (Termux:X11)
@@ -32,20 +34,22 @@ asl menu            # Alias for dashboard
 ---
 
 ## ⚡ Network DNS & Phantom Process Killer
- 
+
 ### `asl dns`
+
 Synchronize active Android network DNS into Debian `/etc/resolv.conf`.
- 
+
 ```bash
 asl dns                                 # Synchronize current Android nameservers into chroot
 asl dns status                          # View active nameserver configuration
 ```
- 
+
 ---
- 
+
 ### `asl ppk`
+
 Inspect or disable Android 12+ Phantom Process Killer limits.
- 
+
 ```bash
 asl ppk off                             # Disable Phantom Process Killer (max 2147483647 processes)
 asl ppk status                          # Inspect current PPK status
@@ -55,6 +59,7 @@ asl ppk on                              # Restore default PPK limits (32 process
 ---
 
 ### `asl wizard` / `asl init`
+
 Run guided first-time interactive setup wizard.
 
 ```bash
@@ -63,6 +68,7 @@ asl init                               # Alias for asl wizard
 ```
 
 Preset options available in wizard:
+
 1. **XFCE4 Desktop** (XFCE4 window manager, D-Bus, PulseAudio, Termux:X11)
 2. **GPU & Graphics Acceleration** (Turnip Mesa Vulkan, Zink, MangoHud, Gamepad)
 3. **Software Developer** (Python 3, Node.js, Neovim, Go, Rust, VS Code Server)
@@ -74,6 +80,7 @@ Preset options available in wizard:
 ## 🐧 Subsystem Management
 
 ### `asl start`
+
 Mount Debian chroot and virtual filesystems (`/dev`, `/proc`, `/sys`, `/sdcard`, `/tmp`).
 
 ```bash
@@ -83,6 +90,7 @@ asl start                           # Start and mount subsystem
 ---
 
 ### `asl stop`
+
 Gracefully terminate desktop and subsystem processes, then unmount all bind mounts in reverse order.
 
 ```bash
@@ -92,6 +100,7 @@ asl stop                            # Prompt confirmation and stop subsystem
 ---
 
 ### `asl status`
+
 Show subsystem mount status, container size, location, and active sub-mounts.
 
 ```bash
@@ -101,6 +110,7 @@ asl status                          # Show status overview
 ---
 
 ### `asl shell [user]`
+
 Enter interactive bash login shell inside subsystem rootfs.
 
 ```bash
@@ -111,6 +121,7 @@ asl shell user                      # Enter as specific container user
 ---
 
 ### `asl exec <command>`
+
 Execute a single command directly inside the subsystem container.
 
 ```bash
@@ -122,6 +133,7 @@ asl exec "python3 script.py"        # Run Python script
 ---
 
 ### `asl install <packages...>`
+
 Install Debian packages inside the subsystem using APT.
 
 ```bash
@@ -132,6 +144,7 @@ asl install git curl wget           # Install multiple packages
 ---
 
 ### `asl search <query>`
+
 Search available Debian APT packages in repository cache.
 
 ```bash
@@ -143,6 +156,7 @@ asl search python3                  # Search packages
 ## 📸 Snapshots & Backups
 
 ### `asl snapshot`
+
 Point-in-time container snapshot management.
 
 ```bash
@@ -157,6 +171,7 @@ asl snapshot import <file> <name>   # Import snapshot from compressed archive
 ---
 
 ### `asl backup` & `asl restore`
+
 Full rootfs backup and restoration.
 
 ```bash
@@ -169,6 +184,7 @@ asl restore [path/to/backup.tar.xz] # Restore Debian rootfs from backup archive
 ## 🖥️ Desktop & Resolution
 
 ### `asl desktop`
+
 Manage hardware-accelerated XFCE4 desktop session on Termux:X11 (`:0`).
 
 ```bash
@@ -185,6 +201,7 @@ asl desktop launch <app>            # Launch specific desktop application
 ---
 
 ### `asl resolution [720p|1080p|native] [scale]`
+
 Configure Termux:X11 display resolution and GTK scaling.
 
 ```bash
@@ -208,6 +225,7 @@ asl remote gui                      # Display remote desktop (VNC/X11) SSH forwa
 ```
 
 ### LAN SSH Server (Port 8022)
+
 ```bash
 asl remote lan start                # Start host OpenSSH daemon on port 8022
 asl remote lan stop                 # Stop LAN SSH daemon
@@ -215,7 +233,9 @@ asl remote lan status               # Show LAN connection command with dynamic I
 ```
 
 ### Dedicated VPS / Oracle Cloud Relay
+
 Interactive and configurable for your own remote server:
+
 ```bash
 asl remote oracle setup             # Interactive setup wizard (prompts for host, user, port, key)
 asl remote oracle start             # Connect persistent reverse SSH tunnel (port 2222 -> 8022)
@@ -228,6 +248,7 @@ asl remote oracle remove            # Remove VPS configuration and keys
 ```
 
 ### Serveo Jump-Host Reverse Tunnel
+
 ```bash
 asl remote serveo start             # Start Serveo reverse tunnel
 asl remote serveo stop              # Stop Serveo tunnel
@@ -235,6 +256,7 @@ asl remote serveo alias <name>      # Set custom Serveo subdomain
 ```
 
 ### Ngrok On-Demand Tunnel Pool
+
 ```bash
 asl remote ngrok start              # Start Ngrok TCP tunnel
 asl remote ngrok stop               # Stop Ngrok tunnel
@@ -245,6 +267,7 @@ asl remote ngrok reset              # Reset exhausted quota flags
 ```
 
 ### SSH Key & Password Management
+
 ```bash
 asl remote keys list                # List authorized SSH public keys
 asl remote keys add "<pubkey>"      # Add an authorized SSH public key
@@ -254,6 +277,7 @@ asl remote password clear           # Clear remote SSH password
 ```
 
 ### Autoconnect 24/7 Daemon
+
 ```bash
 asl remote autoconnect              # Start 24/7 auto-reconnect background daemon
 asl remote autoconnect stop         # Stop autoconnect daemon
@@ -264,6 +288,7 @@ asl remote autoconnect stop         # Stop autoconnect daemon
 ## 🎮 GPU Acceleration & Graphics Engine
 
 ### `asl gpu [profile|apply]`
+
 Configure and apply hardware-accelerated Turnip Vulkan and Mesa Zink graphics drivers.
 
 ```bash
@@ -274,6 +299,7 @@ asl gpu profile                      # Inspect detected GPU and Vulkan ICD
 ---
 
 ### `asl turbo` / `asl mode gpu`
+
 Apply maximum CPU/GPU performance governor and OOM protection.
 
 ```bash
@@ -285,6 +311,7 @@ asl mode status                      # Query active governor profile
 ---
 
 ### `asl gamepad [status|sync|test]`
+
 Synchronize Bluetooth and USB `/dev/input/event*` wireless controllers into chroot.
 
 ```bash
@@ -296,6 +323,7 @@ asl gamepad test                    # Interactive button & joystick calibration 
 ---
 
 ### `asl hud [on|off|toggle|status]`
+
 Manage MangoHud and DXVK_HUD real-time performance telemetry overlay.
 
 ```bash
@@ -308,6 +336,7 @@ asl hud status                      # Check active HUD configuration
 ---
 
 ### `asl mode [gaming|performance|balanced|status]`
+
 Set system CPU governor and performance profile.
 
 ```bash
@@ -322,6 +351,7 @@ asl mode status                     # Show active profile and CPU governor
 ## 📊 Diagnostics & Monitoring
 
 ### `asl doctor`
+
 Comprehensive non-mutating pre-flight system diagnostics.
 
 ```bash
@@ -329,6 +359,7 @@ asl doctor                          # Run full environment health check
 ```
 
 **Checks**:
+
 - Superuser root access (`su`) verification
 - Debian rootfs existence and integrity
 - Subsystem mount status
@@ -342,6 +373,7 @@ asl doctor                          # Run full environment health check
 ---
 
 ### `asl overview`
+
 Display live system status and remote endpoint table.
 
 ```bash
@@ -351,6 +383,7 @@ asl overview                        # Show system overview
 ---
 
 ### `asl thermal`
+
 Monitor thermal sensors and battery temperature.
 
 ```bash
@@ -361,6 +394,7 @@ asl thermal watch                   # Live thermal monitor (5s refresh)
 ---
 
 ### `asl ps` / `asl watch`
+
 Interactive process management and live monitor.
 
 ```bash
@@ -373,6 +407,7 @@ asl watch                           # Open live system monitoring dashboard
 ## 📱 Android Host Integration
 
 ### `asl aid` / `asl gids`
+
 Map Android AID groups (sdcard_rw, inet, graphics) inside container.
 
 ```bash
@@ -383,6 +418,7 @@ asl aid status                      # Verify AID mapping status
 ---
 
 ### `asl keyboard-bar [hide|show|toggle|status]`
+
 Android keyboard bottom bar & IME navigation spacing control (via native Runtime Resource Overlay `config_imeDrawsImeNavBar=false`). Maximizes vertical terminal and desktop screen space by removing the gesture navigation bar gap under the keyboard.
 
 ```bash
@@ -395,6 +431,7 @@ asl keyboard-bar status             # Inspect overlay status and effective confi
 ---
 
 ### `asl wakelock [on|off|status]`
+
 CPU wake lock control.
 
 ```bash
@@ -406,6 +443,7 @@ asl wakelock status                 # Show current wake lock status
 ---
 
 ### `asl open <file|url>`
+
 Open container file or URL in default Android host application.
 
 ```bash
@@ -416,6 +454,7 @@ asl open https://github.com         # Open URL in Android browser
 ---
 
 ### `asl clip [copy <text>|paste]`
+
 Android system clipboard bridge.
 
 ```bash
@@ -429,6 +468,7 @@ asl clip-sync stop                  # Stop clipboard sync daemon
 ---
 
 ### `asl toast <message>` & `asl notify <title> <message>`
+
 Trigger native Android host notifications and toast messages.
 
 ```bash
@@ -439,6 +479,7 @@ asl notify "ASL" "Build finished"   # Post Android system notification
 ---
 
 ### `asl shortcut <app-name>`
+
 Create Android home screen launcher shortcut for container applications.
 
 ```bash
@@ -448,6 +489,7 @@ asl shortcut xfce4-terminal         # Create shortcut for XFCE terminal
 ---
 
 ### `asl storage`
+
 Request Android shared storage permissions.
 
 ```bash
@@ -457,6 +499,7 @@ asl storage                         # Trigger termux-setup-storage
 ---
 
 ### `asl path [OPTIONS] <path>`
+
 Translate filesystem paths between Android host and Linux container.
 
 ```bash
@@ -471,6 +514,7 @@ asl path -m                         # Display container storage mount points
 ## 🤖 24/7 Background Services & Automation
 
 ### `asl service`
+
 Manage 24/7 background daemons, Termux:Boot autostart, and health watchdog.
 
 ```bash
@@ -487,6 +531,7 @@ asl service disable                 # Disable boot autostart
 ---
 
 ### `asl omniroute`
+
 Manage OmniRoute local AI API gateway running on port 20128 (root-isolated to bypass Android netd DNS restrictions).
 
 ```bash
@@ -501,6 +546,7 @@ asl omniroute logs                  # Tail recent OmniRoute proxy logs
 ---
 
 ### `asl openclaude`
+
 Set up and maintain the OpenClaude coding agent (config, turn limit, memory plugin, web search).
 
 ```bash
@@ -512,6 +558,7 @@ asl openclaude status                # Show installed version and config path
 ---
 
 ### `asl ai-update`
+
 Auto-update the AI CLIs (OmniRoute + OpenClaude) against their npm registries. Upgrades only when a
 newer version exists, and re-runs configuration after an OpenClaude upgrade.
 
@@ -532,6 +579,7 @@ The watchdog runs `asl ai-update watchdog` during every service health check; it
 ## 💾 Storage, Memory & Maintenance
 
 ### `asl swap`
+
 Manage virtual swap pool and zRAM swap files with 5GB safety bounds.
 
 ```bash
@@ -544,6 +592,7 @@ asl swap cleanup                    # Deactivate and detach swap loop devices
 ---
 
 ### `asl clean`
+
 Purge cache files, package archives, and temporary artifacts to free internal storage.
 
 ```bash
@@ -557,6 +606,7 @@ asl clean cache                     # Clean user cache & Mesa shader caches
 ---
 
 ### `asl repair`
+
 Automated system integrity repair and recovery for corrupted locks, permissions, or mount states.
 
 ```bash
@@ -573,6 +623,7 @@ asl repair libs                     # Rebind dynamic linker bindings (ldconfig)
 ## 🛠️ Developer & Security Suites
 
 ### `asl dev-suite`
+
 Deploy pre-configured developer toolchains inside the Debian chroot.
 
 ```bash
@@ -589,6 +640,7 @@ asl dev-suite install rust          # Install Rust toolchain via rustup
 ---
 
 ### `asl security-suite`
+
 Install defensive network auditing and security analysis tools.
 
 ```bash
@@ -601,6 +653,7 @@ asl security-suite install full     # Install complete security suite
 ---
 
 ### `asl config`
+
 Manage declarative configuration in `/etc/asl.conf`.
 
 ```bash

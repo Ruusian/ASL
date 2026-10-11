@@ -58,7 +58,8 @@ asl doctor
 ```
 
 Expected output:
-```
+
+```text
 exec-mode      PASS  su grants root access (ROOT mode)
 debian-root    PASS  /data/local/tmp/chrootDebian exists
 chroot         WARN  not mounted; chroot checks skipped (run: asl start)
@@ -81,6 +82,7 @@ asl
 This opens the interactive 74-column alternate-screen buffer TUI dashboard with real-time system stats.
 
 **Key hotkeys**:
+
 - `s` - Start / mount subsystem
 - `x` - Stop / unmount subsystem  
 - `d` - Start XFCE desktop session (Termux:X11)
@@ -229,7 +231,7 @@ export PULSE_SERVER=127.0.0.1:4713
 
 ### Files & Locations
 
-```
+```text
 /data/local/tmp/chrootDebian      # Debian rootfs container
 /data/local/tmp/.asl-snapshots/   # Snapshot storage
 $PREFIX/etc/asl_exec_mode         # Execution mode configuration
@@ -305,8 +307,8 @@ asl desktop start
 
 ## 💬 Support & Community
 
-- 🐛 **Report Bugs**: GitHub Issues at https://github.com/Ruusian/ASL/issues
-- 📧 **Contact**: abhiksarkar00@gmail.com
+- 🐛 **Report Bugs**: GitHub Issues at <https://github.com/Ruusian/ASL/issues>
+- 📧 **Contact**: <abhiksarkar00@gmail.com>
 
 ---
 

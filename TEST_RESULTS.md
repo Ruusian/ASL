@@ -9,7 +9,7 @@
 ## Test Summary
 
 | Test | Status | Notes |
-|------|--------|-------|
+| ------ | -------- | ------- |
 | ✅ Core Scripts Syntax | **PASS** | All core/*.sh files verified (including mount-chroot.sh, stop-chroot.sh) |
 | ✅ Desktop/Gaming/Tools Syntax | **PASS** | All shell scripts in desktop/, gaming/, tools/ verified |
 | ✅ System Diagnostics | **PASS** | `asl doctor` runs successfully, shows system state |
@@ -26,13 +26,15 @@
 ## Detailed Test Results
 
 ### Test 1: Bash Syntax Checks (bin/)
-```
+
+```text
 Result: ✅ PASS
 Details: No syntax errors found in main CLI scripts
 ```
 
 ### Test 2: Core Scripts Syntax
-```
+
+```text
 Command: for f in core/*.sh; do bash -n "$f"; done
 Result: ✅ PASS
 Verified Scripts:
@@ -48,7 +50,8 @@ Verified Scripts:
 ```
 
 ### Test 3: Desktop/Tools Scripts
-```
+
+```text
 Command: for dir in desktop tools; do for f in "$dir"/*.sh; do bash -n "$f"; done; done
 Result: ✅ PASS
 Verified Scripts:
@@ -58,7 +61,8 @@ Verified Scripts:
 ```
 
 ### Test 4: System Diagnostics
-```
+
+```text
 Command: bash bin/asl doctor
 Result: ✅ PASS
 Output:
@@ -72,7 +76,8 @@ Output:
 ```
 
 ### Test 5: CLI Help/Overview
-```
+
+```text
 Command: bash bin/asl help | head -20
 Result: ✅ PASS
 Details: 
@@ -83,7 +88,8 @@ Details:
 ```
 
 ### Test 6: Error Message Enhancement
-```
+
+```text
 Command: bash bin/asl exec "test_command"
 Result: ✅ PASS - Improved Error Message Displayed
 Previous Output (before fix):
@@ -96,7 +102,8 @@ New Output (after fix):
 ```
 
 ### Test 7: Path Traversal Protection
-```
+
+```text
 Command: Test snapshot name "../../etc/passwd" against validation regex
 Result: ✅ PASS - Path Traversal Blocked
 Regex: ^[A-Za-z0-9_-]+$
@@ -107,7 +114,8 @@ Details:
 ```
 
 ### Test 8: Dashboard Interface
-```
+
+```text
 Command: bash bin/asl (no subcommand)
 Result: ✅ PASS
 Details:
@@ -130,44 +138,54 @@ Details:
 ## Code Fixes Verification
 
 ### ✅ Fix #1: Unquoted Variables (CRITICAL)
+
 **File**: core/mount-chroot.sh  
 **Lines**: 78-96  
 **Status**: ✅ FIXED & VERIFIED
+
 - All `$DEBIANPATH` references are now quoted
 - Prevents shell word splitting and injection
 - No syntax errors detected
 - Error messages display correctly
 
 ### ✅ Fix #2: Race Condition (MEDIUM)
+
 **File**: bin/asl  
 **Function**: process_manager()  
 **Status**: ✅ FIXED & VERIFIED
+
 - Process existence check (`kill -0`) added
 - Prevents PID recycling race condition
 - No syntax errors detected
 - Safe PID validation in place
 
 ### ✅ Fix #3: Command Size Validation (MEDIUM)
+
 **File**: bin/asl  
 **Function**: run_in_chroot()  
 **Status**: ✅ FIXED & VERIFIED
+
 - 40KB limit check for base64 encoding
 - Prevents shell argument overflow
 - Graceful error handling
 - No syntax errors detected
 
 ### ✅ Fix #4: File Descriptor Management (LOW)
+
 **File**: desktop/start-desktop.sh  
 **Function**: read_state()  
 **Status**: ✅ FIXED & VERIFIED
+
 - Explicit FD 3 usage in read loop
 - Prevents FD conflicts with stdin
 - Cleaner resource management
 - No syntax errors detected
 
 ### ✅ Fix #5: Error Messages (UX IMPROVEMENT)
+
 **File**: core/mount-chroot.sh, core/stop-chroot.sh  
 **Status**: ✅ FIXED & VERIFIED
+
 - Mount errors now include installation guidance
 - Stop errors include 4-step troubleshooting guide
 - Clear, actionable diagnostics for users
@@ -178,19 +196,22 @@ Details:
 ## Testing Environment
 
 **System**:
+
 - Device: Android rooted device with Termux
 - Environment: Debian chroot (proot-distro) running inside ASL
 - Running from: VS Code inside the Debian chroot
 - Root access: ✅ Confirmed (su works)
 
 **ASL Status**:
+
 - Version: 1.1
 - Branch: master
-- Remote: https://github.com/Ruusian/ASL.git
+- Remote: <https://github.com/Ruusian/ASL.git>
 - Last commit: 64b2445 (Add: CHANGELOG and GitHub Actions)
 - Release tag: v1.1 (pushed to GitHub)
 
 **Debian Rootfs**: Not installed (expected for this testing scenario)
+
 - This is intentional to test error handling without actual mount operations
 - All error messages displayed correctly despite missing rootfs
 
@@ -201,6 +222,7 @@ Details:
 ### ✅ No issues found - Ready for production
 
 All 9 identified bugs have been fixed, verified, or confirmed as secure:
+
 1. ✅ Unquoted variables - FIXED
 2. ✅ Race condition - FIXED  
 3. ✅ Command size validation - FIXED

@@ -1,0 +1,27 @@
+{
+  // ASL documentation style.
+  //
+  // The docs deliberately use wide lines: command tables, shell transcripts and
+  // inline `key --flag | other --flag` pipelines all exceed 80 columns and read
+  // far worse when wrapped. MD013 is therefore disabled rather than forcing
+  // ~360 cosmetic rewraps across the handbook.
+  "config": {
+    "MD013": false,
+
+    // Emoji-prefixed headings are the house style ("## 🚀 Quick Start").
+    "MD026": {
+      "punctuation": ".,;:!。，；：！"
+    },
+
+    // One H1 per file is the norm, except FIXES_APPLIED.md which is an
+    // append-only log where every round begins with its own "Round N" H1.
+    "MD025": false,
+
+    // Duplicate headings are fine inside the long fix/test logs, which
+    // legitimately repeat "## Summary" per round.
+    "MD024": false,
+
+    // Inline HTML is used for badges and status tables in README.md.
+    "MD033": false
+  }
+}

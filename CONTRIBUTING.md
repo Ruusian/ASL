@@ -7,12 +7,14 @@ Thank you for your interest in improving Android Subsystem for Linux (ASL)! This
 ## 🎯 Ways to Contribute
 
 ### 1. **Report Bugs** 🐛
+
 Found an issue? Help us fix it:
 
-- **GitHub Issues**: https://github.com/Ruusian/ASL/issues
+- **GitHub Issues**: <https://github.com/Ruusian/ASL/issues>
 - **Include**: Your device info, Android version, steps to reproduce
 - **Example**:
-  ```
+
+  ```text
   Title: Chroot fails to start on Samsung S21
   Device: Samsung Galaxy S21 (Android 14)
   Termux: v0.118
@@ -23,6 +25,7 @@ Found an issue? Help us fix it:
   ```
 
 ### 2. **Suggest Features** 💡
+
 Have an idea? Share it:
 
 - Open a GitHub Discussion or Issue with tag `[FEATURE]`
@@ -30,6 +33,7 @@ Have an idea? Share it:
 - Example: "Add support for automatic GPU profile switching"
 
 ### 3. **Improve Documentation** 📚
+
 Documentation helps everyone:
 
 - Fix typos or unclear sections
@@ -38,6 +42,7 @@ Documentation helps everyone:
 - Improve code comments
 
 ### 4. **Write Code** 💻
+
 Contribute fixes and features:
 
 - Fix bugs from [BUG_REPORT.md](BUG_REPORT.md)
@@ -46,6 +51,7 @@ Contribute fixes and features:
 - Add new shell subcommands
 
 ### 5. **Test & Validation** ✅
+
 Help ensure quality:
 
 - Test fixes on multiple Android devices
@@ -99,6 +105,7 @@ git checkout -b feature/your-feature-name
 ```
 
 **Branch naming convention**:
+
 - `feature/` - New features
 - `fix/` - Bug fixes
 - `docs/` - Documentation
@@ -108,6 +115,7 @@ git checkout -b feature/your-feature-name
 ### Step 2: Make Changes
 
 **For shell scripts**:
+
 ```bash
 # 1. Edit your target file
 vim bin/asl  # or core/mount-chroot.sh, etc.
@@ -124,6 +132,7 @@ bash bin/asl help
 ```
 
 **For documentation**:
+
 - Use Markdown format
 - Follow existing style (see README.md)
 - Include code examples when helpful
@@ -146,7 +155,8 @@ Tested on: Samsung S21, Pixel 6, OnePlus 9"
 ```
 
 **Commit message format**:
-```
+
+```text
 Type: Summary (50 chars max)
 
 - Detailed explanation (72 chars per line)
@@ -167,6 +177,7 @@ git push origin feature/your-feature-name
 ```
 
 **PR Template**:
+
 ```markdown
 ## Description
 Brief explanation of what this PR does.
@@ -234,6 +245,7 @@ asl dashboard
 ### Shell Script Style
 
 1. **Use proper quoting**:
+
    ```bash
    # ✅ Good
    if [ -d "$DEBIANPATH" ]; then
@@ -247,6 +259,7 @@ asl dashboard
    ```
 
 2. **Error handling**:
+
    ```bash
    # ✅ Good
    if ! mount -v "$source" "$target"; then
@@ -259,6 +272,7 @@ asl dashboard
    ```
 
 3. **Function documentation**:
+
    ```bash
    # Process manager function
    # Usage: process_manager <pid> <signal>
@@ -270,6 +284,7 @@ asl dashboard
    ```
 
 4. **Comments for logic**:
+
    ```bash
    # ✅ Good
    # Check if process exists before sending signal
@@ -324,6 +339,7 @@ Before submitting a PR, check:
 If you're fixing a bug from [BUG_REPORT.md](BUG_REPORT.md):
 
 1. **Reference the issue** in commit message:
+
    ```bash
    git commit -m "Fix: Prevent race condition in process_manager (Issue #2)"
    ```
@@ -335,6 +351,7 @@ If you're fixing a bug from [BUG_REPORT.md](BUG_REPORT.md):
 4. **Update TEST_RESULTS.md** with test results
 
 Example PR for Issue #2:
+
 ```markdown
 ## Description
 Fixes race condition in process_manager where PID could be recycled 
@@ -357,16 +374,19 @@ Fixes #2
 ## 🎓 Learning Resources
 
 **ASL Architecture**:
+
 - [.instructions.md](.instructions.md) - Complete project context
 - [CHANGELOG.md](CHANGELOG.md) - Version history & changes
 - [BUG_REPORT.md](BUG_REPORT.md) - Known issues & analysis
 
 **Bash Scripting**:
+
 - [Bash Guide for Beginners](https://mywiki.wooledge.org/BashGuide)
 - [ShellCheck](https://www.shellcheck.net/) - Script linting
 - [Google Shell Style Guide](https://google.github.io/styleguide/shellguide.html)
 
 **Git & GitHub**:
+
 - [GitHub Flow Guide](https://guides.github.com/introduction/flow/)
 - [How to Write Good Commit Messages](https://chris.beams.io/posts/git-commit/)
 
@@ -374,9 +394,9 @@ Fixes #2
 
 ## 💬 Questions?
 
-- **GitHub Discussions**: https://github.com/Ruusian/ASL/discussions
-- **Issues**: https://github.com/Ruusian/ASL/issues
-- **Email**: abhiksarkar00@gmail.com
+- **GitHub Discussions**: <https://github.com/Ruusian/ASL/discussions>
+- **Issues**: <https://github.com/Ruusian/ASL/issues>
+- **Email**: <abhiksarkar00@gmail.com>
 
 ---
 

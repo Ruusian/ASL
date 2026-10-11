@@ -123,7 +123,6 @@ All notable changes to the ASL (Android Subsystem for Linux) project are documen
   - Supported `--yes` / `-y` flags across CLI commands for automated background execution (Tasker/MacroDroid).
   - Added automatic diagnostic log surfacing from `/tmp/app_launch.log` on application startup failures.
 
-
 ## [1.4] - 2026-08-17
 
 ### 🚀 New Features & Desktop GTK3 Control Center
@@ -236,6 +235,7 @@ Initial stable release with core functionality for ASL chroot management.
 ## How to Report Issues
 
 Found a bug? Please open an issue on [GitHub](https://github.com/Ruusian/ASL/issues) with:
+
 1. ASL version (`asl --version`)
 2. Device info (Android version, Termux version)
 3. Steps to reproduce
@@ -244,6 +244,7 @@ Found a bug? Please open an issue on [GitHub](https://github.com/Ruusian/ASL/iss
 ## Contributing
 
 Contributions are welcome! Please:
+
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit changes (`git commit -m 'Add amazing feature'`)

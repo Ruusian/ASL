@@ -1,15 +1,17 @@
 # ASL CLI & Utilities Reference
 
 ## Main CLI Dispatcher (`asl`)
+
 The `asl` binary in `$PREFIX/bin/asl` (and `$PREFIX/share/asl/bin/asl`) serves as the unified entry point for all ASL operations.
 
 ### Subcommands
+
 | Command | Subcommand / Syntax | Description |
 | :--- | :--- | :--- |
 | **Interactive Dashboard** | `asl` or `asl dashboard` | Launches 74-column DEC 1049 alternate-screen buffer TUI console. |
 | **System Overview** | `asl overview` | Displays concise live system status and remote endpoint table. |
 | **DNS Synchronization** | `asl dns [sync\|status]` | Synchronizes active Android nameservers into chroot `/etc/resolv.conf`. |
-| **Phantom Process Killer**| `asl ppk [off\|on\|status]` | Disables or inspects Android 12+ background process limits. |
+| **Phantom Process Killer** | `asl ppk [off\|on\|status]` | Disables or inspects Android 12+ background process limits. |
 | **Desktop Environment** | `asl desktop [start\|stop\|setup\|status\|restart]` | Controls XFCE4 desktop lifecycle, Termux:X11 display, and auto-bootstrap. |
 | **Setup Wizard** | `asl wizard` or `asl init` | Guided first-time setup wizard for Desktop, Graphics, Dev, Security, or Workstation presets. |
 | **GPU Acceleration** | `asl gpu [profile\|apply]` | Auto-detects and applies Turnip/Zink GPU acceleration profiles. |
@@ -20,25 +22,27 @@ The `asl` binary in `$PREFIX/bin/asl` (and `$PREFIX/share/asl/bin/asl`) serves a
 | **Storage Cleaner** | `asl clean [status\|all\|apt\|tmp\|cache]` | Purges package archives, temporary files, and Mesa shader caches. |
 | **System Repair** | `asl repair [all\|mounts\|permissions\|dpkg\|env\|libs]` | Runs automated repair for mounts, lock files, permissions, and D-Bus. |
 | **Subsystem Backup** | `asl backup` | Creates full compressed archive of the subsystem rootfs. |
-| **Subsystem Restore**| `asl restore [archive]` | Restores subsystem rootfs from a backup archive. |
+| **Subsystem Restore** | `asl restore [archive]` | Restores subsystem rootfs from a backup archive. |
 | **Point-in-Time Snapshots** | `asl snapshot [list\|create\|restore\|delete\|export\|import]` | Manages fast point-in-time snapshots and export/import. |
 | **24/7 Service Manager** | `asl service [start\|stop\|restart\|check\|loop\|enable\|disable\|status]` | Controls background services, Termux:Boot autostart, and health watchdog. |
 | **OmniRoute AI Proxy** | `asl omniroute [start\|stop\|restart\|logs\|status]` | Manages root-isolated OmniRoute AI proxy on port 20128. |
 | **Virtual Swap Manager** | `asl swap [status\|setup\|optimize\|cleanup]` | Controls virtual swap allocation with 5GB safety bounds. |
 | **Performance HUD** | `asl hud [on\|off\|toggle\|status]` | Toggles MangoHud & DXVK_HUD telemetry overlay. |
-| **Thermal Diagnostics**| `asl thermal [watch]` | Monitors SoC, CPU, GPU, and battery thermal sensors. |
+| **Thermal Diagnostics** | `asl thermal [watch]` | Monitors SoC, CPU, GPU, and battery thermal sensors. |
 | **Process Manager** | `asl ps` | Interactive process viewer and termination manager. |
 | **Path Translation** | `asl path [-u\|-a\|-c\|-m] <path>` | Translates paths between Android host and Linux container. |
-| **Declarative Config**| `asl config [show\|init\|get\|set]` | Manages system declarative configuration in `/etc/asl.conf`. |
-| **Android Host Bridge**| `asl wakelock\|open\|clip\|toast\|shortcut\|storage` | Android host integration bridges. |
+| **Declarative Config** | `asl config [show\|init\|get\|set]` | Manages system declarative configuration in `/etc/asl.conf`. |
+| **Android Host Bridge** | `asl wakelock\|open\|clip\|toast\|shortcut\|storage` | Android host integration bridges. |
 | **Interactive Shell** | `asl shell` | Drops into target Linux subsystem rootfs bash login shell. |
 
 ---
 
 ## One-Line Installer Flags (`install.sh`)
+
 The automated installer supports non-interactive execution flags:
 
 ### Distribution Selection Flags
+
 - `--debian` / `--base` / `--standard`: Installs official Debian Trixie base with Turnip Vulkan & XFCE4 desktop.
 - `--ubuntu`: Installs official Ubuntu 24.04 LTS base.
 - `--arch`: Installs official Arch Linux base.
@@ -50,11 +54,13 @@ The automated installer supports non-interactive execution flags:
 - `--distro=<name>` / `--type=<name>`: Specifies any custom OCI/Docker container image or proot-distro alias.
 
 ### Execution Prerequisites
+
 - **Root (`su`)**: ASL requires Superuser root access (Magisk, KernelSU, or APatch) to mount the Linux chroot and interface directly with Android GPU nodes.
 
 ---
 
 ## Core Infrastructure Scripts
+
 All core helper scripts reside in `core/`, `desktop/`, `gaming/`, and `$PREFIX/share/asl/`:
 
 - `core/common.sh`: Shared environment module (`asl_detect_mode`, `asl_exec`, `asl_chroot_exec`, `is_mounted`).

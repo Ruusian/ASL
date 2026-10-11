@@ -3,7 +3,9 @@
 ## Round 4 Codebase Hardening & Variable Safety
 
 ### ✅ 1. Unset Local Variable Guarding & TUI Summary Diagnostics
+
 **Files**: `bin/asl`, `core/asl-conf.sh`, `core/termux-bridge.sh`
+
 - Fixed unbound/unset variable warnings in `bin/asl` overview badges (`boot_lbl`, `wdog_lbl`).
 - Resolved variable scoping and initialization in screen resolution/orientation bridge helpers (`CURR_SIZE`, `CURR_DENSITY`).
 - Corrected template directory extraction in `core/asl-conf.sh`.
@@ -11,14 +13,18 @@
 ---
 
 ### ✅ 2. Robust Swap Pool & Kernel Capability Detection
+
 **Files**: `core/swap-manager.sh`, `core/kernel-check.sh`
+
 - Hardened loop-mounted swap image handling in `core/swap-manager.sh` to safely detach duplicate or stale loop devices.
 - Enhanced virtual/file swap detection in `core/kernel-check.sh` by inspecting `/proc/swaps` directly when `swapon` utility is restricted or absent in user space.
 
 ---
 
 ### ✅ 3. Mount Verification & Fallback Path Consistency
+
 **Files**: `core/common.sh`, `core/mount-chroot.sh`, `desktop/start-desktop.sh`, `core/benchmark.sh`
+
 - Standardized `ensure_chroot_mounted` alias in `core/common.sh` for cross-module consistency.
 - Synchronized chroot state checks with exact filesystem mount table inspection.
 - Cleaned up redundant shell initializations and path sourcing in `desktop/start-desktop.sh` and `core/benchmark.sh`.
@@ -30,45 +36,55 @@
 ## Round 3 Stress Test Fixes Applied
 
 ### ✅ 1. Standardized Mount Checking (`grep -q -F " $target " /proc/mounts`) (CRITICAL)
+
 **Files**: `bin/asl`, `core/*.sh`, `desktop/*.sh`, `gaming/*.sh`, `module/action.sh`, `install.sh`
 
 **Changes Made**:
+
 - Replaced ambiguous `grep -q -w` (which treats `/` as a word boundary, causing false positives on nested chroot paths) with exact space-padded `/proc/mounts` column matching: `grep -q -F " $target " /proc/mounts`.
 - Eliminates false-positive mount checks and prevents unmount bypasses.
 
 ---
 
 ### ✅ 2. Dynamic Reverse Depth Sorting in `stop-chroot.sh` (HIGH)
+
 **File**: `core/stop-chroot.sh`
 
 **Changes Made**:
+
 - Updated mount resolution to dynamically extract all active mounts under `$DEBIANPATH` from `/proc/mounts` and sort by string length descending (`awk '{ print length, $0 }' | sort -rn`).
 - Guarantees nested child filesystems (`/proc/sys/fs/binfmt_misc`, `/dev/pts`, `/dev/shm`, `/tmp`) are unmounted before parent directories, preventing mount point leakage on stop.
 
 ---
 
 ### ✅ 3. Safe Subshell Execution for Desktop Application Launchers (HIGH)
+
 **Files**: `bin/asl`
 
 **Changes Made**:
+
 - Replaced dangerous `eval "nohup $EXEC_CMD ..."` calls with safe explicit subshell invocation `nohup /bin/bash -c "$EXEC_CMD" >/tmp/app_launch.log 2>&1 &`.
 - Prevents command injection and parameter expansion errors when parsing `.desktop` Exec lines.
 
 ---
 
 ### ✅ 4. Path Escaping and Regex Sanitization (HIGH)
+
 **Files**: `core/snapshot.sh`, `desktop/theme.sh`
 
 **Changes Made**:
+
 - Implemented `printf '%q'` shell path escaping for export/import tar operations in `core/snapshot.sh`.
 - Added character escaping for `/`, `&`, and `|` in `desktop/theme.sh` (`esc_val=$(printf '%s\n' "$val" | sed -e 's/[\/&|]/\\&/g')`) to prevent `sed` substitution corruption when updating XFCE XML configuration files.
 
 ---
 
 ### ✅ 5. Prebuilt GPU Driver Install Mount Guard (MEDIUM)
+
 **Files**: `core/gpu-profile.sh`, `install.sh`
 
 **Changes Made**:
+
 - Added an explicit `grep -q -F " $DEBIANPATH/proc " /proc/mounts` guard in `asl_gpu_install_drivers()` to ensure the chroot environment is mounted prior to invoking `apt-get`.
 - Standardized installer mount checks in `install.sh` `ensure_chroot_unmounted_for_replace()`.
 
@@ -79,14 +95,17 @@
 ## Additional Fixes Applied
 
 ### ✅ 5. Enhanced Error Messages in mount-chroot.sh (LOW)
+
 **File**: `core/mount-chroot.sh` (Lines 5-10, 101-105)
 
 **Changes Made**:
+
 - ✓ Improved initial error message when Debian rootfs not found
 - ✓ Added actionable troubleshooting steps for users
 - ✓ Added detailed mount verification failure diagnostics
 
 **Before**:
+
 ```bash
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] || [ ! -d "$DEBIANPATH" ]; then
     echo "Error: Debian chroot is not available at /data/local/tmp/chrootDebian"
@@ -95,6 +114,7 @@ fi
 ```
 
 **After**:
+
 ```bash
 if [ "$DEBIANPATH" != "/data/local/tmp/chrootDebian" ] || [ ! -d "$DEBIANPATH" ]; then
     echo "[!] Error: Debian chroot rootfs not found at /data/local/tmp/chrootDebian"
@@ -109,14 +129,17 @@ fi
 ---
 
 ### ✅ 6. Enhanced Error Messages in stop-chroot.sh (LOW)
+
 **File**: `core/stop-chroot.sh` (Lines 24-25, 78-89)
 
 **Changes Made**:
+
 - ✓ Improved success message clarity
 - ✓ Added comprehensive troubleshooting guide on unmount failures
 - ✓ Added specific commands for force unmount and process detection
 
 **Added Diagnostics**:
+
 ```bash
 echo "[!] Chroot stop was incomplete. Troubleshooting:"
 echo "    1. Check for running processes in chroot: lsof $DEBIANPATH"
@@ -132,7 +155,7 @@ echo "    4. View mounts: grep $DEBIANPATH /proc/mounts"
 ## Verification Status
 
 | Issue | Status | Severity | Resolution |
-|-------|--------|----------|-----------|
+| ------- | -------- | ---------- | ----------- |
 | #1 Unquoted variables | ✅ FIXED | 🔴 HIGH | Quoted all path variables |
 | #2 Race condition | ✅ FIXED | 🟠 MEDIUM | Added kill -0 checks |
 | #3 Command size validation | ✅ FIXED | 🟠 MEDIUM | Added 40KB limit check |
@@ -146,9 +169,11 @@ echo "    4. View mounts: grep $DEBIANPATH /proc/mounts"
 ---
 
 ### ✅ 1. Fixed Unquoted Variables in mount-chroot.sh (CRITICAL)
+
 **File**: `core/mount-chroot.sh` (Lines 78-96)
 
 **Changes Made**:
+
 - ✓ Quoted all `$DEBIANPATH` variables in test conditions
 - ✓ Fixed Lines 81: `if [ -d "$DEBIANPATH/var" ] && [ ! -L "$DEBIANPATH/var/lock" ]`
 - ✓ Fixed Lines 85-86: `if [ ! -s "$DEBIANPATH/etc/resolv.conf" ]` and `mkdir -p "$DEBIANPATH/etc"`
@@ -159,14 +184,17 @@ echo "    4. View mounts: grep $DEBIANPATH /proc/mounts"
 ---
 
 ### ✅ 2. Fixed Race Condition in Process Manager (MEDIUM)
+
 **File**: `bin/asl` (Lines 369-403)
 
 **Changes Made**:
+
 - ✓ Added `kill -0 "$target_pid"` check before sending SIGTERM/SIGKILL
 - ✓ This verifies the process still exists before attempting to terminate it
 - ✓ Prevents accidental termination of unrelated processes that reuse the PID
 
 **Before**:
+
 ```bash
 if kill "$target_pid" 2>/dev/null || su -c "kill '$target_pid'" 2>/dev/null; then
     echo "[✓] Sent SIGTERM to PID $target_pid"
@@ -174,6 +202,7 @@ fi
 ```
 
 **After**:
+
 ```bash
 if kill -0 "$target_pid" 2>/dev/null || su -c "kill -0 '$target_pid'" 2>/dev/null; then
     if kill "$target_pid" 2>/dev/null || su -c "kill '$target_pid'" 2>/dev/null; then
@@ -189,19 +218,23 @@ fi
 ---
 
 ### ✅ 3. Added Command Size Validation in run_in_chroot() (MEDIUM)
+
 **File**: `bin/asl` (Lines 48-63)
 
 **Changes Made**:
+
 - ✓ Added 40KB size limit check for commands before base64 encoding
 - ✓ Added validation that base64 encoding succeeded
 - ✓ Improved error messages for debugging
 
 **Benefits**:
+
 - Prevents silent failures from command truncation
 - Catches argument limit issues before they cause problems
 - Better error diagnostics
 
 **Code Added**:
+
 ```bash
 # Validate command size to prevent truncation or argument limit issues
 # ARG_MAX on Linux is typically 128KB; allow commands up to 50KB encoded
@@ -222,14 +255,17 @@ fi
 ---
 
 ### ✅ 4. Improved File Descriptor Management in start-desktop.sh (LOW)
+
 **File**: `desktop/start-desktop.sh` (Lines 88-105)
 
 **Changes Made**:
+
 - ✓ Changed `read -r key value` to `read -r -u 3 key value`
 - ✓ Changed `done < "$STATE_FILE"` to `done 3< "$STATE_FILE"`
 - ✓ Explicitly manages file descriptor 3 instead of stdin
 
 **Benefits**:
+
 - Prevents potential issues with stdin redirection conflicts
 - Cleaner file descriptor handling
 - Better practice for shell scripting
@@ -241,22 +277,27 @@ fi
 ## Bugs NOT Fixed (Justification)
 
 ### Issue #4: Error Handling in mount-chroot.sh
+
 **Status**: ℹ️ Not fixed - By design
 **Reason**: The `set -e` with `|| true` fallback pattern is intentional. Some mount operations may fail but should not block the entire mounting process (e.g., binfmt_misc may not be available on all systems).
 
 ### Issue #5: Snapshot Path Traversal Validation
+
 **Status**: ⚠️ Requires investigation
 **Reason**: The `safe_name()` function wasn't visible in the code review. This needs manual verification by examining `core/snapshot.sh` in detail.
 
 ### Issue #7: Package Name Regex Strictness
+
 **Status**: ℹ️ Low priority
 **Reason**: Current regex follows Debian package naming conventions. The `+` character is actually valid in Debian package names (e.g., `gcc++-11`).
 
 ### Issue #8: Hardcoded Path Validation
+
 **Status**: ℹ️ Design decision
 **Reason**: Hardcoding the path ensures security and prevents accidental mounting of wrong directories. This is intentional for system safety.
 
 ### Issue #9: Missing Error Messages
+
 **Status**: ℹ️ Would improve diagnostics
 **Reason**: Low priority; requires careful balance between verbosity and output clarity.
 
@@ -267,17 +308,20 @@ fi
 1. **Test Case 1**: Run `asl overview` to verify fixes don't break basic functionality ✓ PASSED
 
 2. **Test Case 2**: Verify mount-chroot path handling:
+
    ```bash
    asl start  # Will fail as Debian not installed, but path handling should work
    ```
 
 3. **Test Case 3**: Test process manager with actual processes:
+
    ```bash
    asl ps
    # Try to terminate a process and verify it checks existence first
    ```
 
 4. **Test Case 4**: Test command size limits:
+
    ```bash
    asl exec echo "This should work"
    asl exec $(python3 -c "print('x' * 50000)")  # Should fail gracefully
@@ -290,7 +334,7 @@ fi
 ## Summary
 
 | Issue | Severity | Status | Impact |
-|-------|----------|--------|--------|
+| ------- | ---------- | -------- | -------- |
 | Unquoted variables | 🔴 HIGH | ✅ FIXED | Improved shell robustness |
 | Race condition | 🟠 MEDIUM | ✅ FIXED | Safer process termination |
 | Command size validation | 🟠 MEDIUM | ✅ FIXED | Better error handling |
