@@ -264,9 +264,10 @@ show_help() {
     echo ""
     echo "AI & 24/7 Service Hub:"
     echo "  service [act]    24/7 Service Manager & Boot Autostart (start|stop|restart|check|loop|enable|disable|status)"
-    echo "  omniroute [act]  OmniRoute Local Multi-Model AI Proxy (start|stop|restart|logs|status)"
+    echo "  omniroute [act]  OmniRoute Local Multi-Model AI Proxy (start|stop|restart|update|logs|status)"
     echo "  dsh [act]        DeepSeek Harness Browser UI & Engine (start|stop|restart|logs|token|status)"
-    echo "  openclaude       Setup & configure OpenClaude agentic environment with memory & web search"
+    echo "  openclaude [act] OpenClaude AI agent environment (setup|update|status)"
+    echo "  ai-update [act]  Auto-update OmniRoute & OpenClaude to latest npm releases (all|check|omni|claude)"
     echo "  ps, top          Interactive Process & Resource Manager"
     echo ""
     echo ""
@@ -1897,6 +1898,9 @@ case "${1:-}" in
                     echo "[✓] OmniRoute restarted."
                 fi
                 ;;
+            update|upgrade)
+                bash "$ASL_DIR/core/ai-updater.sh" omniroute 1
+                ;;
             logs|log)
                 if [ -f /data/data/com.termux/files/home/omniroute.log ]; then
                     tail -n 50 /data/data/com.termux/files/home/omniroute.log
@@ -2158,7 +2162,24 @@ case "${1:-}" in
         ;;
     openclaude|claude)
         shift
-        bash "$ASL_DIR/core/openclaude-setup.sh" "$@"
+        SUB_CLAUDE="${1:-setup}"
+        case "$SUB_CLAUDE" in
+            update|upgrade)
+                bash "$ASL_DIR/core/ai-updater.sh" openclaude 1
+                ;;
+            status|check)
+                echo "=== OpenClaude Status ==="
+                echo " Version: $(openclaude --version 2>/dev/null || echo 'not installed')"
+                echo " Config:  $HOME/.openclaude/settings.json"
+                ;;
+            setup|install|*)
+                bash "$ASL_DIR/core/openclaude-setup.sh" "$@"
+                ;;
+        esac
+        ;;
+    ai-update|ai-updater|ai-upgrade)
+        shift
+        bash "$ASL_DIR/core/ai-updater.sh" "$@"
         ;;
     aid|gids)
         shift

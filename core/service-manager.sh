@@ -819,6 +819,14 @@ asl_service_check() {
         fi
     fi
 
+    # 12. AI CLI auto-update (OmniRoute / OpenClaude) -- delegated to ai-updater.sh,
+    # which self-gates on a 12h stamp and runs detached so npm never blocks the check.
+    local ai_upd_bin="${PREFIX:-/data/data/com.termux/files/usr}/share/asl/core/ai-updater.sh"
+    [ -f "$ai_upd_bin" ] || ai_upd_bin="${HOME:-/data/data/com.termux/files/home}/ASL/core/ai-updater.sh"
+    if [ -f "$ai_upd_bin" ]; then
+        bash "$ai_upd_bin" watchdog >/dev/null 2>&1 || true
+    fi
+
     if [ "$healed" -eq 0 ]; then
         echo "[✓] All 24/7 background services are healthy and running."
     else

@@ -22,9 +22,21 @@ fi
 if ! command -v openclaude >/dev/null 2>&1; then
     echo -e "\033[0;32m[*] Installing OpenClaude CLI (@gitlawb/openclaude)...\033[0m"
     npm install -g @gitlawb/openclaude --force 2>/dev/null || true
+else
+    # Already installed: upgrade only when the registry has a newer version.
+    # Never run this unconditionally -- it would rewrite global npm state on
+    # every setup invocation.
+    oc_have=$(openclaude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    oc_want=$(npm view @gitlawb/openclaude version 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$oc_have" ] && [ -n "$oc_want" ] && [ "$oc_have" != "$oc_want" ]; then
+        echo -e "\033[0;32m[*] Updating OpenClaude CLI ($oc_have -> $oc_want)...\033[0m"
+        npm install -g @gitlawb/openclaude --force 2>/dev/null || true
+    else
+        echo -e "\033[0;32m[*] OpenClaude CLI is up to date ($oc_have).\033[0m"
+    fi
 fi
 
-# 3. Configure ~/.openclaude/settings.json with Infinite Turns, Memory & Full Permissions
+# 3. Configure ~/.openclaude/settings.json with turn limit, Memory & Full Permissions
 mkdir -p "$OPENCLAUDE_CONF_DIR"
 
 if [ -f "$SETTINGS_FILE" ]; then
@@ -49,7 +61,13 @@ if os.path.exists(config_path):
 if "env" not in data or not isinstance(data["env"], dict):
     data["env"] = {}
 
-data["env"]["OPENCLAUDE_MAX_TURNS"] = "0"
+# Turn limit. NOTE: a value of "0" is silently rejected by the CLI parser
+# (parsePositiveTurnEnv requires > 0) and falls back to the 50-turn default.
+# Use a real positive value; unlimited requires the --max-turns 0 CLI flag.
+data["env"]["OPENCLAUDE_MAX_TURNS"] = "500"
+data["env"]["CLAUDE_CODE_MAX_TURNS"] = "500"
+# Fire auto-compact near 90k tokens instead of at the full context window.
+data["env"].setdefault("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "8.57")
 data["env"]["ENABLE_FREE_WEB_SEARCH"] = "1"
 
 # Permissions & auto-memory
@@ -75,4 +93,4 @@ if [ -f "$SCRIPT_DIR/tools/free-web-search.py" ]; then
     chmod +x "$SCRIPT_DIR/tools/free-web-search.py" 2>/dev/null || true
 fi
 
-echo -e "\033[0;32m[✓] OpenClaude AI environment configured: Memory ENABLED, Infinite Turns ENABLED, Web Search ENABLED.\033[0m"
+echo -e "\033[0;32m[✓] OpenClaude AI environment configured: Memory ENABLED, 500-turn limit, Web Search ENABLED.\033[0m"
