@@ -49,7 +49,7 @@ asl_benchmark_run() {
     # 2. 3D Graphics & OpenGL Rendering Benchmark
     echo "3D Graphics & OpenGL Pipeline:"
     local x11_active=0
-    if [ -S "${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0" ] || [ -S "/tmp/.X11-unix/X0" ] || pgrep -f "termux-x11" >/dev/null 2>&1; then
+    if pgrep -f "termux-x11.*:[0-9]" >/dev/null 2>&1 && ([ -S "${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/.X11-unix/X0" ] || [ -S "/tmp/.X11-unix/X0" ]); then
         x11_active=1
     fi
 
