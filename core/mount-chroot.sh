@@ -95,9 +95,18 @@ asl_exec "
         domount_bind /proc/sys/fs/binfmt_misc \"$DEBIANPATH/proc/sys/fs/binfmt_misc\"
     fi
 
-    if [ \"${ASL_MOUNT_SDCARD:-1}\" = \"1\" ] && [ -d /sdcard ]; then
-        domount_bind /sdcard \"$DEBIANPATH/sdcard\"
-        domount_bind /sdcard \"$DEBIANPATH/storage/emulated/0\"
+    if [ \"${ASL_MOUNT_SDCARD:-1}\" = \"1\" ]; then
+        local sd_src=\"/data/media/0\"
+        if [ ! -d \"\$sd_src\" ]; then
+            sd_src=\"/mnt/pass_through/0/emulated/0\"
+        fi
+        if [ ! -d \"\$sd_src\" ]; then
+            sd_src=\"/sdcard\"
+        fi
+        if [ -d \"\$sd_src\" ]; then
+            domount_bind \"\$sd_src\" \"$DEBIANPATH/sdcard\"
+            domount_bind \"\$sd_src\" \"$DEBIANPATH/storage/emulated/0\"
+        fi
     fi
 
     if [ -d /data/data/com.termux ]; then
