@@ -4,7 +4,7 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd || echo "$HOME/ASL")"
 TARGET_DIR="$HOME/ASL"
 
 RED='\033[0;31m'
@@ -410,9 +410,10 @@ if [ "$INSTALL_DESKTOP" != "no" ] && [ "$DISTRO_TYPE" != "skip" ]; then
     esac
 fi
 
-echo -e "${GREEN}[*] Provisioning OpenClaude AI agent environment...${RESET}"
-if [ -f "$INSTALL_DIR/core/openclaude-setup.sh" ]; then
-    bash "$INSTALL_DIR/core/openclaude-setup.sh" || true
+# 8. Service Autostart & Boot Integration
+echo -e "${GREEN}[*] Provisioning 24/7 background service autostart & Termux:Boot...${RESET}"
+if [ -f "$INSTALL_DIR/core/service-manager.sh" ]; then
+    bash "$INSTALL_DIR/core/service-manager.sh" enable || true
 fi
 
 # Synchronize dynamic environment
