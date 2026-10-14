@@ -182,10 +182,11 @@ asl_service_start() {
     fi
 
     # 4cc. Check & restore Hermes Dashboard on port 9119
-    if ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
-        if [ -x "/usr/local/bin/hermes-daemon.sh" ] || [ -f "/usr/local/bin/hermes" ]; then
+    local hermes_dash_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
+    if [ -f "$hermes_dash_bin" ]; then
+        if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
             echo "[*] Starting Hermes Dashboard on port 9119..."
-            asl_exec "nohup /usr/local/bin/hermes dashboard --port 9119 --host 127.0.0.1 --no-open --skip-build >> /root/.hermes/logs/dashboard.log 2>&1 &" 2>/dev/null || true
+            (cd "$TERMUX_HOME" && nohup bash "$hermes_dash_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
         fi
     fi
 
@@ -676,10 +677,11 @@ asl_service_check() {
     fi
 
     # 5ab. Hermes Dashboard Check (port 9119)
-    if ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
-        if [ -x "/usr/local/bin/hermes-daemon.sh" ] || [ -f "/usr/local/bin/hermes" ]; then
+    local hermes_dash_chk="$TERMUX_HOME/hermes-dashboard-daemon.sh"
+    if [ -f "$hermes_dash_chk" ]; then
+        if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
             echo "[!] Hermes Dashboard daemon down — restarting on port 9119..."
-            asl_exec "nohup /usr/local/bin/hermes dashboard --port 9119 --host 127.0.0.1 --no-open --skip-build >> /root/.hermes/logs/dashboard.log 2>&1 &" 2>/dev/null || true
+            (cd "$TERMUX_HOME" && nohup bash "$hermes_dash_chk" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
             healed=$((healed + 1))
         fi
     fi
@@ -916,6 +918,17 @@ asl_service_stop_one() {
             _asl_pkill_real "ttyd"
             echo "[✓] Web Terminal stopped."
             ;;
+        hermes|hermes-dashboard|hermes-dash)
+            echo "[*] Stopping Hermes Dashboard on port 9119..."
+            _asl_pkill_real "hermes dashboard"
+            asl_exec "pkill -f 'hermes dashboard' 2>/dev/null || true" 2>/dev/null || true
+            echo "[✓] Hermes Dashboard stopped."
+            ;;
+        hermes-gateway|hermes-gw)
+            echo "[*] Stopping Hermes Messaging Gateway..."
+            asl_exec "/usr/local/bin/hermes gateway stop 2>/dev/null || pkill -f 'hermes.*gateway' 2>/dev/null || true" 2>/dev/null || true
+            echo "[✓] Hermes Messaging Gateway stopped."
+            ;;
         ssh|sshd)
             echo "[*] Stopping SSH server..."
             if [ -f "$remote_script" ]; then
@@ -1046,6 +1059,28 @@ asl_service_start_one() {
                 echo "[✓] Web Terminal (ttyd) started on port 4096."
             else
                 echo "[!] Error: ttyd / web-terminal-daemon.sh not found."
+            fi
+            ;;
+        hermes|hermes-dashboard|hermes-dash)
+            echo "[*] Starting Hermes Dashboard on port 9119..."
+            local hd_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
+            if [ -f "$hd_bin" ]; then
+                (cd "$TERMUX_HOME" && nohup bash "$hd_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
+                sleep 2
+                echo "[✓] Hermes Dashboard started on port 9119."
+            else
+                echo "[!] Error: hermes-dashboard-daemon.sh not found."
+            fi
+            ;;
+        hermes-gateway|hermes-gw)
+            echo "[*] Starting Hermes Messaging Gateway..."
+            local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
+            if [ -f "$hg_bin" ]; then
+                (cd "$TERMUX_HOME" && nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 &)
+                sleep 2
+                echo "[✓] Hermes Messaging Gateway started."
+            else
+                echo "[!] Error: hermes-gateway-daemon.sh not found."
             fi
             ;;
         ssh|sshd)
