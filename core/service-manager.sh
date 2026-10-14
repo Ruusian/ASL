@@ -181,6 +181,14 @@ asl_service_start() {
         fi
     fi
 
+    # 4cc. Check & restore Hermes Dashboard on port 9119
+    if ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
+        if [ -x "/usr/local/bin/hermes-daemon.sh" ] || [ -f "/usr/local/bin/hermes" ]; then
+            echo "[*] Starting Hermes Dashboard on port 9119..."
+            asl_exec "nohup /usr/local/bin/hermes dashboard --port 9119 --host 127.0.0.1 --no-open --skip-build >> /root/.hermes/logs/dashboard.log 2>&1 &" 2>/dev/null || true
+        fi
+    fi
+
     # 4d. Oracle VPS 2 (144.24.122.241) AI, Web Terminal & Dashboard Tunnel
     local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
     if [ -f "$vps2_key" ]; then
@@ -199,7 +207,7 @@ asl_service_start() {
                 -R 20128:127.0.0.1:20128 \
                 -R 4096:127.0.0.1:4096 \
                 -R 9119:127.0.0.1:9119 \
-                -R 18080:127.0.0.1:8080 \
+                -R 18080:127.0.0.1:4173 \
                 -R 3080:127.0.0.1:3080 \
                 ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
         fi
@@ -516,6 +524,18 @@ asl_service_status() {
         echo " DeepSeek Harness: INACTIVE"
     fi
 
+    local hermes_pid hermes_mem
+    hermes_pid=$(_asl_pgrep_first "hermes dashboard")
+    [ -z "$hermes_pid" ] && hermes_pid=$(_asl_pgrep_first "hermes dashboard" root)
+    if [ -n "$hermes_pid" ]; then
+        hermes_mem=$(fmt_mem "$hermes_pid")
+        echo " Hermes Dashboard: ACTIVE (Port 9119, PID: $hermes_pid, RAM: $hermes_mem)"
+    elif (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
+        echo " Hermes Dashboard: ACTIVE (Port 9119)"
+    else
+        echo " Hermes Dashboard: INACTIVE"
+    fi
+
     local loop_pid loop_mem
     loop_pid=$(_asl_pgrep_first "asl-watchdog-loop")
     if [ -n "$loop_pid" ]; then
@@ -655,6 +675,15 @@ asl_service_check() {
         fi
     fi
 
+    # 5ab. Hermes Dashboard Check (port 9119)
+    if ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
+        if [ -x "/usr/local/bin/hermes-daemon.sh" ] || [ -f "/usr/local/bin/hermes" ]; then
+            echo "[!] Hermes Dashboard daemon down — restarting on port 9119..."
+            asl_exec "nohup /usr/local/bin/hermes dashboard --port 9119 --host 127.0.0.1 --no-open --skip-build >> /root/.hermes/logs/dashboard.log 2>&1 &" 2>/dev/null || true
+            healed=$((healed + 1))
+        fi
+    fi
+
     # 5b. Oracle VPS 2 (144.24.122.241) AI, Web Terminal & Dashboard Tunnel Check
     local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
     if [ -f "$vps2_key" ]; then
@@ -673,7 +702,7 @@ asl_service_check() {
                 -R 20128:127.0.0.1:20128 \
                 -R 4096:127.0.0.1:4096 \
                 -R 9119:127.0.0.1:9119 \
-                -R 18080:127.0.0.1:8080 \
+                -R 18080:127.0.0.1:4173 \
                 -R 3080:127.0.0.1:3080 \
                 ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
             healed=$((healed + 1))
