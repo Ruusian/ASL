@@ -88,29 +88,29 @@ asl_swap_setup() {
     fi
 
     # Strict user limit: 5GB max total swap pool (5,242,880 KB)
-    local max_swap_kb=5242880
+    local max_swap_kb=4194304
 
     # If active swap is already at or above the 5GB cap (e.g. native zRAM),
     # strictly avoid creating or mounting any file swap image.
     if [ "$cur_total_kb" -ge "$max_swap_kb" ]; then
-        echo "[✓] Total swap pool already satisfies 5GB limit ($((cur_total_kb / 1024))MB active). No file swap needed."
+        echo "[✓] Total swap pool already satisfies 4GB limit ($((cur_total_kb / 1024))MB active). No file swap needed."
         # If an unnecessary loop/file swap device is active alongside zRAM, clean it up
         if grep -q "asl_swap\|/data/local/tmp" /proc/swaps 2>/dev/null || su -c "cat /proc/swaps" 2>/dev/null | grep -q "asl_swap\|/data/local/tmp"; then
-            echo "[*] Cleaning up redundant file swap to strictly adhere to 5GB limit..."
+            echo "[*] Cleaning up redundant file swap to strictly adhere to 4GB limit..."
             asl_swap_cleanup >/dev/null 2>&1 || true
         fi
         return 0
     fi
 
     # User cap: 4GB max total swap (2026-10-10). Override with ASL_SWAP_SIZE.
-    local target_size="${1:-${ASL_SWAP_SIZE:-4G}}"
+    local target_size="${1:-${ASL_SWAP_SIZE:-2G}}"
     echo "[*] Setting up $target_size virtual swap pool & memory optimization..."
 
     local swapfile="/data/local/tmp/asl_swap.img"
     if [ ! -f "$swapfile" ]; then
         echo "[*] Creating $target_size swap image..."
-        su -c "swapoff -a 2>/dev/null || true" 2>/dev/null || swapoff -a 2>/dev/null || true
-        su -c "fallocate -l $target_size '$swapfile' || dd if=/dev/zero of='$swapfile' bs=1M count=3072" 2>/dev/null || fallocate -l $target_size "$swapfile" 2>/dev/null || dd if=/dev/zero of="$swapfile" bs=1M count=3072 2>/dev/null || true
+        # Never run swapoff -a globally: decompressing gigabytes of live zRAM causes kernel OOM crash
+        su -c "fallocate -l $target_size '$swapfile' || dd if=/dev/zero of='$swapfile' bs=1M count=2048" 2>/dev/null || fallocate -l $target_size "$swapfile" 2>/dev/null || dd if=/dev/zero of="$swapfile" bs=1M count=2048 2>/dev/null || true
         su -c "chmod 600 '$swapfile' && mkswap '$swapfile'" 2>/dev/null || (chmod 600 "$swapfile" && mkswap "$swapfile") 2>/dev/null || true
         echo "[✓] $target_size swap image created."
     fi

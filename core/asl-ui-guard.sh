@@ -1,7 +1,7 @@
 #!/bin/bash
 # ASL Autonomous UI Guard Daemon
 # Actively monitors and enforces:
-# 1. 90° Forced Landscape lock (accelerometer=0, user_rotation=1) at 0.2s intervals.
+# 1. 90° Forced Landscape lock (accelerometer=0, user_rotation=1) at 1.5s intervals (optimized CPU/battery).
 # 2. Zero-gap Keyboard Bar overlay (config_imeDrawsImeNavBar=false) auto-persistence.
 
 TERMUX_HOME="${TERMUX_HOME:-/data/data/com.termux/files/home}"
@@ -62,7 +62,7 @@ run_loop() {
             fi
         fi
 
-        sleep 0.2
+        sleep 1.5
     done
 }
 
@@ -93,7 +93,7 @@ start_guard() {
     [ -z "$actual_pid" ] && actual_pid="$lpid"
     echo "$actual_pid" > "$PID_FILE" 2>/dev/null || true
     chmod 666 "$PID_FILE" 2>/dev/null || true
-    echo "[✓] ASL UI Guard daemon ACTIVE (PID: $actual_pid, Polling: 0.2s)."
+    echo "[✓] ASL UI Guard daemon ACTIVE (PID: $actual_pid, Polling: 1.5s)."
 }
 
 stop_guard() {
@@ -111,7 +111,7 @@ status_guard() {
     pid=$(_host_cmd "pgrep -f '[a]sl-ui-guard.sh run_loop'" 2>/dev/null | head -1)
     if [ -n "$pid" ]; then
         echo "$pid" > "$PID_FILE" 2>/dev/null || true
-        echo " UI Guard:        ACTIVE (PID: $pid, 0.2s Rotation + Keyboard Spacing Enforced)"
+        echo " UI Guard:        ACTIVE (PID: $pid, 1.5s Rotation + Keyboard Spacing Enforced)"
         return 0
     fi
     echo " UI Guard:        INACTIVE"
