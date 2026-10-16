@@ -181,12 +181,14 @@ asl_service_start() {
         fi
     fi
 
-    # 4cc. Check & restore Hermes Dashboard on port 9119
-    local hermes_dash_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
-    if [ -f "$hermes_dash_bin" ]; then
-        if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
-            echo "[*] Starting Hermes Dashboard on port 9119..."
-            (cd "$TERMUX_HOME" && nohup bash "$hermes_dash_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
+    # 4cc. Check & restore Hermes Dashboard on port 9119 (only if state enabled)
+    if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-hermes-dashboard.state" ]; then
+        local hermes_dash_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
+        if [ -f "$hermes_dash_bin" ]; then
+            if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
+                echo "[*] Starting Hermes Dashboard on port 9119..."
+                (cd "$TERMUX_HOME" && nohup bash "$hermes_dash_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
+            fi
         fi
     fi
 
@@ -676,13 +678,15 @@ asl_service_check() {
         fi
     fi
 
-    # 5ab. Hermes Dashboard Check (port 9119)
-    local hermes_dash_chk="$TERMUX_HOME/hermes-dashboard-daemon.sh"
-    if [ -f "$hermes_dash_chk" ]; then
-        if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
-            echo "[!] Hermes Dashboard daemon down — restarting on port 9119..."
-            (cd "$TERMUX_HOME" && nohup bash "$hermes_dash_chk" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
-            healed=$((healed + 1))
+    # 5ab. Hermes Dashboard Check (port 9119) - only if explicitly started
+    if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-hermes-dashboard.state" ]; then
+        local hermes_dash_chk="$TERMUX_HOME/hermes-dashboard-daemon.sh"
+        if [ -f "$hermes_dash_chk" ]; then
+            if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
+                echo "[!] Hermes Dashboard daemon down — restarting on port 9119..."
+                (cd "$TERMUX_HOME" && nohup bash "$hermes_dash_chk" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
+                healed=$((healed + 1))
+            fi
         fi
     fi
 
@@ -1063,6 +1067,7 @@ asl_service_start_one() {
             ;;
         hermes|hermes-dashboard|hermes-dash)
             echo "[*] Starting Hermes Dashboard on port 9119..."
+            touch "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-hermes-dashboard.state"
             local hd_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
             if [ -f "$hd_bin" ]; then
                 (cd "$TERMUX_HOME" && nohup bash "$hd_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
