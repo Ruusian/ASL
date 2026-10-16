@@ -13,6 +13,23 @@ BOOT_DIR="$TERMUX_HOME/.termux/boot"
 BOOT_SCRIPT="$BOOT_DIR/00-asl-autostart.sh"
 BASHRC="$TERMUX_HOME/.bashrc"
 
+# User Intent Registry: tracks services intentionally stopped by the user
+ASL_STOPPED_DIR="${TERMUX_HOME}/.asl/stopped_services"
+mkdir -p "$ASL_STOPPED_DIR" 2>/dev/null || true
+
+_asl_is_stopped() {
+    [ -f "$ASL_STOPPED_DIR/$1" ]
+}
+
+_asl_mark_stopped() {
+    mkdir -p "$ASL_STOPPED_DIR" 2>/dev/null || true
+    touch "$ASL_STOPPED_DIR/$1"
+}
+
+_asl_clear_stopped() {
+    rm -f "$ASL_STOPPED_DIR/$1" 2>/dev/null || true
+}
+
 # --- Reliable process detection helpers ---
 # pgrep -f matches kernel threads (irq/*, msm_watchdog) and shell snapshots.
 # These helpers filter to real userspace processes only.
@@ -504,6 +521,10 @@ asl_service_status() {
     if [ -n "$omni_pid" ]; then
         omni_mem=$(fmt_mem "$omni_pid")
         echo " Omniroute Proxy: ACTIVE (Port 20128, PID: $omni_pid, RAM: $omni_mem)"
+    elif _asl_is_stopped "omniroute"; then
+        echo " Omniroute Proxy: STOPPED (User Intended)"
+    else
+        echo " Omniroute Proxy: INACTIVE"
     fi
 
     local web_pid web_mem
@@ -511,6 +532,8 @@ asl_service_status() {
     if [ -n "$web_pid" ]; then
         web_mem=$(fmt_mem "$web_pid")
         echo " Web Terminal:   ACTIVE (Port 4096, PID: $web_pid, RAM: $web_mem)"
+    elif _asl_is_stopped "web"; then
+        echo " Web Terminal:   STOPPED (User Intended)"
     else
         echo " Web Terminal:   INACTIVE"
     fi
@@ -521,6 +544,8 @@ asl_service_status() {
     if [ -n "$dsh_pid" ]; then
         dsh_mem=$(fmt_mem "$dsh_pid")
         echo " DeepSeek Harness: ACTIVE (Port 3080, PID: $dsh_pid, RAM: $dsh_mem)"
+    elif _asl_is_stopped "dsh"; then
+        echo " DeepSeek Harness: STOPPED (User Intended)"
     elif (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/3080') 2>/dev/null; then
         echo " DeepSeek Harness: ACTIVE (Port 3080)"
     else
@@ -533,10 +558,23 @@ asl_service_status() {
     if [ -n "$hermes_pid" ]; then
         hermes_mem=$(fmt_mem "$hermes_pid")
         echo " Hermes Dashboard: ACTIVE (Port 9119, PID: $hermes_pid, RAM: $hermes_mem)"
+    elif _asl_is_stopped "hermes-dashboard"; then
+        echo " Hermes Dashboard: STOPPED (User Intended)"
     elif (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
         echo " Hermes Dashboard: ACTIVE (Port 9119)"
     else
-        echo " Hermes Dashboard: INACTIVE"
+        echo " Hermes Dashboard: INACTIVE (On-Demand)"
+    fi
+
+    local gw_pid gw_mem
+    gw_pid=$(_asl_pgrep_first "hermes gateway run" root)
+    if [ -n "$gw_pid" ] || su -c "test -S /data/local/tmp/chrootDebian/root/.hermes/gateway.sock" 2>/dev/null; then
+        [ -n "$gw_pid" ] && gw_mem=$(fmt_mem "$gw_pid")
+        echo " Hermes Gateway:   ACTIVE (Telegram Bot Connected, PID: ${gw_pid:-socket}, RAM: ${gw_mem:-active})"
+    elif _asl_is_stopped "hermes-gateway"; then
+        echo " Hermes Gateway:   STOPPED (User Intended)"
+    else
+        echo " Hermes Gateway:   INACTIVE"
     fi
 
     local loop_pid loop_mem
@@ -628,6 +666,7 @@ asl_service_check() {
     fi
 
     # 5. OmniRoute Local AI Proxy Check
+    if ! _asl_is_stopped "omniroute"; then
     local omni_chk=""
     if [ -f "$TERMUX_HOME/omniroute-daemon.sh" ]; then
         omni_chk="$TERMUX_HOME/omniroute-daemon.sh"
@@ -643,8 +682,10 @@ asl_service_check() {
             healed=$((healed + 1))
         fi
     fi
+    fi
 
     # 5a. Web Terminal Dashboard Check (ttyd on port 4096)
+    if ! _asl_is_stopped "web"; then
     local web_chk=""
     if [ -f "$TERMUX_HOME/web-terminal-daemon.sh" ]; then
         web_chk="$TERMUX_HOME/web-terminal-daemon.sh"
@@ -662,8 +703,10 @@ asl_service_check() {
             healed=$((healed + 1))
         fi
     fi
+    fi
 
     # 5aa. DeepSeek Harness (dsh) Check (port 3080)
+    if ! _asl_is_stopped "dsh"; then
     local dsh_chk=""
     if [ -f "$TERMUX_HOME/dsh-daemon.sh" ]; then
         dsh_chk="$TERMUX_HOME/dsh-daemon.sh"
@@ -677,16 +720,23 @@ asl_service_check() {
             healed=$((healed + 1))
         fi
     fi
+    fi
 
-    # 5ab. Hermes Dashboard Check (port 9119) - only if explicitly started
-    if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-hermes-dashboard.state" ]; then
-        local hermes_dash_chk="$TERMUX_HOME/hermes-dashboard-daemon.sh"
-        if [ -f "$hermes_dash_chk" ]; then
-            if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
-                echo "[!] Hermes Dashboard daemon down — restarting on port 9119..."
-                (cd "$TERMUX_HOME" && nohup bash "$hermes_dash_chk" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
-                healed=$((healed + 1))
+    # 5ab. Hermes Messaging Gateway Check (24/7 Companion)
+    if ! _asl_is_stopped "hermes-gateway"; then
+        local gw_alive=0
+        if su -c "test -S /data/local/tmp/chrootDebian/root/.hermes/gateway.sock" 2>/dev/null || [ -n "$(_asl_pgrep_first "hermes gateway run" root)" ]; then
+            gw_alive=1
+        fi
+        if [ "$gw_alive" -eq 0 ]; then
+            echo "[!] Hermes Messaging Gateway down — restarting 24/7 companion..."
+            local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
+            if [ -f "$hg_bin" ]; then
+                (cd "$TERMUX_HOME" && nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 &)
+            else
+                asl_exec "nohup /usr/local/bin/hermes gateway run >> /root/.hermes/logs/gateway.log 2>&1 &" 2>/dev/null || true
             fi
+            healed=$((healed + 1))
         fi
     fi
 
@@ -905,22 +955,25 @@ asl_service_stop_one() {
     case "$svc" in
         dsh|deepseek|deepseek-harness)
             echo "[*] Stopping DeepSeek Harness daemon..."
+            _asl_mark_stopped "dsh"
             _asl_pkill_real "dsh-daemon"
             _asl_pkill_real "apps/cli/src/bin.ts"
             _asl_pkill_real "dsh"
-            echo "[✓] DeepSeek Harness stopped."
+            echo "[✓] DeepSeek Harness stopped (Watchdog paused for this service)."
             ;;
         omniroute|omni)
             echo "[*] Stopping OmniRoute AI proxy..."
+            _asl_mark_stopped "omniroute"
             _asl_pkill_real "omniroute-daemon"
             _asl_pkill_real "omniroute serve"
             _asl_pkill_real "omniroute"
-            echo "[✓] OmniRoute stopped."
+            echo "[✓] OmniRoute stopped (Watchdog paused for this service)."
             ;;
         web|terminal|web-terminal|opencode|code)
             echo "[*] Stopping Web Terminal daemon..."
+            _asl_mark_stopped "web"
             _asl_pkill_real "ttyd"
-            echo "[✓] Web Terminal stopped."
+            echo "[✓] Web Terminal stopped (Watchdog paused for this service)."
             ;;
         hermes|hermes-dashboard|hermes-dash)
             echo "[*] Stopping Hermes Dashboard on port 9119..."
@@ -930,8 +983,9 @@ asl_service_stop_one() {
             ;;
         hermes-gateway|hermes-gw)
             echo "[*] Stopping Hermes Messaging Gateway..."
+            _asl_mark_stopped "hermes-gateway"
             asl_exec "/usr/local/bin/hermes gateway stop 2>/dev/null || pkill -f 'hermes.*gateway' 2>/dev/null || true" 2>/dev/null || true
-            echo "[✓] Hermes Messaging Gateway stopped."
+            echo "[✓] Hermes Messaging Gateway stopped (Watchdog paused for this service)."
             ;;
         ssh|sshd)
             echo "[*] Stopping SSH server..."
@@ -1019,6 +1073,7 @@ asl_service_start_one() {
     case "$svc" in
         dsh|deepseek|deepseek-harness)
             echo "[*] Starting DeepSeek Harness on port 3080..."
+            _asl_clear_stopped "dsh" 
             local dsh_bin=""
             if [ -f "$TERMUX_HOME/dsh-daemon.sh" ]; then
                 dsh_bin="$TERMUX_HOME/dsh-daemon.sh"
@@ -1034,6 +1089,7 @@ asl_service_start_one() {
             ;;
         omniroute|omni)
             echo "[*] Starting OmniRoute AI proxy..."
+            _asl_clear_stopped "omniroute" 
             local omni_bin=""
             if [ -f "$TERMUX_HOME/omniroute-daemon.sh" ]; then
                 omni_bin="$TERMUX_HOME/omniroute-daemon.sh"
@@ -1049,6 +1105,7 @@ asl_service_start_one() {
             ;;
         web|terminal|web-terminal|opencode|code)
             echo "[*] Starting Web Terminal on port 4096..."
+            _asl_clear_stopped "web" 
             local web_bin=""
             if [ -f "$TERMUX_HOME/web-terminal-daemon.sh" ]; then
                 web_bin="$TERMUX_HOME/web-terminal-daemon.sh"
@@ -1067,6 +1124,7 @@ asl_service_start_one() {
             ;;
         hermes|hermes-dashboard|hermes-dash)
             echo "[*] Starting Hermes Dashboard on port 9119..."
+            _asl_clear_stopped "hermes-dashboard" 
             touch "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-hermes-dashboard.state"
             local hd_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
             if [ -f "$hd_bin" ]; then
@@ -1079,6 +1137,7 @@ asl_service_start_one() {
             ;;
         hermes-gateway|hermes-gw)
             echo "[*] Starting Hermes Messaging Gateway..."
+            _asl_clear_stopped "hermes-gateway" 
             local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
             if [ -f "$hg_bin" ]; then
                 (cd "$TERMUX_HOME" && nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 &)
