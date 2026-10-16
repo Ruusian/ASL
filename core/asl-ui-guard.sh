@@ -62,6 +62,24 @@ run_loop() {
             fi
         fi
 
+        # 3. Permanent Airplane Mode Lockout & Quick Settings Tile Removal
+        if [ "$tick" -eq 5 ]; then
+            local air_mode
+            air_mode=$(_host_cmd "settings get global airplane_mode_on" 2>/dev/null | tr -d "[:space:]")
+            if [ "$air_mode" = "1" ]; then
+                _host_cmd "settings put global airplane_mode_on 0; cmd connectivity airplane-mode disable" 2>/dev/null || true
+            fi
+            local cur_tiles
+            cur_tiles=$(_host_cmd "cmd settings get --user 0 secure sysui_qs_tiles" 2>/dev/null | tr -d "[:space:]")
+            if echo "$cur_tiles" | grep -q "airplane"; then
+                _host_cmd "cmd statusbar set-tiles 'internet,bt,flashlight,dnd,alarm,nfc,rotation,battery,controls,wallet,cast,screenrecord'" 2>/dev/null || true
+            fi
+            local air_radios
+            air_radios=$(_host_cmd "settings get global airplane_mode_radios" 2>/dev/null | tr -d "[:space:]")
+            if [ -n "$air_radios" ]; then
+                _host_cmd "settings put global airplane_mode_radios ''; settings put global airplane_mode_toggleable_radios ''" 2>/dev/null || true
+            fi
+        fi
         sleep 1.5
     done
 }

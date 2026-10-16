@@ -1698,6 +1698,38 @@ dashboard() {
 }
 
 case "${1:-}" in
+    cellular|mobile-data|cell|data)
+        shift
+        case "${1:-status}" in
+            enable|on|start)
+                echo "[*] Enabling Cellular Radio & Mobile Data..."
+                su -c "settings put global mobile_data 1; settings put global mobile_data_always_on 1" 2>/dev/null || true
+                echo "[✓] Cellular Mobile Data enabled."
+                ;;
+            disable|off|stop)
+                echo "[*] Disabling Cellular Radio & Mobile Data (saving RAM & power)..."
+                su -c "settings put global mobile_data 0; settings put global mobile_data_always_on 0" 2>/dev/null || true
+                echo "[✓] Cellular Mobile Data disabled (Wi-Fi/Ethernet prioritized)."
+                ;;
+            status|*)
+                m_data=$(su -c "settings get global mobile_data" 2>/dev/null | tr -d '[:space:]')
+                m_always=$(su -c "settings get global mobile_data_always_on" 2>/dev/null | tr -d '[:space:]')
+                echo "=== ASL Cellular Radio & Data Status ==="
+                if [ "$m_data" = "1" ]; then
+                    echo " Mobile Data:           ENABLED"
+                else
+                    echo " Mobile Data:           DISABLED (RAM & Battery Optimized)"
+                fi
+                if [ "$m_always" = "1" ]; then
+                    echo " Mobile Data Always-On: ENABLED"
+                else
+                    echo " Mobile Data Always-On: DISABLED (Modem sleeps on Wi-Fi)"
+                fi
+                echo ""
+                echo "Commands: asl cellular [enable|disable|status]"
+                ;;
+        esac
+        ;;
     exec-mode|execmode)
         shift
         echo "ASL Execution Mode: ROOT (native Linux chroot with hardware acceleration)"
