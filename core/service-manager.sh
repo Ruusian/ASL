@@ -209,19 +209,25 @@ asl_service_start() {
         fi
     fi
 
-    # 4d. Oracle VPS 2 (144.24.122.241) AI, Web Terminal & Dashboard Tunnel
+    # 4d. Oracle VPS 2 (144.24.122.241) Fast Auto-Reconnect Tunnel Supervisor
     local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
+    local vps2_daemon="$TERMUX_HOME/oracle_vps2_tunnel_daemon.sh"
     if [ -f "$vps2_key" ]; then
-        if ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
+        if [ -f "$vps2_daemon" ]; then
+            if ! pgrep -f "oracle_vps2_tunnel_daemon\.sh" >/dev/null 2>&1; then
+                echo "[*] Starting Oracle VPS2 (144.24.122.241) fast auto-reconnect tunnel supervisor..."
+                (cd "$TERMUX_HOME" && nohup bash "$vps2_daemon" >/dev/null 2>&1 &)
+            fi
+        elif ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
             echo "[*] Starting Oracle VPS2 (144.24.122.241) reverse tunnel..."
             nohup ssh -i "$vps2_key" -T -N \
                 -o BatchMode=yes \
                 -o PasswordAuthentication=no \
                 -o StrictHostKeyChecking=accept-new \
                 -o UserKnownHostsFile="$TERMUX_HOME/.ssh/known_hosts" \
-                -o ServerAliveInterval=10 \
-                -o ServerAliveCountMax=3 \
-                -o ConnectTimeout=10 \
+                -o ServerAliveInterval=5 \
+                -o ServerAliveCountMax=2 \
+                -o ConnectTimeout=5 \
                 -o ExitOnForwardFailure=yes \
                 -R 8022:127.0.0.1:8022 \
                 -R 20128:127.0.0.1:20128 \
@@ -740,19 +746,28 @@ asl_service_check() {
         fi
     fi
 
-    # 5b. Oracle VPS 2 (144.24.122.241) AI, Web Terminal & Dashboard Tunnel Check
+    # 5b. Oracle VPS 2 (144.24.122.241) Fast Auto-Reconnect Tunnel Supervisor Check
     local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
+    local vps2_daemon="$TERMUX_HOME/oracle_vps2_tunnel_daemon.sh"
     if [ -f "$vps2_key" ]; then
-        if ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
+        if [ -f "$vps2_daemon" ]; then
+            if ! pgrep -f "oracle_vps2_tunnel_daemon\.sh" >/dev/null 2>&1 || ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
+                echo "[!] Oracle VPS2 tunnel supervisor down — restoring fast auto-reconnect daemon..."
+                pkill -f "oracle_vps2_tunnel_daemon\.sh" 2>/dev/null || true
+                pkill -f "ssh.*144\.24\.122\.241" 2>/dev/null || true
+                (cd "$TERMUX_HOME" && nohup bash "$vps2_daemon" >/dev/null 2>&1 &)
+                healed=$((healed + 1))
+            fi
+        elif ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
             echo "[!] Oracle VPS2 (144.24.122.241) reverse tunnel down — restoring..."
             nohup ssh -i "$vps2_key" -T -N \
                 -o BatchMode=yes \
                 -o PasswordAuthentication=no \
                 -o StrictHostKeyChecking=accept-new \
                 -o UserKnownHostsFile="$TERMUX_HOME/.ssh/known_hosts" \
-                -o ServerAliveInterval=10 \
-                -o ServerAliveCountMax=3 \
-                -o ConnectTimeout=10 \
+                -o ServerAliveInterval=5 \
+                -o ServerAliveCountMax=2 \
+                -o ConnectTimeout=5 \
                 -o ExitOnForwardFailure=yes \
                 -R 8022:127.0.0.1:8022 \
                 -R 20128:127.0.0.1:20128 \
