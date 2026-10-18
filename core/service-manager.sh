@@ -969,6 +969,10 @@ asl_service_stop_one() {
     remote_script=$(asl_find_script "remote.sh")
     case "$svc" in
         dsh|deepseek|deepseek-harness)
+            if [ "${FORCE_STOP_DSH:-0}" != "1" ] && [ -n "$DSH_RUNNER_PID" ]; then
+                echo "[!] Protection active: Running inside an active DSH agent turn. Skipping self-kill to preserve web session."
+                return 0
+            fi
             echo "[*] Stopping DeepSeek Harness daemon..."
             _asl_mark_stopped "dsh"
             _asl_pkill_real "dsh-daemon"
