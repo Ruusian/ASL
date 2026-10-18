@@ -80,6 +80,24 @@ run_loop() {
                 _host_cmd "settings put global airplane_mode_radios ''; settings put global airplane_mode_toggleable_radios ''" 2>/dev/null || true
             fi
         fi
+        # 4. CPU Governor Persistence Lock (keeps Turbo / Powersave locked against PowerHAL resets)
+        if [ -f "$TERMUX_HOME/.asl/asl_mode_state" ]; then
+            local wanted_mode
+            wanted_mode=$(cat "$TERMUX_HOME/.asl/asl_mode_state" 2>/dev/null | tr -d "[:space:]")
+            if [ "$wanted_mode" = "performance" ] || [ "$wanted_mode" = "gpu" ] || [ "$wanted_mode" = "turbo" ]; then
+                local cur_gov
+                cur_gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null | tr -d "[:space:]")
+                if [ "$cur_gov" != "performance" ]; then
+                    _host_cmd 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$g" 2>/dev/null || true; done' 2>/dev/null || true
+                fi
+            elif [ "$wanted_mode" = "powersave" ]; then
+                local cur_gov
+                cur_gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null | tr -d "[:space:]")
+                if [ "$cur_gov" != "powersave" ]; then
+                    _host_cmd 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo powersave > "$g" 2>/dev/null || true; done' 2>/dev/null || true
+                fi
+            fi
+        fi
         sleep 1.5
     done
 }
