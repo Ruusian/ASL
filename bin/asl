@@ -2092,11 +2092,16 @@ case "${1:-}" in
                 asl_exec "echo performance > '$MODE_STATE'" 2>/dev/null || true
                 echo "[✓] Performance mode active: CPU governor set to performance."
                 ;;
-            balanced|normal)
+            balanced|normal|schedutil)
                 asl_exec 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > "$g" 2>/dev/null || echo powersave > "$g" 2>/dev/null || true; done' 2>/dev/null || true
                 asl_exec "rm -f '$MODE_STATE'" 2>/dev/null || true
                 unset TU_DEBUG
-                echo "[✓] Balanced profile active: CPU governor reset."
+                echo "[✓] Balanced profile active: CPU governor set to schedutil."
+                ;;
+            powersave|power|cool)
+                asl_exec 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo powersave > "$g" 2>/dev/null || true; done' 2>/dev/null || true
+                asl_exec "echo powersave > '$MODE_STATE'" 2>/dev/null || true
+                echo "[✓] Powersave profile active: CPU governor set to powersave."
                 ;;
             status|"")
                 GOV=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
@@ -2108,7 +2113,7 @@ case "${1:-}" in
                 fi
                 ;;
             *)
-                echo "Usage: asl mode [gpu|performance|balanced|status]"
+                echo "Usage: asl mode [performance|balanced|powersave|status]"
                 exit 1
                 ;;
         esac
