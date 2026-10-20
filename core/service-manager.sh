@@ -161,7 +161,7 @@ asl_service_start() {
         if [ -z "$(_asl_pgrep_first "omniroute")" ] && [ -z "$(_asl_pgrep_first "omniroute" root)" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
             echo "[*] Starting Omniroute local AI proxy on port 20128..."
             if [ -n "$omni_bin" ]; then
-                su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_bin'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
+                su -c "setsid ${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_bin' >> /data/data/com.termux/files/home/omniroute.log 2>&1 < /dev/null &" || true
             fi
         fi
     fi
@@ -683,7 +683,7 @@ asl_service_check() {
         if [ -z "$(_asl_pgrep_first "omniroute")" ] && [ -z "$(_asl_pgrep_first "omniroute" root)" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
             echo "[!] OmniRoute AI proxy down — starting as root..."
             if [ -n "$omni_chk" ]; then
-                su -c "${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_chk'" >> /data/data/com.termux/files/home/omniroute.log 2>&1 || true
+                su -c "setsid ${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_chk' >> /data/data/com.termux/files/home/omniroute.log 2>&1 < /dev/null &" || true
             fi
             healed=$((healed + 1))
         fi
