@@ -209,6 +209,23 @@ asl_service_start() {
         fi
     fi
 
+    # 4cd. Hermes Messaging Gateway (24/7 Companion)
+    if ! _asl_is_stopped "hermes-gateway"; then
+        local gw_alive=0
+        if su -c "test -S /data/local/tmp/chrootDebian/root/.hermes/gateway.sock" 2>/dev/null || [ -n "$(_asl_pgrep_first "hermes gateway run" root)" ]; then
+            gw_alive=1
+        fi
+        if [ "$gw_alive" -eq 0 ]; then
+            echo "[*] Starting Hermes Messaging Gateway (24/7 Companion)..."
+            local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
+            if [ -f "$hg_bin" ]; then
+                (cd "$TERMUX_HOME" && nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 &)
+            else
+                asl_exec "nohup /usr/local/bin/hermes gateway run >> /root/.hermes/logs/gateway.log 2>&1 &" 2>/dev/null || true
+            fi
+        fi
+    fi
+
     # 4d. Oracle VPS 2 (144.24.122.241) Fast Auto-Reconnect Tunnel Supervisor
     local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
     local vps2_daemon="$TERMUX_HOME/oracle_vps2_tunnel_daemon.sh"
@@ -624,6 +641,11 @@ asl_service_check() {
 
     local remote_script
     remote_script=$(asl_find_script "remote.sh")
+
+    # 0. Background Wake-Lock Assertion
+    if ! dumpsys power 2>/dev/null | grep -q 'termux:service-wakelock'; then
+        termux-wake-lock 2>/dev/null || true
+    fi
 
     # 1. SSH Server Check (process & socket probe)
     local ssh_alive=0
