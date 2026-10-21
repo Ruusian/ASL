@@ -439,6 +439,8 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$target_uid/bus
     fi
     xrandr --newmode "1280x720" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
     xrandr --addmode "$x_out" "1280x720" 2>/dev/null || xrandr --addmode screen "1280x720" 2>/dev/null || xrandr --addmode builtin "1280x720" 2>/dev/null || true
+    xrandr --newmode "1920x1080" 173.00 1920 2048 2248 2576 1080 1083 1088 1120 -hsync +vsync 2>/dev/null || true
+    xrandr --addmode "$x_out" "1920x1080" 2>/dev/null || xrandr --addmode screen "1920x1080" 2>/dev/null || xrandr --addmode builtin "1920x1080" 2>/dev/null || true
     xrandr --newmode "1600x900" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true
     xrandr --addmode "$x_out" "1600x900" 2>/dev/null || xrandr --addmode screen "1600x900" 2>/dev/null || xrandr --addmode builtin "1600x900" 2>/dev/null || true
     xrandr --newmode "1366x768" 85.50 1366 1436 1579 1792 768 771 774 798 -hsync +vsync 2>/dev/null || true

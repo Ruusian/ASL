@@ -57,8 +57,8 @@ chmod 755 '$DEBIANPATH/root/.vnc/xstartup'" 2>/dev/null || true
 
     # 4. Start TigerVNC server on :1 (port 5901)
     if ! is_vnc_running; then
-        echo "[*] Starting TigerVNC server on display :1 (1280x720 24-bit)..."
-        su -c "chroot '$DEBIANPATH' /usr/bin/tigervncserver :1 -SecurityTypes None -geometry 1280x720 -depth 16 -FrameRate 60 -CompareFB 1 --I-KNOW-THIS-IS-INSECURE" >> "$VNC_LOG" 2>&1 || true
+        echo "[*] Starting TigerVNC server on display :1 (1920x1080 24-bit)..."
+        su -c "chroot '$DEBIANPATH' /usr/bin/tigervncserver :1 -SecurityTypes None -geometry 1920x1080 -depth 16 -FrameRate 60 -CompareFB 1 --I-KNOW-THIS-IS-INSECURE" >> "$VNC_LOG" 2>&1 || true
         sleep 2
     fi
 
