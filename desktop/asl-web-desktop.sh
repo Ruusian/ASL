@@ -52,6 +52,12 @@ chmod 755 '$DEBIANPATH/root/.vnc/xstartup'" 2>/dev/null || true
         su -c "ln -sf /usr/share/novnc/vnc.html '$DEBIANPATH/usr/share/novnc/index.html'" 2>/dev/null || true
     fi
 
+    # 3. Ensure PulseAudio sound server is running on host
+    if ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/4713') 2>/dev/null; then
+        echo "[*] Initializing PulseAudio audio bridge on port 4713..."
+        pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp port=4713 auth-ip-acl=127.0.0.1 auth-anonymous=1" 2>/dev/null || true
+    fi
+
     # 3. Clean any stale locks on display :1
     su -c "rm -f '$DEBIANPATH/tmp/.X1-lock' '$DEBIANPATH/tmp/.X11-unix/X1'" 2>/dev/null || true
 
@@ -71,7 +77,7 @@ chmod 755 '$DEBIANPATH/root/.vnc/xstartup'" 2>/dev/null || true
 
     for _retry in 1 2 3 4 5 6; do
         if is_vnc_running && is_websockify_running; then
-            touch "$STATE_FILE" 2>/dev/null || true
+            # State tracked via live processes
             echo "[✓] ASL Debian Linux Web Desktop is LIVE on port 6080!"
             echo "    Local URL:   http://localhost:6080/vnc.html?autoconnect=true&resize=remote"
             echo "    Public URL:  https://desktop.144.24.122.241.sslip.io/vnc.html?autoconnect=true&resize=remote"
@@ -89,20 +95,26 @@ chmod 755 '$DEBIANPATH/root/.vnc/xstartup'" 2>/dev/null || true
 stop_web_desktop() {
     echo "[*] Stopping ASL Debian Linux Web Desktop..."
     
-    # 1. Stop websockify
-    su -c "killall -9 websockify 2>/dev/null || pkill -9 -f 'websockify.*6080' 2>/dev/null || true" 2>/dev/null || true
+    # 1. Stop websockify by exact PIDs
+    local sock_pids
+    sock_pids=$(pgrep -f "websockify.*6080" 2>/dev/null || true)
+    if [ -n "$sock_pids" ]; then
+        su -c "kill -9 $sock_pids" >/dev/null 2>&1 || true
+    fi
 
-    # 2. Stop TigerVNC server on :1
-    su -c "chroot '$DEBIANPATH' /usr/bin/tigervncserver -kill :1" >> "$VNC_LOG" 2>&1 || true
-    su -c "killall -9 Xtigervnc 2>/dev/null || pkill -9 -f 'Xtigervnc :1' 2>/dev/null || true" 2>/dev/null || true
-    
-    # 3. Clean lingering display processes
-    su -c "rm -f '$DEBIANPATH/tmp/.X1-lock' '$DEBIANPATH/tmp/.X11-unix/X1'" 2>/dev/null || true
-    rm -f "$STATE_FILE" 2>/dev/null || true
+    # 2. Stop TigerVNC by exact PIDs
+    local vnc_pids
+    vnc_pids=$(pgrep -f "Xtigervnc :1" 2>/dev/null || true)
+    if [ -n "$vnc_pids" ]; then
+        su -c "kill -9 $vnc_pids" >/dev/null 2>&1 || true
+    fi
 
-    # 4. Flush caches & reclaim memory
+    # 3. Clean locks
+    su -c "rm -f '$DEBIANPATH/tmp/.X1-lock' '$DEBIANPATH/tmp/.X11-unix/X1'" >/dev/null 2>&1 || true
+
+    # 4. Flush caches
     sync
-    su -c "echo 3 > /proc/sys/vm/drop_caches; echo 1 > /proc/sys/vm/compact_memory 2>/dev/null || true" 2>/dev/null || true
+    su -c "echo 3 > /proc/sys/vm/drop_caches" >/dev/null 2>&1 || true
 
     echo "[✓] ASL Debian Linux Web Desktop stopped. Graphical memory reclaimed."
     return 0
