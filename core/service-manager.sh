@@ -251,8 +251,7 @@ asl_service_start() {
                 -R 4096:127.0.0.1:4096 \
                 -R 6080:127.0.0.1:6080 \
                 -R 9119:127.0.0.1:9119 \
-                -R 18080:127.0.0.1:4173 \
-                -R 3080:127.0.0.1:3080 \
+                               -R 3080:127.0.0.1:3080 \
                 ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
         fi
     fi
@@ -517,7 +516,7 @@ asl_service_status() {
     vps2_pid=$(_asl_pgrep_first "ssh.*144\.24\.122\.241")
     if [ -n "$vps2_pid" ]; then
         vps2_mem=$(fmt_mem "$vps2_pid")
-        echo " Oracle VPS2 Tunnel: ACTIVE (144.24.122.241 -> Ports 8022,20128,4096,6080,9119,18080,3080, PID: $vps2_pid, RAM: $vps2_mem)"
+        echo " Oracle VPS2 Tunnel: ACTIVE (144.24.122.241 -> Ports 8022,20128,4096,6080,9119,3080, PID: $vps2_pid, RAM: $vps2_mem)"
     elif [ -f "$TERMUX_HOME/.ssh/oracle_vps2.key" ]; then
         echo " Oracle VPS2 Tunnel: STANDBY"
     fi
@@ -797,8 +796,7 @@ asl_service_check() {
                 -R 4096:127.0.0.1:4096 \
                 -R 6080:127.0.0.1:6080 \
                 -R 9119:127.0.0.1:9119 \
-                -R 18080:127.0.0.1:4173 \
-                -R 3080:127.0.0.1:3080 \
+                               -R 3080:127.0.0.1:3080 \
                 ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
             healed=$((healed + 1))
         fi
