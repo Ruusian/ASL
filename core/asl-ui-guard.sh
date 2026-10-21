@@ -20,6 +20,21 @@ _host_cmd() {
     fi
 }
 
+# Hourly memory compaction in Server Mode
+do_hourly_compact() {
+    if [ -f "$HOME/.asl/server_mode.active" ]; then
+        local last_compact_file="$HOME/.asl/.last_compact"
+        local now
+        now=$(date +%s)
+        local last=0
+        [ -f "$last_compact_file" ] && last=$(cat "$last_compact_file" 2>/dev/null || echo 0)
+        if [ $((now - last)) -ge 3600 ]; then
+            _host_cmd "echo 1 > /proc/sys/vm/compact_memory; echo 3 > /proc/sys/vm/drop_caches" 2>/dev/null || true
+            echo "$now" > "$last_compact_file" 2>/dev/null || true
+        fi
+    fi
+}
+
 run_loop() {
     local tick=0
     while true; do
@@ -78,6 +93,8 @@ run_loop() {
             air_radios=$(_host_cmd "settings get global airplane_mode_radios" 2>/dev/null | tr -d "[:space:]")
             if [ -n "$air_radios" ]; then
                 _host_cmd "settings put global airplane_mode_radios ''; settings put global airplane_mode_toggleable_radios ''" 2>/dev/null || true
+
+
             fi
         fi
         # 4. CPU Governor Persistence Lock (keeps Turbo / Powersave locked against PowerHAL resets)
@@ -98,6 +115,7 @@ run_loop() {
                 fi
             fi
         fi
+        do_hourly_compact
         sleep 1.5
     done
 }
