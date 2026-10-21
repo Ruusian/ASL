@@ -12,11 +12,11 @@ SOCK_LOG="$PREFIX/tmp/web-desktop-sock.log"
 export PATH="$PREFIX/bin:$PATH"
 
 is_vnc_running() {
-    pgrep -f "Xtigervnc :1" >/dev/null 2>&1 || (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5901') 2>/dev/null
+    (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5901') 2>/dev/null
 }
 
 is_websockify_running() {
-    pgrep -f "websockify.*6080" >/dev/null 2>&1 || (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6080') 2>/dev/null
+    (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6080') 2>/dev/null
 }
 
 start_web_desktop() {
@@ -94,28 +94,7 @@ chmod 755 '$DEBIANPATH/root/.vnc/xstartup'" 2>/dev/null || true
 
 stop_web_desktop() {
     echo "[*] Stopping ASL Debian Linux Web Desktop..."
-    
-    # 1. Stop websockify by exact PIDs
-    local sock_pids
-    sock_pids=$(pgrep -f "websockify.*6080" 2>/dev/null || true)
-    if [ -n "$sock_pids" ]; then
-        su -c "kill -9 $sock_pids" >/dev/null 2>&1 || true
-    fi
-
-    # 2. Stop TigerVNC by exact PIDs
-    local vnc_pids
-    vnc_pids=$(pgrep -f "Xtigervnc :1" 2>/dev/null || true)
-    if [ -n "$vnc_pids" ]; then
-        su -c "kill -9 $vnc_pids" >/dev/null 2>&1 || true
-    fi
-
-    # 3. Clean locks
-    su -c "rm -f '$DEBIANPATH/tmp/.X1-lock' '$DEBIANPATH/tmp/.X11-unix/X1'" >/dev/null 2>&1 || true
-
-    # 4. Flush caches
-    sync
-    su -c "echo 3 > /proc/sys/vm/drop_caches" >/dev/null 2>&1 || true
-
+    su -c "chroot '$DEBIANPATH' /usr/local/bin/asl-vnc-stop" >/dev/null 2>&1 || true
     echo "[✓] ASL Debian Linux Web Desktop stopped. Graphical memory reclaimed."
     return 0
 }
