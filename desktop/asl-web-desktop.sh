@@ -68,11 +68,21 @@ chmod 755 '$DEBIANPATH/root/.vnc/xstartup'" 2>/dev/null || true
         sleep 2
     fi
 
-    # 5. Start websockify proxy on port 6080 -> 127.0.0.1:5901
+    # 5. Start websockify proxy on port 6080 -> 127.0.0.1:5901 (idempotent: single instance guaranteed)
     if ! is_websockify_running; then
         echo "[*] Starting WebSockify noVNC bridge on port 6080..."
+        # Kill any stale websockify holding a dead/ghost listener before spawning a fresh one
+        su -c "pkill -9 -f '/usr/bin/websockify --web=/usr/share/novnc' 2>/dev/null; true"
+        sleep 0.5
         su -c "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/python3 /usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5901 >> '$SOCK_LOG' 2>&1 &" || true
         sleep 1
+        # Guard against a race double-spawn: if more than one python websockify survived, keep none and retry once
+        if [ "$(pgrep -f '^/usr/bin/python3 /usr/bin/websockify' | wc -l)" -gt 1 ]; then
+            su -c "pkill -9 -f '/usr/bin/websockify --web=/usr/share/novnc' 2>/dev/null; true"
+            sleep 0.5
+            su -c "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/python3 /usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5901 >> '$SOCK_LOG' 2>&1 &" || true
+            sleep 1
+        fi
     fi
 
     for _retry in 1 2 3 4 5 6; do
