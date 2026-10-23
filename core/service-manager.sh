@@ -204,7 +204,7 @@ asl_service_start() {
         if [ -f "$hermes_dash_bin" ]; then
             if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
                 echo "[*] Starting Hermes Dashboard on port 9119..."
-                (cd "$TERMUX_HOME" && nohup bash "$hermes_dash_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
+                (cd "$TERMUX_HOME" && setsid nohup bash "$hermes_dash_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 < /dev/null &)
             fi
         fi
     fi
@@ -219,7 +219,7 @@ asl_service_start() {
             echo "[*] Starting Hermes Messaging Gateway (24/7 Companion)..."
             local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
             if [ -f "$hg_bin" ]; then
-                (cd "$TERMUX_HOME" && nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 &)
+                (cd "$TERMUX_HOME" && setsid nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 < /dev/null &)
             else
                 asl_exec "nohup /usr/local/bin/hermes gateway run >> /root/.hermes/logs/gateway.log 2>&1 &" 2>/dev/null || true
             fi
@@ -760,7 +760,7 @@ asl_service_check() {
             echo "[!] Hermes Messaging Gateway down — restarting 24/7 companion..."
             local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
             if [ -f "$hg_bin" ]; then
-                (cd "$TERMUX_HOME" && nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 &)
+                (cd "$TERMUX_HOME" && setsid nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 < /dev/null &)
             else
                 asl_exec "nohup /usr/local/bin/hermes gateway run >> /root/.hermes/logs/gateway.log 2>&1 &" 2>/dev/null || true
             fi
@@ -1025,7 +1025,8 @@ asl_service_stop_one() {
         hermes-gateway|hermes-gw)
             echo "[*] Stopping Hermes Messaging Gateway..."
             _asl_mark_stopped "hermes-gateway"
-            asl_exec "/usr/local/bin/hermes gateway stop 2>/dev/null || pkill -f 'hermes.*gateway' 2>/dev/null || true" 2>/dev/null || true
+            asl_exec "timeout 10 /usr/local/bin/hermes gateway stop 2>/dev/null; pkill -f 'venv/bin/hermes gateway run' 2>/dev/null; pkill -f 'asl exec /usr/local/bin/hermes gateway run' 2>/dev/null; sleep 1; rm -f /root/.hermes/gateway.sock /root/.hermes/gateway_state.json; true" 2>/dev/null || true
+            su -c "rm -f /data/local/tmp/chrootDebian/root/.hermes/gateway.sock /data/local/tmp/chrootDebian/root/.hermes/gateway_state.json" 2>/dev/null || true
             echo "[✓] Hermes Messaging Gateway stopped (Watchdog paused for this service)."
             ;;
         ssh|sshd)
@@ -1169,7 +1170,7 @@ asl_service_start_one() {
             touch "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-hermes-dashboard.state"
             local hd_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
             if [ -f "$hd_bin" ]; then
-                (cd "$TERMUX_HOME" && nohup bash "$hd_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 &)
+                (cd "$TERMUX_HOME" && setsid nohup bash "$hd_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 < /dev/null &)
                 sleep 2
                 echo "[✓] Hermes Dashboard started on port 9119."
             else
@@ -1181,7 +1182,7 @@ asl_service_start_one() {
             _asl_clear_stopped "hermes-gateway" 
             local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
             if [ -f "$hg_bin" ]; then
-                (cd "$TERMUX_HOME" && nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 &)
+                (cd "$TERMUX_HOME" && setsid nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 < /dev/null &)
                 sleep 2
                 echo "[✓] Hermes Messaging Gateway started."
             else
