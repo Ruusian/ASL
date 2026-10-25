@@ -2032,7 +2032,7 @@ case "${1:-}" in
         ;;
     web-desktop|vnc|novnc|remote-desktop|gui-web)
         shift
-        local wd_script="$ASL_DIR/desktop/asl-web-desktop.sh"
+        wd_script="$ASL_DIR/desktop/asl-web-desktop.sh"
         [ -f "$wd_script" ] || wd_script="${PREFIX:-/data/data/com.termux/files/usr}/share/asl/desktop/asl-web-desktop.sh"
         bash "$wd_script" "${1:-status}"
         ;;

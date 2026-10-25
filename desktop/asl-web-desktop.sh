@@ -5,7 +5,6 @@
 TERMUX_HOME="${TERMUX_HOME:-/data/data/com.termux/files/home}"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 DEBIANPATH="${DEBIANPATH:-/data/local/tmp/chrootDebian}"
-STATE_FILE="$PREFIX/tmp/.asl-desktop.active"
 VNC_LOG="$PREFIX/tmp/web-desktop-vnc.log"
 SOCK_LOG="$PREFIX/tmp/web-desktop-sock.log"
 
