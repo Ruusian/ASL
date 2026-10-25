@@ -99,16 +99,18 @@ asl_update_ai_all() {
 }
 
 asl_update_ai_watchdog() {
-    # Non-blocking auto-check executed periodically by the 24/7 watchdog (every 12 hours)
-    local now last_time=0 interval=43200
-    now=$(date +%s)
-    if [ -f "$STAMP_FILE" ]; then
-        last_time=$(stat -c %Y "$STAMP_FILE" 2>/dev/null || stat -f %m "$STAMP_FILE" 2>/dev/null || echo 0)
-    fi
-
-    if [ $((now - last_time)) -ge $interval ]; then
-        # Launch detached in background to never block watchdog health checks
-        ( ( nohup bash "$0" all >/dev/null 2>&1 & ) & ) 2>/dev/null
+    # Automatic in-place background npm updates of live production AI gateways (OmniRoute)
+    # are disabled by default to prevent service disruption while sessions are active.
+    # Manual updates remain available via: asl ai update
+    if [ -f "${HOME:-/data/data/com.termux/files/home}/.config/asl/enable_ai_autoupdate" ]; then
+        local now last_time=0 interval=86400
+        now=$(date +%s)
+        if [ -f "$STAMP_FILE" ]; then
+            last_time=$(stat -c %Y "$STAMP_FILE" 2>/dev/null || stat -f %m "$STAMP_FILE" 2>/dev/null || echo 0)
+        fi
+        if [ $((now - last_time)) -ge $interval ]; then
+            ( ( nohup bash "$0" all >/dev/null 2>&1 & ) & ) 2>/dev/null
+        fi
     fi
 }
 

@@ -709,7 +709,7 @@ asl_service_check() {
         fi
     fi
 
-    # 5. OmniRoute Local AI Proxy Check
+    # 5. OmniRoute Local AI Proxy Check (Socket probe is ground truth)
     if ! _asl_is_stopped "omniroute"; then
     local omni_chk=""
     if [ -f "$TERMUX_HOME/omniroute-daemon.sh" ]; then
@@ -718,10 +718,12 @@ asl_service_check() {
         omni_chk="/data/data/com.termux/files/home/omniroute-daemon.sh"
     fi
     if [ -n "$omni_chk" ] || command -v omniroute >/dev/null 2>&1; then
-        if [ -z "$(_asl_pgrep_first "omniroute")" ] && [ -z "$(_asl_pgrep_first "omniroute" root)" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
-            echo "[!] OmniRoute AI proxy down — starting as root..."
+        if ! (timeout 1.5 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
+            echo "[!] OmniRoute AI proxy port 20128 unreachable — auto-healing..."
+            _asl_pkill_real "omniroute.*serve"
+            sleep 0.5
             if [ -n "$omni_chk" ]; then
-                su -c "setsid ${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_chk' >> /data/data/com.termux/files/home/omniroute.log 2>&1 < /dev/null &" || true
+                (cd "$TERMUX_HOME" && setsid nohup bash "$omni_chk" >> /data/data/com.termux/files/home/omniroute.log 2>&1 < /dev/null &)
             fi
             healed=$((healed + 1))
         fi
