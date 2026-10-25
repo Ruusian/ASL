@@ -159,7 +159,12 @@ asl_service_start() {
     fi
     if [ -n "$omni_bin" ] || command -v omniroute >/dev/null 2>&1; then
         if [ -z "$(_asl_pgrep_first "omniroute")" ] && [ -z "$(_asl_pgrep_first "omniroute" root)" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/20128') 2>/dev/null; then
-            echo "[*] Starting Omniroute local AI proxy on port 20128..."
+                    local patch_script
+        patch_script=$(asl_find_script "patch-omniroute-claude-heal.py")
+        if [ -n "$patch_script" ] && [ -f "$patch_script" ]; then
+            python3 "$patch_script" >/dev/null 2>&1 || true
+        fi
+        echo "[*] Starting Omniroute local AI proxy on port 20128..."
             if [ -n "$omni_bin" ]; then
                 su -c "setsid ${PREFIX:-/data/data/com.termux/files/usr}/bin/bash '$omni_bin' >> /data/data/com.termux/files/home/omniroute.log 2>&1 < /dev/null &" || true
             fi
@@ -710,7 +715,7 @@ asl_service_check() {
     fi
 
     # 5. OmniRoute Local AI Proxy Check (Socket probe is ground truth)
-    if ! _asl_is_stopped "omniroute"; then
+    if ! _asl_is_stopped "omniroute" && [ ! -f "$TERMUX_HOME/.asl/no-watchdog-omniroute" ]; then
     local omni_chk=""
     if [ -f "$TERMUX_HOME/omniroute-daemon.sh" ]; then
         omni_chk="$TERMUX_HOME/omniroute-daemon.sh"
