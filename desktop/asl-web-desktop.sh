@@ -12,11 +12,11 @@ SOCK_LOG="$PREFIX/tmp/web-desktop-sock.log"
 export PATH="$PREFIX/bin:$PATH"
 
 is_vnc_running() {
-    (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5901') 2>/dev/null
+    (timeout 0.3 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5901') 2>/dev/null
 }
 
 is_websockify_running() {
-    (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6080') 2>/dev/null
+    (timeout 0.3 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6080') 2>/dev/null
 }
 
 start_web_desktop() {
@@ -53,52 +53,43 @@ chmod 755 '$DEBIANPATH/root/.vnc/xstartup'" 2>/dev/null || true
     fi
 
     # 3. Ensure PulseAudio sound server is running on host
-    if ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/4713') 2>/dev/null; then
+    if ! (timeout 0.5 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/4713') 2>/dev/null; then
         echo "[*] Initializing PulseAudio audio bridge on port 4713..."
         pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp port=4713 auth-ip-acl=127.0.0.1 auth-anonymous=1" 2>/dev/null || true
     fi
 
-    # 3. Clean any stale locks on display :1
+    # Clean any stale locks on display :1
     su -c "rm -f '$DEBIANPATH/tmp/.X1-lock' '$DEBIANPATH/tmp/.X11-unix/X1'" 2>/dev/null || true
 
     # 4. Start TigerVNC server on :1 (port 5901)
     if ! is_vnc_running; then
-        echo "[*] Starting TigerVNC server on display :1 (1920x1080 24-bit)..."
+        echo "[*] Starting TigerVNC server on display :1 (1920x1080 16-bit)..."
         su -c "chroot '$DEBIANPATH' /usr/bin/tigervncserver :1 -SecurityTypes None -geometry 1920x1080 -depth 16 -FrameRate 60 -CompareFB 1 --I-KNOW-THIS-IS-INSECURE" >> "$VNC_LOG" 2>&1 || true
-        sleep 2
+        for _t in $(seq 1 35); do
+            is_vnc_running && break
+            sleep 0.2
+        done
     fi
 
-    # 5. Start websockify proxy on port 6080 -> 127.0.0.1:5901 (idempotent: single instance guaranteed)
+    # 5. Start websockify proxy on port 6080 -> 127.0.0.1:5901
     if ! is_websockify_running; then
         echo "[*] Starting WebSockify noVNC bridge on port 6080..."
-        # Kill any stale websockify holding a dead/ghost listener before spawning a fresh one
-        su -c "pkill -9 -f '/usr/bin/websockify --web=/usr/share/novnc' 2>/dev/null; true"
-        sleep 0.5
-        su -c "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/python3 /usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5901 >> '$SOCK_LOG' 2>&1 &" || true
-        sleep 1
-        # Guard against a race double-spawn: if more than one python websockify survived, keep none and retry once
-        if [ "$(pgrep -f '^/usr/bin/python3 /usr/bin/websockify' | wc -l)" -gt 1 ]; then
-            su -c "pkill -9 -f '/usr/bin/websockify --web=/usr/share/novnc' 2>/dev/null; true"
-            sleep 0.5
-            su -c "chroot '$DEBIANPATH' /usr/bin/nohup /usr/bin/python3 /usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5901 >> '$SOCK_LOG' 2>&1 &" || true
-            sleep 1
-        fi
+        su -c "pkill -9 -f /usr/bin/websockify 2>/dev/null; true"
+        su -c "nohup chroot '$DEBIANPATH' /usr/bin/python3 /usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5901 >> '$SOCK_LOG' 2>&1 &" || true
+        for _s in $(seq 1 25); do
+            is_websockify_running && break
+            sleep 0.2
+        done
     fi
 
-    for _retry in 1 2 3 4 5 6; do
-        if is_vnc_running && is_websockify_running; then
-            # State tracked via live processes
-            echo "[✓] ASL Debian Linux Web Desktop is LIVE on port 6080!"
-            echo "    Local URL:   http://localhost:6080/vnc.html?autoconnect=true&resize=remote"
-            echo "    Public URL:  https://desktop.144.24.122.241.sslip.io/vnc.html?autoconnect=true&resize=remote"
-            return 0
-        fi
-        sleep 1
-    done
+    if is_vnc_running && is_websockify_running; then
+        echo "[✓] ASL Debian Linux Web Desktop is LIVE on port 6080!"
+        echo "    Local URL:   http://localhost:6080/vnc.html?autoconnect=true&resize=remote"
+        echo "    Public URL:  https://desktop.144.24.122.241.sslip.io/vnc.html?autoconnect=true&resize=remote"
+        return 0
+    fi
 
-    echo "[!] Warning: Web Desktop startup incomplete. Check logs:"
-    echo "    $VNC_LOG"
-    echo "    $SOCK_LOG"
+    echo "[!] Warning: Web Desktop startup incomplete."
     return 1
 }
 
@@ -126,7 +117,7 @@ status_web_desktop() {
 case "${1:-status}" in
     start) start_web_desktop ;;
     stop) stop_web_desktop ;;
-    restart) stop_web_desktop; sleep 1; start_web_desktop ;;
+    restart) stop_web_desktop; sleep 0.5; start_web_desktop ;;
     status|"") status_web_desktop ;;
     *) echo "Usage: asl-web-desktop.sh [start|stop|restart|status]"; exit 1 ;;
 esac

@@ -208,6 +208,29 @@ if ! command -v proot-distro >/dev/null 2>&1; then
     }
 fi
 
+# 4b. Interactive Subsystem Environment Mode Selection
+if { [ -t 0 ] || [ -c /dev/tty ]; } && [ "$INSTALL_DESKTOP" = "auto" ]; then
+    echo -e "\n${CYAN}====================================================${RESET}"
+    echo -e "${CYAN} 🖥️  Select Subsystem Environment Mode:              ${RESET}"
+    echo -e "${CYAN}====================================================${RESET}"
+    echo -e "  1) ${GREEN}Full Linux Desktop GUI${RESET} (Recommended — XFCE4, Termux:X11 GPU Acceleration, noVNC Web Canvas on :6080 with Real-time Audio)"
+    echo -e "  2) ${CYAN}Headless Linux Container${RESET} (CLI Server only — minimal RAM footprint, saves battery, no GUI packages)"
+    echo -e ""
+    desktop_choice=""
+    if [ -c /dev/tty ]; then
+        read -r -p "Select mode [1-2, default: 1]: " desktop_choice < /dev/tty 2>/dev/null || true
+    else
+        read -r -p "Select mode [1-2, default: 1]: " desktop_choice || true
+    fi
+    case "$desktop_choice" in
+        2) INSTALL_DESKTOP="no" ;;
+        1|"") INSTALL_DESKTOP="yes" ;;
+        *) INSTALL_DESKTOP="yes" ;;
+    esac
+fi
+
+[ "$INSTALL_DESKTOP" = "auto" ] && INSTALL_DESKTOP="yes"
+
 # 5. Interactive Distro Edition Selection
 if { [ -t 0 ] || [ -c /dev/tty ]; } && [ "$DISTRO_TYPE" = "auto" ]; then
     echo -e "\n${CYAN}====================================================${RESET}"
@@ -422,6 +445,49 @@ if [ -f "$INSTALL_DIR/core/gpu-profile.sh" ]; then
         source "$INSTALL_DIR/core/gpu-profile.sh"
         asl_sync_chroot_env 2>/dev/null || true
     )
+fi
+
+# 9. Optional Hardware & System Device Tweaks
+if { [ -t 0 ] || [ -c /dev/tty ]; }; then
+    echo -e "\n${CYAN}====================================================${RESET}"
+    echo -e "${CYAN} ⚙️  Optional Device Hardware & System Settings:     ${RESET}"
+    echo -e "${CYAN}====================================================${RESET}"
+    
+    # 1. UI Guard & Forced Landscape
+    rot_choice=""
+    echo -e "  Lock display to 90° Forced Landscape? (Recommended for stationary/docked servers; not recommended for handheld phones)"
+    if [ -c /dev/tty ]; then
+        read -r -p "  Enable 90° Landscape Lock? [y/N]: " rot_choice < /dev/tty 2>/dev/null || true
+    else
+        read -r -p "  Enable 90° Landscape Lock? [y/N]: " rot_choice || true
+    fi
+    if [[ "$rot_choice" =~ ^[Yy]$ ]]; then
+        mkdir -p "$PREFIX/tmp" "$HOME/.asl" "$HOME/.config/asl"
+        echo "FORCED_LANDSCAPE=1" > "$PREFIX/tmp/.asl_rotation_state"
+        echo "USER_ROTATION=1" >> "$PREFIX/tmp/.asl_rotation_state"
+        touch "$HOME/.asl/enable-ui-guard" 2>/dev/null || true
+        echo -e "  ${GREEN}[✓] UI Guard Forced Landscape enabled.${RESET}"
+    else
+        rm -f "$HOME/.asl/enable-ui-guard" "$PREFIX/tmp/.asl_rotation_state" 2>/dev/null || true
+        echo -e "  ${CYAN}[✓] Display rotation left in native Android auto-rotation mode.${RESET}"
+    fi
+
+    # 2. Local HQ Dashboard
+    dash_choice=""
+    echo -e "\n  Enable local web control dashboard on port 3000 (control over local Wi-Fi or VPS)?"
+    if [ -c /dev/tty ]; then
+        read -r -p "  Enable Web Control Dashboard? [Y/n]: " dash_choice < /dev/tty 2>/dev/null || true
+    else
+        read -r -p "  Enable Web Control Dashboard? [Y/n]: " dash_choice || true
+    fi
+    if [[ ! "$dash_choice" =~ ^[Nn]$ ]]; then
+        mkdir -p "$HOME/.asl"
+        touch "$HOME/.asl/enable-hq-dashboard" 2>/dev/null || true
+        echo -e "  ${GREEN}[✓] Local HQ Control Dashboard enabled on port 3000.${RESET}"
+    else
+        rm -f "$HOME/.asl/enable-hq-dashboard" 2>/dev/null || true
+        echo -e "  ${CYAN}[✓] Web Control Dashboard disabled.${RESET}"
+    fi
 fi
 
 echo -e "${CYAN}====================================================${RESET}"

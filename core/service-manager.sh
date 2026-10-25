@@ -194,23 +194,23 @@ asl_service_start() {
     if [ -n "$dsh_bin" ]; then
         if [ -z "$(_asl_pgrep_first "apps/cli/src/bin.ts")" ] && [ -z "$(_asl_pgrep_first "dsh-daemon")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/3080') 2>/dev/null; then
             echo "[*] Starting DeepSeek Harness (dsh) on port 3080..."
-            (cd "$TERMUX_HOME" && nohup bash "$dsh_bin" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 &)
+            (cd "$TERMUX_HOME" && nohup bash "$dsh_bin" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 < /dev/null &)
         fi
     fi
 
-    # 4cc. Check & restore Hermes Dashboard on port 9119 (only if state enabled)
-    if [ -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-hermes-dashboard.state" ]; then
+    # 4cc. Hermes Dashboard on port 9119 (OFFLINE by default; starts only if user enabled autostart)
+    if [ -f "$TERMUX_HOME/.asl/autostart-hermes-dashboard" ]; then
         local hermes_dash_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
         if [ -f "$hermes_dash_bin" ]; then
-            if [ -z "$(_asl_pgrep_first "hermes dashboard")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
-                echo "[*] Starting Hermes Dashboard on port 9119..."
+            if [ -z "$(_asl_pgrep_first \"hermes dashboard\")" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/9119') 2>/dev/null; then
+                echo "[*] Starting Hermes Dashboard on port 9119 (autostart enabled)..."
                 (cd "$TERMUX_HOME" && setsid nohup bash "$hermes_dash_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 < /dev/null &)
             fi
         fi
     fi
 
     # 4cd. Hermes Messaging Gateway (24/7 Companion)
-    if ! _asl_is_stopped "hermes-gateway"; then
+    if ! _asl_is_stopped "hermes-gateway" && [ ! -f "$TERMUX_HOME/.asl/no-autostart-hermes-gateway" ]; then
         local gw_alive=0
         if su -c "test -S /data/local/tmp/chrootDebian/root/.hermes/gateway.sock" 2>/dev/null || [ -n "$(_asl_pgrep_first "hermes gateway run" root)" ]; then
             gw_alive=1
@@ -268,12 +268,24 @@ asl_service_start() {
         asl_service_loop >/dev/null 2>&1 || true
     fi
 
-    # Ensure fast 0.2s UI guard daemon is active for forced landscape & zero keyboard gap
-    local ui_guard_script
-    ui_guard_script=$(asl_find_script "asl-ui-guard.sh")
-    [ -z "$ui_guard_script" ] && ui_guard_script=$(asl_find_script "rotation-guard.sh")
-    if [ -n "$ui_guard_script" ] && [ -f "$ui_guard_script" ]; then
-        bash "$ui_guard_script" start >/dev/null 2>&1 || true
+    # UI Guard (90° Forced Landscape & input bar lock) is an OPTIONAL server feature.
+    # It only activates if explicitly enabled by the user (asl rotation on / enable-ui-guard).
+    local is_ui_guard_enabled=0
+    if [ -f "$TERMUX_HOME/.asl/enable-ui-guard" ]; then
+        is_ui_guard_enabled=1
+    elif [ -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.asl_rotation_state" ]; then
+        local f_rot
+        f_rot=$(grep -E '^FORCED_LANDSCAPE=' "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.asl_rotation_state" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+        [ "$f_rot" = "1" ] && is_ui_guard_enabled=1
+    fi
+
+    if [ "$is_ui_guard_enabled" -eq 1 ]; then
+        local ui_guard_script
+        ui_guard_script=$(asl_find_script "asl-ui-guard.sh")
+        [ -z "$ui_guard_script" ] && ui_guard_script=$(asl_find_script "rotation-guard.sh")
+        if [ -n "$ui_guard_script" ] && [ -f "$ui_guard_script" ]; then
+            bash "$ui_guard_script" start >/dev/null 2>&1 || true
+        fi
     fi
 
     echo "[✓] All ASL 24/7 background services are ACTIVE."
@@ -321,6 +333,10 @@ asl_service_stop() {
     _asl_pkill_real "dsh-daemon"
     _asl_pkill_real "apps/cli/src/bin.ts"
     _asl_pkill_real "dsh"
+    # Kill Hermes Dashboard if running
+    _asl_pkill_real "hermes dashboard"
+    asl_exec "pkill -f 'hermes dashboard' 2>/dev/null || true" 2>/dev/null || true
+    rm -f "/data/data/com.termux/files/usr/tmp/asl-hermes-dashboard.state" 2>/dev/null || true
     # Kill SSH server (runs as root)
     _asl_pkill_real "sshd"
     if command -v termux-wake-unlock >/dev/null 2>&1; then
@@ -744,14 +760,14 @@ asl_service_check() {
     if [ -n "$dsh_chk" ]; then
         if [ -z "$(_asl_pgrep_first "apps/cli/src/bin.ts")" ] && [ -z "$(_asl_pgrep_first "apps/cli/src/bin.ts" root)" ] && ! (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/3080') 2>/dev/null; then
             echo "[!] DeepSeek Harness daemon down — restarting on port 3080..."
-            (cd "$TERMUX_HOME" && nohup bash "$dsh_chk" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 &)
+            (cd "$TERMUX_HOME" && nohup bash "$dsh_chk" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 < /dev/null &)
             healed=$((healed + 1))
         fi
     fi
     fi
 
     # 5ab. Hermes Messaging Gateway Check (24/7 Companion)
-    if ! _asl_is_stopped "hermes-gateway"; then
+    if ! _asl_is_stopped "hermes-gateway" && [ ! -f "$TERMUX_HOME/.asl/no-autostart-hermes-gateway" ]; then
         local gw_alive=0
         if su -c "test -S /data/local/tmp/chrootDebian/root/.hermes/gateway.sock" 2>/dev/null || [ -n "$(_asl_pgrep_first "hermes gateway run" root)" ]; then
             gw_alive=1
@@ -1018,6 +1034,8 @@ asl_service_stop_one() {
             ;;
         hermes|hermes-dashboard|hermes-dash)
             echo "[*] Stopping Hermes Dashboard on port 9119..."
+            _asl_mark_stopped "hermes-dashboard"
+            rm -f "/data/data/com.termux/files/usr/tmp/asl-hermes-dashboard.state" 2>/dev/null || true
             _asl_pkill_real "hermes dashboard"
             asl_exec "pkill -f 'hermes dashboard' 2>/dev/null || true" 2>/dev/null || true
             echo "[✓] Hermes Dashboard stopped."
@@ -1123,7 +1141,7 @@ asl_service_start_one() {
                 dsh_bin="/data/data/com.termux/files/home/dsh-daemon.sh"
             fi
             if [ -n "$dsh_bin" ]; then
-                (cd "$TERMUX_HOME" && nohup bash "$dsh_bin" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 &)
+                (cd "$TERMUX_HOME" && nohup bash "$dsh_bin" >> /data/data/com.termux/files/home/dsh-web.log 2>&1 < /dev/null &)
                 echo "[✓] DeepSeek Harness started on port 3080."
             else
                 echo "[!] Error: dsh-daemon.sh not found."
@@ -1167,7 +1185,6 @@ asl_service_start_one() {
         hermes|hermes-dashboard|hermes-dash)
             echo "[*] Starting Hermes Dashboard on port 9119..."
             _asl_clear_stopped "hermes-dashboard" 
-            touch "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-hermes-dashboard.state"
             local hd_bin="$TERMUX_HOME/hermes-dashboard-daemon.sh"
             if [ -f "$hd_bin" ]; then
                 (cd "$TERMUX_HOME" && setsid nohup bash "$hd_bin" >> /data/data/com.termux/files/home/hermes-dashboard.log 2>&1 < /dev/null &)
