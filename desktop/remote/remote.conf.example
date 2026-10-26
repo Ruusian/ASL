@@ -1,0 +1,22 @@
+# ASL Remote VPS Tunnel Configuration Example
+# Copy this file to ~/.asl/remote.conf to configure your own remote VPS relay:
+#   mkdir -p ~/.asl && cp desktop/remote/remote.conf.example ~/.asl/remote.conf
+
+# IP or hostname of your remote VPS / relay server
+VPS_HOST="your-vps-ip-or-domain.com"
+
+# SSH user on the VPS (usually ubuntu, debian, or root)
+VPS_USER="ubuntu"
+
+# Path to your private SSH key for passwordless authentication
+VPS_KEY="$HOME/.ssh/id_rsa"
+
+# Remote-to-Local port mappings to expose over the reverse SSH tunnel
+# Format: <remote_port>:<local_bind_ip>:<local_port> separated by spaces
+# 8022  = Termux SSH
+# 6080  = ASL noVNC Web Desktop
+# 4096  = Web Terminal (ttyd)
+VPS_PORTS="8022:127.0.0.1:8022 6080:127.0.0.1:6080 4096:127.0.0.1:4096"
+
+# Optional public domain suffix for web dashboards (e.g. your-vps.sslip.io or yourdomain.com)
+# ASL_REMOTE_DOMAIN="your-domain.com"

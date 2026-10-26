@@ -214,15 +214,19 @@ asl_service_start() {
         fi
     fi
 
-    # 4cd. Hermes Messaging Gateway (24/7 Companion)
-    if ! _asl_is_stopped "hermes-gateway" && [ ! -f "$TERMUX_HOME/.asl/no-autostart-hermes-gateway" ]; then
+    # 4cd. Hermes Messaging Gateway (24/7 Companion - optional)
+    local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
+    local has_hermes_gw=0
+    [ -f "$hg_bin" ] && has_hermes_gw=1
+    asl_chroot_exec "command -v hermes >/dev/null 2>&1" 2>/dev/null && has_hermes_gw=1
+
+    if [ "$has_hermes_gw" -eq 1 ] && ! _asl_is_stopped "hermes-gateway" && [ ! -f "$TERMUX_HOME/.asl/no-autostart-hermes-gateway" ]; then
         local gw_alive=0
         if su -c "test -S /data/local/tmp/chrootDebian/root/.hermes/gateway.sock" 2>/dev/null || [ -n "$(_asl_pgrep_first "hermes gateway run" root)" ]; then
             gw_alive=1
         fi
         if [ "$gw_alive" -eq 0 ]; then
             echo "[*] Starting Hermes Messaging Gateway (24/7 Companion)..."
-            local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
             if [ -f "$hg_bin" ]; then
                 (cd "$TERMUX_HOME" && setsid nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 < /dev/null &)
             else
@@ -231,18 +235,32 @@ asl_service_start() {
         fi
     fi
 
-    # 4d. Oracle VPS 2 (144.24.122.241) Fast Auto-Reconnect Tunnel Supervisor
-    local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
+    # 4d. Configured Remote VPS Reverse Tunnel Supervisor
+    local remote_conf="$TERMUX_HOME/.asl/remote.conf"
+    local vps_host="" vps_user="ubuntu" vps_key="" vps_ports=""
+    if [ -f "$remote_conf" ]; then
+        # shellcheck source=/dev/null
+        source "$remote_conf" 2>/dev/null || true
+        vps_host="${VPS_HOST:-}"
+        vps_user="${VPS_USER:-ubuntu}"
+        vps_key="${VPS_KEY:-}"
+        vps_ports="${VPS_PORTS:-8022:127.0.0.1:8022}"
+    fi
+
     local vps2_daemon="$TERMUX_HOME/oracle_vps2_tunnel_daemon.sh"
-    if [ -f "$vps2_key" ]; then
+    if [ -n "$vps_host" ] && [ -f "$vps_key" ]; then
         if [ -f "$vps2_daemon" ]; then
             if ! pgrep -f "oracle_vps2_tunnel_daemon\.sh" >/dev/null 2>&1; then
-                echo "[*] Starting Oracle VPS2 (144.24.122.241) fast auto-reconnect tunnel supervisor..."
+                echo "[*] Starting Remote VPS ($vps_host) tunnel supervisor..."
                 (cd "$TERMUX_HOME" && nohup bash "$vps2_daemon" >/dev/null 2>&1 &)
             fi
-        elif ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
-            echo "[*] Starting Oracle VPS2 (144.24.122.241) reverse tunnel..."
-            nohup ssh -i "$vps2_key" -T -N \
+        elif ! pgrep -f "ssh.*$vps_host" >/dev/null 2>&1; then
+            echo "[*] Starting Remote VPS ($vps_host) reverse tunnel..."
+            local port_args=()
+            for p_map in $vps_ports; do
+                port_args+=(-R "$p_map")
+            done
+            nohup ssh -i "$vps_key" -T -N \
                 -o BatchMode=yes \
                 -o PasswordAuthentication=no \
                 -o StrictHostKeyChecking=accept-new \
@@ -251,13 +269,8 @@ asl_service_start() {
                 -o ServerAliveCountMax=2 \
                 -o ConnectTimeout=5 \
                 -o ExitOnForwardFailure=yes \
-                -R 8022:127.0.0.1:8022 \
-                -R 20128:127.0.0.1:20128 \
-                -R 4096:127.0.0.1:4096 \
-                -R 6080:127.0.0.1:6080 \
-                -R 9119:127.0.0.1:9119 \
-                               -R 3080:127.0.0.1:3080 \
-                ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
+                "${port_args[@]}" \
+                "${vps_user}@${vps_host}" > "$TERMUX_HOME/remote_vps_tunnel.log" 2>&1 &
         fi
     fi
 
@@ -542,13 +555,18 @@ asl_service_status() {
         echo " Oracle Tunnel: STANDBY (Run 'asl remote oracle start')"
     fi
 
-    local vps2_pid vps2_mem
-    vps2_pid=$(_asl_pgrep_first "ssh.*144\.24\.122\.241")
-    if [ -n "$vps2_pid" ]; then
-        vps2_mem=$(fmt_mem "$vps2_pid")
-        echo " Oracle VPS2 Tunnel: ACTIVE (144.24.122.241 -> Ports 8022,20128,4096,6080,9119,3080, PID: $vps2_pid, RAM: $vps2_mem)"
-    elif [ -f "$TERMUX_HOME/.ssh/oracle_vps2.key" ]; then
-        echo " Oracle VPS2 Tunnel: STANDBY"
+    local remote_conf="$TERMUX_HOME/.asl/remote.conf"
+    local vps_host=""
+    [ -f "$remote_conf" ] && vps_host=$(grep '^VPS_HOST=' "$remote_conf" 2>/dev/null | cut -d'=' -f2- | tr -d '"'\'' ')
+    if [ -n "$vps_host" ]; then
+        local vps2_pid vps2_mem
+        vps2_pid=$(_asl_pgrep_first "ssh.*$vps_host")
+        if [ -n "$vps2_pid" ]; then
+            vps2_mem=$(fmt_mem "$vps2_pid")
+            echo " Remote VPS Tunnel: ACTIVE ($vps_host, PID: $vps2_pid, RAM: $vps2_mem)"
+        else
+            echo " Remote VPS Tunnel: STANDBY"
+        fi
     fi
 
     local serveo_pid serveo_mem
@@ -782,15 +800,19 @@ asl_service_check() {
     fi
     fi
 
-    # 5ab. Hermes Messaging Gateway Check (24/7 Companion)
-    if ! _asl_is_stopped "hermes-gateway" && [ ! -f "$TERMUX_HOME/.asl/no-autostart-hermes-gateway" ]; then
+    # 5ab. Hermes Messaging Gateway Check (24/7 Companion - optional)
+    local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
+    local has_hermes_gw=0
+    [ -f "$hg_bin" ] && has_hermes_gw=1
+    asl_chroot_exec "command -v hermes >/dev/null 2>&1" 2>/dev/null && has_hermes_gw=1
+
+    if [ "$has_hermes_gw" -eq 1 ] && ! _asl_is_stopped "hermes-gateway" && [ ! -f "$TERMUX_HOME/.asl/no-autostart-hermes-gateway" ]; then
         local gw_alive=0
         if su -c "test -S /data/local/tmp/chrootDebian/root/.hermes/gateway.sock" 2>/dev/null || [ -n "$(_asl_pgrep_first "hermes gateway run" root)" ]; then
             gw_alive=1
         fi
         if [ "$gw_alive" -eq 0 ]; then
             echo "[!] Hermes Messaging Gateway down — restarting 24/7 companion..."
-            local hg_bin="$TERMUX_HOME/hermes-gateway-daemon.sh"
             if [ -f "$hg_bin" ]; then
                 (cd "$TERMUX_HOME" && setsid nohup bash "$hg_bin" >> /data/data/com.termux/files/home/hermes-gateway.log 2>&1 < /dev/null &)
             else
@@ -800,21 +822,35 @@ asl_service_check() {
         fi
     fi
 
-    # 5b. Oracle VPS 2 (144.24.122.241) Fast Auto-Reconnect Tunnel Supervisor Check
-    local vps2_key="$TERMUX_HOME/.ssh/oracle_vps2.key"
+    # 5b. Remote VPS Reverse Tunnel Supervisor Check
+    local remote_conf="$TERMUX_HOME/.asl/remote.conf"
+    local vps_host="" vps_user="ubuntu" vps_key="" vps_ports=""
+    if [ -f "$remote_conf" ]; then
+        # shellcheck source=/dev/null
+        source "$remote_conf" 2>/dev/null || true
+        vps_host="${VPS_HOST:-}"
+        vps_user="${VPS_USER:-ubuntu}"
+        vps_key="${VPS_KEY:-}"
+        vps_ports="${VPS_PORTS:-8022:127.0.0.1:8022}"
+    fi
+
     local vps2_daemon="$TERMUX_HOME/oracle_vps2_tunnel_daemon.sh"
-    if [ -f "$vps2_key" ]; then
+    if [ -n "$vps_host" ] && [ -f "$vps_key" ]; then
         if [ -f "$vps2_daemon" ]; then
-            if ! pgrep -f "oracle_vps2_tunnel_daemon\.sh" >/dev/null 2>&1 || ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
-                echo "[!] Oracle VPS2 tunnel supervisor down — restoring fast auto-reconnect daemon..."
+            if ! pgrep -f "oracle_vps2_tunnel_daemon\.sh" >/dev/null 2>&1 || ! pgrep -f "ssh.*$vps_host" >/dev/null 2>&1; then
+                echo "[!] Remote VPS ($vps_host) tunnel supervisor down — restoring..."
                 pkill -f "oracle_vps2_tunnel_daemon\.sh" 2>/dev/null || true
-                pkill -f "ssh.*144\.24\.122\.241" 2>/dev/null || true
+                pkill -f "ssh.*$vps_host" 2>/dev/null || true
                 (cd "$TERMUX_HOME" && nohup bash "$vps2_daemon" >/dev/null 2>&1 &)
                 healed=$((healed + 1))
             fi
-        elif ! pgrep -f "ssh.*144\.24\.122\.241" >/dev/null 2>&1; then
-            echo "[!] Oracle VPS2 (144.24.122.241) reverse tunnel down — restoring..."
-            nohup ssh -i "$vps2_key" -T -N \
+        elif ! pgrep -f "ssh.*$vps_host" >/dev/null 2>&1; then
+            echo "[!] Remote VPS ($vps_host) reverse tunnel down — restoring..."
+            local port_args=()
+            for p_map in $vps_ports; do
+                port_args+=(-R "$p_map")
+            done
+            nohup ssh -i "$vps_key" -T -N \
                 -o BatchMode=yes \
                 -o PasswordAuthentication=no \
                 -o StrictHostKeyChecking=accept-new \
@@ -823,13 +859,8 @@ asl_service_check() {
                 -o ServerAliveCountMax=2 \
                 -o ConnectTimeout=5 \
                 -o ExitOnForwardFailure=yes \
-                -R 8022:127.0.0.1:8022 \
-                -R 20128:127.0.0.1:20128 \
-                -R 4096:127.0.0.1:4096 \
-                -R 6080:127.0.0.1:6080 \
-                -R 9119:127.0.0.1:9119 \
-                               -R 3080:127.0.0.1:3080 \
-                ubuntu@144.24.122.241 > "$TERMUX_HOME/oracle_vps2_tunnel.log" 2>&1 &
+                "${port_args[@]}" \
+                "${vps_user}@${vps_host}" > "$TERMUX_HOME/remote_vps_tunnel.log" 2>&1 &
             healed=$((healed + 1))
         fi
     fi

@@ -84,7 +84,16 @@ chmod 755 '$DEBIANPATH/root/.vnc/xstartup'" 2>/dev/null || true
     if is_vnc_running && is_websockify_running; then
         echo "[✓] ASL Debian Linux Web Desktop is LIVE on port 6080!"
         echo "    Local URL:   http://localhost:6080/vnc.html?autoconnect=true&resize=remote"
-        echo "    Public URL:  https://desktop.144.24.122.241.sslip.io/vnc.html?autoconnect=true&resize=remote"
+        local remote_conf="$TERMUX_HOME/.asl/remote.conf"
+        if [ -f "$remote_conf" ]; then
+            # shellcheck source=/dev/null
+            source "$remote_conf" 2>/dev/null || true
+            if [ -n "${ASL_REMOTE_DOMAIN:-}" ]; then
+                echo "    Public URL:  https://desktop.${ASL_REMOTE_DOMAIN}/vnc.html?autoconnect=true&resize=remote"
+            elif [ -n "${VPS_HOST:-}" ]; then
+                echo "    Public URL:  http://${VPS_HOST}:6080/vnc.html?autoconnect=true&resize=remote"
+            fi
+        fi
         return 0
     fi
 

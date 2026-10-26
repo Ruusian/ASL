@@ -2006,7 +2006,16 @@ case "${1:-}" in
                 if (timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/3080') 2>/dev/null; then
                     echo " Status:   ACTIVE"
                     echo " Local:    http://127.0.0.1:3080"
-                    echo " Public:   https://dsh.144.24.122.241.sslip.io"
+                    remote_conf="$TERMUX_HOME/.asl/remote.conf"
+                    if [ -f "$remote_conf" ]; then
+                        # shellcheck source=/dev/null
+                        source "$remote_conf" 2>/dev/null || true
+                        if [ -n "${ASL_REMOTE_DOMAIN:-}" ]; then
+                            echo " Public:   https://dsh.${ASL_REMOTE_DOMAIN}"
+                        elif [ -n "${VPS_HOST:-}" ]; then
+                            echo " Public:   http://${VPS_HOST}:3080"
+                        fi
+                    fi
                     dpid=$(asl_exec "su -c 'pgrep -f apps/cli/src/bin.ts 2>/dev/null | head -n 1'" 2>/dev/null || true)
                     echo " PID:      ${dpid:-active}"
                 else
