@@ -393,6 +393,17 @@ asl thermal watch                   # Live thermal monitor (5s refresh)
 
 ---
 
+### `asl cputop`
+
+Real-time sustained CPU utilization and memory monitor (samples `/proc/[pid]/stat` delta over an interval to avoid misleading lifetime-averaged `%CPU`).
+
+```bash
+asl cputop [seconds]                # Sample CPU usage (default: 4 seconds)
+asl cputop 2                        # Fast 2-second sampling interval
+```
+
+---
+
 ### `asl ps` / `asl watch`
 
 Interactive process management and live monitor.

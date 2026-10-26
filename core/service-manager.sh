@@ -308,11 +308,24 @@ asl_service_start() {
 
         # Check if Server Mode was previously active across reboots
     if [ -f "$TERMUX_HOME/.asl/server_mode.active" ]; then
-        local kill_script="$TERMUX_HOME/kill-android-apps.sh"
-        if [ -f "$kill_script" ]; then
-            echo "[*] Server Mode state active — re-engaging headless optimizations across reboot..."
-            bash "$kill_script" server-mode stop >/dev/null 2>&1 || true
+        local sm_conf="$TERMUX_HOME/.asl/server_mode.conf"
+        local freeze_script=""
+        if [ -f "$sm_conf" ]; then
+            # shellcheck source=/dev/null
+            source "$sm_conf" 2>/dev/null || true
+            freeze_script="${SERVER_MODE_FREEZE_SCRIPT:-}"
         fi
+        if [ -n "$freeze_script" ] && [ -f "$freeze_script" ]; then
+            echo "[*] Server Mode state active — re-engaging headless optimizations across reboot..."
+            bash "$freeze_script" server-mode stop >/dev/null 2>&1 || true
+        fi
+    fi
+
+    # Execute user post-start hook if present
+    local post_start_hook="$TERMUX_HOME/.asl/hooks/post-start.sh"
+    if [ -f "$post_start_hook" ]; then
+        echo "[*] Executing user post-start hook ($post_start_hook)..."
+        bash "$post_start_hook" || true
     fi
 
     echo "[✓] All ASL 24/7 background services are ACTIVE."
@@ -346,7 +359,13 @@ asl_service_stop() {
     if [ -n "$o_host" ]; then
         _asl_pkill_real "ssh.*${o_host}"
     fi
-    _asl_pkill_real "ssh.*144\.24\.122\.241"
+    local v_host=""
+    if [ -f "$TERMUX_HOME/.asl/remote.conf" ]; then
+        v_host=$(grep -E '^VPS_HOST=' "$TERMUX_HOME/.asl/remote.conf" 2>/dev/null | cut -d'=' -f2- | tr -d '"'\'' ')
+    fi
+    if [ -n "$v_host" ]; then
+        _asl_pkill_real "ssh.*${v_host}"
+    fi
     # Kill omniroute: match daemon script, serve subcommand, and the binary itself
     # Skip if ASL_KEEP_OMNIROUTE=1 or if active AI session is using local OmniRoute
     if [ "${ASL_KEEP_OMNIROUTE:-0}" != "1" ] && [ -z "${CLAUDECODE:-}" ] && [[ "${OPENAI_BASE_URL:-}" != *"20128"* ]]; then
@@ -371,6 +390,14 @@ asl_service_stop() {
     fi
     rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-service.start_time" 2>/dev/null || true
     rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/asl-watchdog.pid" 2>/dev/null || true
+
+    # Execute user post-stop hook if present
+    local post_stop_hook="$TERMUX_HOME/.asl/hooks/post-stop.sh"
+    if [ -f "$post_stop_hook" ]; then
+        echo "[*] Executing user post-stop hook ($post_stop_hook)..."
+        bash "$post_stop_hook" || true
+    fi
+
     echo "[✓] ASL 24/7 background services stopped."
 }
 
@@ -1016,10 +1043,19 @@ asl_service_check() {
         if dumpsys power 2>/dev/null | grep -q 'mWakefulness=Awake'; then
             su -c "settings put global stay_on_while_plugged_in 0; settings put system screen_brightness 0; input keyevent 223" 2>/dev/null || true
         fi
-        if ! su -c "pgrep -f '[c]om.nlsn.psc'" >/dev/null 2>&1; then
-            echo "[!] Confluence earning app not running — reviving..."
-            su -c "am start -n com.nlsn.psc/.MobileConnect" 2>/dev/null || true
-            healed=$((healed + 1))
+        # Revive user-configured apps in Server Mode if specified
+        local sm_conf="$TERMUX_HOME/.asl/server_mode.conf"
+        if [ -f "$sm_conf" ]; then
+            local revive_targets=""
+            revive_targets=$(grep '^SERVER_MODE_REVIVE_APPS=' "$sm_conf" 2>/dev/null | cut -d'=' -f2- | tr -d '"'\'' ')
+            for target in $revive_targets; do
+                local pkg_name="${target%%/*}"
+                if [ -n "$pkg_name" ] && ! su -c "pgrep -f '$pkg_name'" >/dev/null 2>&1; then
+                    echo "[!] Server Mode component ($target) not running — reviving..."
+                    su -c "am start -n '$target'" 2>/dev/null || true
+                    healed=$((healed + 1))
+                fi
+            done
         fi
     fi
 

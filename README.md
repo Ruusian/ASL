@@ -179,6 +179,7 @@ asl snapshot restore my-backup            # Restore container state
 | `asl hud [on\|off]` | Toggle MangoHud / DXVK performance overlay |
 | `asl mode <profile>` | Switch CPU governor: `performance`, `balanced`, `powersave`, `gpu` |
 | `asl thermal` | Display real-time CPU and battery temperatures |
+| `asl cputop [secs]` | Real-time sustained process CPU & memory monitor |
 | `asl benchmark` | Run CPU compute, memory bandwidth, and 3D rasterization benchmarks |
 | `asl gamepad sync` | Synchronize host `/dev/input` evdev gamepad nodes into container |
 
@@ -213,6 +214,7 @@ ASL/
 │   ├── swap-manager.sh        # Virtual swap pool management
 │   ├── snapshot.sh            # Rootfs archive and restore
 │   ├── thermal.sh             # SoC temperature monitoring
+│   ├── cputop.sh              # Real-time sustained CPU usage monitor
 │   ├── benchmark.sh           # Hardware performance benchmarking
 │   ├── repair.sh              # Self-healing recovery
 │   ├── cleaner.sh             # Cache and scratch file cleanup
@@ -238,6 +240,17 @@ ASL/
 ├── GETTING_STARTED.md          # Setup walkthrough
 └── LICENSE                     # MIT License
 ```
+
+---
+
+## Modular Configuration & User Hooks
+
+ASL supports untracked local configurations and lifecycle hooks under `~/.asl/`:
+
+* `~/.asl/remote.conf`: Custom VPS reverse tunnel endpoints and port mappings (see `desktop/remote/remote.conf.example`).
+* `~/.asl/server_mode.conf`: Android component targets to revive in headless Server Mode.
+* `~/.asl/hooks/post-start.sh`: Executed automatically after subsystem services are started.
+* `~/.asl/hooks/post-stop.sh`: Executed automatically after subsystem services are stopped.
 
 ---
 

@@ -1748,7 +1748,7 @@ case "${1:-}" in
     watch|monitor)
         watch_dashboard
         ;;
-    ps|top|processes)
+    ps|processes)
         process_manager
         ;;
     start)
@@ -1880,6 +1880,10 @@ case "${1:-}" in
         ;;
     thermal|temp)
         bash "$ASL_DIR/core/thermal.sh"
+        ;;
+    cputop|top)
+        shift
+        bash "$ASL_DIR/core/cputop.sh" "$@"
         ;;
     benchmark|bench)
         shift
