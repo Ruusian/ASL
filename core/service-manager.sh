@@ -293,6 +293,15 @@ asl_service_start() {
         fi
     fi
 
+        # Check if Server Mode was previously active across reboots
+    if [ -f "$TERMUX_HOME/.asl/server_mode.active" ]; then
+        local kill_script="$TERMUX_HOME/kill-android-apps.sh"
+        if [ -f "$kill_script" ]; then
+            echo "[*] Server Mode state active — re-engaging headless optimizations across reboot..."
+            bash "$kill_script" server-mode stop >/dev/null 2>&1 || true
+        fi
+    fi
+
     echo "[✓] All ASL 24/7 background services are ACTIVE."
 }
 
@@ -961,6 +970,25 @@ asl_service_check() {
                 su -c "cmd overlay fabricate --target android --name HideKeyboardBar android:bool/config_imeDrawsImeNavBar 0x12 0x0 2>/dev/null; cmd overlay enable --user 0 com.android.shell:HideKeyboardBar 2>/dev/null" 2>/dev/null || true
                 healed=$((healed + 1))
             fi
+        fi
+    fi
+
+        # 12b. Autonomous Server Mode Watchdog Guard
+    if [ -f "$TERMUX_HOME/.asl/server_mode.active" ] || [ -f "${HOME:-/data/data/com.termux/files/home}/.asl/server_mode.active" ]; then
+        local cur_gov
+        cur_gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
+        if [ "$cur_gov" != "performance" ]; then
+            echo "[!] Server Mode active but CPU governor drifted ($cur_gov) — re-locking to Performance..."
+            su -c "for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > \$g 2>/dev/null; done" 2>/dev/null || true
+            healed=$((healed + 1))
+        fi
+        if dumpsys power 2>/dev/null | grep -q 'mWakefulness=Awake'; then
+            su -c "settings put global stay_on_while_plugged_in 0; settings put system screen_brightness 0; input keyevent 223" 2>/dev/null || true
+        fi
+        if ! su -c "pgrep -f '[c]om.nlsn.psc'" >/dev/null 2>&1; then
+            echo "[!] Confluence earning app not running — reviving..."
+            su -c "am start -n com.nlsn.psc/.MobileConnect" 2>/dev/null || true
+            healed=$((healed + 1))
         fi
     fi
 
