@@ -20,15 +20,15 @@ asl menu            # Alias for dashboard
 
 - `s` - Start / mount subsystem
 - `x` - Stop / unmount subsystem
+- `e` - Enter interactive bash shell
 - `d` - Start desktop session (Termux:X11)
-- `g` - Launch Windows executable / Game Hub
-- `h` - Toggle performance HUD overlay
+- `g` - Inspect GPU profiles & Turnip/Virgl driver state
+- `m` - Switch performance profile (CPU governor)
+- `f` - MangoHud overlay & Gamepad input manager
 - `v` - Remote bridges & tunnel endpoints
+- `c` - Android host integration & clipboard
 - `p` - Process manager
 - `t` - Thermal & battery monitor
-- `w` - Live watchdog monitor
-- `c` - Clean container cache & storage
-- `r` - System integrity self-repair
 - `q` - Quit dashboard
 
 ---

@@ -84,16 +84,17 @@ This opens the interactive 74-column alternate-screen buffer TUI dashboard with 
 **Key hotkeys**:
 
 - `s` - Start / mount subsystem
-- `x` - Stop / unmount subsystem  
+- `x` - Stop / unmount subsystem
+- `e` - Enter interactive bash shell
 - `d` - Start XFCE desktop session (Termux:X11)
-- `g` - Launch Windows executable / Game Hub
+- `g` - Inspect GPU profiles & Turnip/Virgl driver state
+- `m` - Switch performance profile (CPU governor)
+- `f` - MangoHud overlay & Gamepad input manager
+- `v` - Remote access & tunnel manager
+- `c` - Android host integration & clipboard
 - `p` - Process manager
 - `t` - Thermal & battery monitor
-- `h` - Toggle HUD telemetry overlay
-- `v` - Remote bridge endpoints
-- `c` - Clean storage & caches
-- `r` - Integrity self-repair
-- `q` - Quit
+- `q` - Quit dashboard
 
 ### Workflow 2: Mount Debian & Enter Shell
 
